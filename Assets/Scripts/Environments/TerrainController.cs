@@ -2,7 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class Terrain : MonoBehaviour {
+public class TerrainController : MonoBehaviour {
     [Header("Basic settings")]
     public GameObject cubePrefab; // 拖入你剛做好的 Cube Prefab
     public int size = 50;         // 地圖大小 (50x50)

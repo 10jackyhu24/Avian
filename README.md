@@ -25,7 +25,7 @@
 
     If the scene appears empty or objects show "Missing Script," you might be using an incompatible Unity version (e.g., Unity 6).
 
-    * Solution: Close Unity, delete the `/Library` folder in your project directory, and re-open the project specifically with Unity 2022.3.x.
+    * **Solution:** Close Unity, delete the `/Library` folder in your project directory, and re-open the project specifically with Unity 2022.3.4f1.
 
 2. **Script Compilation Errors (Naming Conflict)**
 
@@ -39,4 +39,4 @@
 
     If you see an error regarding `default-6000.dwlt` layout:
 
-    * *Solution:* Go to the top-right corner of the Unity Editor -> **Layout** -> **Default**. This will reset the interface to match your current Unity version.
+    * **Solution:** Go to the top-right corner of the Unity Editor -> **Layout** -> **Default**. This will reset the interface to match your current Unity version.
