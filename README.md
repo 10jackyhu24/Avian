@@ -18,7 +18,7 @@
 3. **Select Correct Version:**
     * Ensure the version dropdown in Unity Hub is set to 6000.3.15f1.
 
-4. **Add the following to your .git or .gitconfig file:**
+4. **Add the following to your .git/config file:**
     ```
     [merge]
     tool = unityyamlmerge
