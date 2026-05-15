@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-* **Unity Version:** `2022.3.4f1 LTS` (Please check `ProjectSettings/ProjectVersion.txt` for the exact version).
+* **Unity Version:** `6000.3.15f1 LTS` (Please check `ProjectSettings/ProjectVersion.txt` for the exact version).
 *   **Git LFS:** Ensure you have [Git Large File Storage](https://git-lfs.github.com/) installed to handle high-quality assets.
 
 ## Getting Started
@@ -16,8 +16,18 @@
     * Select the cloned folder.
 
 3. **Select Correct Version:**
-    * Ensure the version dropdown in Unity Hub is set to 2022.3.4f1.
-    * Do not upgrade to Unity 6 (6000) unless instructed by the team.
+    * Ensure the version dropdown in Unity Hub is set to 6000.3.15f1.
+
+4. **Add the following to your .git or .gitconfig file:**
+    ```
+    [merge]
+    tool = unityyamlmerge
+
+    [mergetool "unityyamlmerge"]
+    trustExitCode = false
+    cmd = '<path to UnityYAMLMerge>' merge -p "$BASE" "$REMOTE" "$LOCAL" "$MERGED"
+    ```
+    The location of unityYAMLMerge.exe may be `"C:/Program Files/Unity/Hub/Editor/6000.3.15f1/Editor/Data/Tools/UnityYAMLMerge.exe"`
 
 ## Common Issues & Troubleshooting
 
@@ -25,7 +35,7 @@
 
     If the scene appears empty or objects show "Missing Script," you might be using an incompatible Unity version (e.g., Unity 6).
 
-    * **Solution:** Close Unity, delete the `/Library` folder in your project directory, and re-open the project specifically with Unity 2022.3.4f1.
+    * **Solution:** Close Unity, delete the `/Library` folder in your project directory, and re-open the project specifically with Unity 6000.3.15f1.
 
 2. **Script Compilation Errors (Naming Conflict)**
 
