@@ -21,10 +21,6 @@ public class MenuManager : MonoBehaviour {
         for (int i = 0; i < uiPanels.Length; ++i) {
             uiPanels[i].SetActive(i == panelIndex);
         }
-    }
-
-    public void MainMenu() {
-        Debug.Log("Switch to Main Menu");
-        SwitchToPanel(0);
+        Debug.Log("Switch to page" + panelIndex);
     }
 }

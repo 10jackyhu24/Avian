@@ -8,6 +8,6 @@ public class SinglePlayerMenu : MonoBehaviour {
     }
 
     public void Cancel() {
-        
+        menuManager.SwitchToPanel(0);
     }
 }

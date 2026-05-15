@@ -40,3 +40,14 @@
     If you see an error regarding `default-6000.dwlt` layout:
 
     * **Solution:** Go to the top-right corner of the Unity Editor -> **Layout** -> **Default**. This will reset the interface to match your current Unity version.
+
+4. **Burst Compilation Error (Error 4551)**
+
+    You may see an error: `Unexpected error in Burst compilation... Unable to load the unmanaged library... error code 4551`.
+
+    * **Cause:** Unity Burst cache signature verification failed or files are corrupted (often happens during version switching).
+
+    * **Solution:**
+        1. Close Unity Editor.
+        2. Go to your project folder and delete the directory: `Library/BurstCache`.
+        3. Restart Unity. The cache will be rebuilt automatically.
