@@ -16,7 +16,7 @@ public class MainMenu : MonoBehaviour {
     }
 
     public void OptionsPanel() {
-        menuManager.SwitchToPanel(3);
+        menuManager.SwitchToPanel(4);
     }
 
     public void QuitGame() {
