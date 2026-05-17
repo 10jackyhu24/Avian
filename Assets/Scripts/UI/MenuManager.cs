@@ -1,26 +1,51 @@
 using UnityEngine;
+using System.Collections.Generic;
+
+public enum PanelType {
+    MainMenu,
+    SinglePlayer,
+    Multiplayer,
+    MultiplayerRoomList,
+    Options
+}
 
 public class MenuManager : MonoBehaviour {
+    [System.Serializable]
+    public struct PanelData {
+        public PanelType panelType;
+        public GameObject panelObject;
+    }
+
     [Header("UI Elements")]
-    [Tooltip("Drag all Panels in sequence")]
-    [SerializeField] private GameObject[] uiPanels;
+    [SerializeField] private PanelData[] uiPanels;
+
+    private Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
+    
+    private void Awake() {
+        foreach (var data in uiPanels) {
+            if (data.panelObject == null) continue;
+            
+            if (!panelDict.ContainsKey(data.panelType)) {
+                panelDict.Add(data.panelType, data.panelObject);
+            } else {
+                Debug.LogError($"Duplicate panel types: {data.panelType}", this);
+            }
+        }
+    }
 
     public void Start() {
-        if (uiPanels == null || uiPanels.Length == 0) {
-            Debug.LogError("UI Panels not assigned in the inspector.");
-            return;
-        }
-        SwitchToPanel(0);
+        SwitchToPanel(PanelType.MainMenu);
     }
 
-    public void SwitchToPanel(int panelIndex) {
-        if (panelIndex < 0 || panelIndex >= uiPanels.Length) {
-            Debug.LogError("Panel index out of range: " + panelIndex);
+    public void SwitchToPanel(PanelType panelType) {
+        if (!panelDict.ContainsKey(panelType)) {
+            Debug.LogError("Panel not found: " + panelType, this);
             return;
         }
-        for (int i = 0; i < uiPanels.Length; ++i) {
-            uiPanels[i].SetActive(i == panelIndex);
+        foreach (var pair in panelDict) {
+            pair.Value.SetActive(pair.Key == panelType);
         }
-        Debug.Log("Switch to page" + panelIndex);
+        Debug.Log("Switch to panel:" + panelType);
     }
+
 }

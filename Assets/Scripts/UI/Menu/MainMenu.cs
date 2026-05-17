@@ -8,15 +8,15 @@ public class MainMenu : MonoBehaviour {
     }
 
     public void SinglePlayer() {
-        menuManager.SwitchToPanel(1);
+        menuManager.SwitchToPanel(PanelType.SinglePlayer);
     }
 
     public void Multiplayer() {
-        menuManager.SwitchToPanel(2);
+        menuManager.SwitchToPanel(PanelType.Multiplayer);
     }
 
     public void OptionsPanel() {
-        menuManager.SwitchToPanel(4);
+        menuManager.SwitchToPanel(PanelType.Options);
     }
 
     public void QuitGame() {

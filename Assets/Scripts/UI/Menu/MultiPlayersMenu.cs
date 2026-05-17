@@ -8,10 +8,10 @@ public class MultiPlayersMenu : MonoBehaviour {
     }
 
     public void MultiRoomList() {
-        menuManager.SwitchToPanel(3);
+        menuManager.SwitchToPanel(PanelType.MultiplayerRoomList);
     }
 
     public void Cancel() {
-        menuManager.SwitchToPanel(0);
+        menuManager.SwitchToPanel(PanelType.MainMenu);
     }
 }
