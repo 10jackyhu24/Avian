@@ -5,7 +5,7 @@ using UnityEngine;
 public class TerrainController : MonoBehaviour {
     [Header("Basic settings")]
     public GameObject cubePrefab; // 拖入你剛做好的 Cube Prefab
-    public int size = 50;         // 地圖大小 (50x50)
+    public int size = 10000;         // 地圖大小 (50x50)
     public float scale = 0.05f;   // 縮放比例 (相當於之前的 Zoom)
     public float heightMultiplier = 10f; // 讓高山凸起的倍率 (3D 模式使用)
 
@@ -13,6 +13,14 @@ public class TerrainController : MonoBehaviour {
     public bool is2DMap = true;           // 是否使用 2D 地圖模式
     public float wallHeight = 1.5f;       // 牆壁的高度 (不要太高)
     public float waterDepth = 0.2f;       // 水深 (往下微凹的高度，設為 0 則與地面同高)
+
+    [Header("Dynamic Loading Settings")]
+    public bool enableDynamicLoading = true;  // 是否啟用動態載入（只顯示畫面內的區塊）
+    public int viewDistance = 20;             // 可視距離（以格子數計算，半徑）
+    
+    private Transform mainCameraTransform;    // 主相機 Transform
+    private GameObject[,] cubeGrid;           // 儲存所有方塊的網格
+    private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
 
 
     [Header("Noise settings")]
@@ -29,11 +37,28 @@ public class TerrainController : MonoBehaviour {
     private Color snowPeak = Color.white;                     // 雪山白
 
     public void GenerateWorld(int seed) {
+        // 先尋找主相機
+        if (mainCameraTransform == null) {
+            Camera mainCam = Camera.main;
+            if (mainCam != null) {
+                mainCameraTransform = mainCam.transform;
+            }
+        }
+
         // 自動尋找或創建名為 "Terrain" 的父物件
         GameObject terrainParent = GameObject.Find("Terrain");
-        if (terrainParent == null) {
+        if (terrainParent != null) {
+            // 銷毀舊的地形方塊
+            foreach (Transform child in terrainParent.transform) {
+                Destroy(child.gameObject);
+            }
+        } else {
             terrainParent = new GameObject("Terrain");
         }
+
+        // 初始化網格並重置相機記錄位置
+        cubeGrid = new GameObject[size, size];
+        lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
 
         // 雙層迴圈生成 X 與 Z 軸的地形 (Unity 中 3D 平面通常是 X 和 Z)
         for (int x = 0; x < size; x++) {
@@ -76,6 +101,62 @@ public class TerrainController : MonoBehaviour {
 
                 // 改變方塊顏色
                 newCube.GetComponent<Renderer>().material.color = biomeColor;
+
+                // 儲存到網格中以供動態載入使用
+                cubeGrid[x, z] = newCube;
+            }
+        }
+
+        // 生成後，立即更新一次方塊可見性
+        if (enableDynamicLoading && mainCameraTransform != null) {
+            int camX = Mathf.RoundToInt(mainCameraTransform.position.x);
+            int camZ = Mathf.RoundToInt(mainCameraTransform.position.z);
+            UpdateBlockVisibilities(camX, camZ);
+        }
+    }
+
+    void Update() {
+        if (!enableDynamicLoading || cubeGrid == null) {
+            return;
+        }
+
+        // 自動取得相機 Transform
+        if (mainCameraTransform == null) {
+            Camera mainCam = Camera.main;
+            if (mainCam != null) {
+                mainCameraTransform = mainCam.transform;
+            }
+            return;
+        }
+
+        // 取得相機目前的網格座標
+        Vector3Int currentCamGridPos = new Vector3Int(
+            Mathf.RoundToInt(mainCameraTransform.position.x),
+            0,
+            Mathf.RoundToInt(mainCameraTransform.position.z)
+        );
+
+        // 如果相機跨越了格子邊界才更新，大幅提升效能！
+        if (currentCamGridPos.x != lastCameraGridPos.x || currentCamGridPos.z != lastCameraGridPos.z) {
+            lastCameraGridPos = currentCamGridPos;
+            UpdateBlockVisibilities(currentCamGridPos.x, currentCamGridPos.z);
+        }
+    }
+
+    private void UpdateBlockVisibilities(int camX, int camZ) {
+        if (cubeGrid == null) return;
+
+        for (int x = 0; x < size; x++) {
+            for (int z = 0; z < size; z++) {
+                if (cubeGrid[x, z] == null) continue;
+
+                // 計算與相機的 X-Z 二維格子距離是否在視野半徑內
+                bool isVisible = Mathf.Abs(x - camX) <= viewDistance && 
+                                 Mathf.Abs(z - camZ) <= viewDistance;
+
+                if (cubeGrid[x, z].activeSelf != isVisible) {
+                    cubeGrid[x, z].SetActive(isVisible);
+                }
             }
         }
     }
