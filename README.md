@@ -45,13 +45,7 @@
 
     * **Solution:** No need to do anything or rename your `Terrain.cs` file and its class name to something unique (e.g., `MyTerrain.cs`).
 
-3. **Layout Loading Error**
-
-    If you see an error regarding `default-6000.dwlt` layout:
-
-    * **Solution:** Go to the top-right corner of the Unity Editor -> **Layout** -> **Default**. This will reset the interface to match your current Unity version.
-
-4. **Burst Compilation Error (Error 4551)**
+3. **Burst Compilation Error (Error 4551)**
 
     You may see an error: `Unexpected error in Burst compilation... Unable to load the unmanaged library... error code 4551`.
 
@@ -61,3 +55,9 @@
         1. Close Unity Editor.
         2. Go to your project folder and delete the directory: `Library/BurstCache`.
         3. Restart Unity. The cache will be rebuilt automatically.
+
+4. **Code Editor Only Opens Single File (Missing Project Context)**
+
+    If your text editor (e.g., VS Code) only opens the double-clicked C# file instead of the whole project folder (causing autocomplete/IntelliSense to fail):
+
+    * **Solution:** Go to Unity **Preferences > External Tools** and change **External Script Editor Args** from `$(File)` to `$(ProjectPath) $(File)`.
