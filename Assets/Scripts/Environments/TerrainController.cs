@@ -5,7 +5,7 @@ using UnityEngine;
 public class TerrainController : MonoBehaviour {
     [Header("Basic settings")]
     public GameObject cubePrefab; // 拖入你剛做好的 Cube Prefab
-    public int size = 10000;         // 地圖大小 (50x50)
+    public int size = 50;         // 地圖大小 (50x50)
     public float scale = 0.05f;   // 縮放比例 (相當於之前的 Zoom)
     public float heightMultiplier = 10f; // 讓高山凸起的倍率 (3D 模式使用)
 
@@ -22,6 +22,10 @@ public class TerrainController : MonoBehaviour {
     private GameObject[,] cubeGrid;           // 儲存所有方塊的網格
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
 
+
+    [Header("Biome Settings")]
+    [Tooltip("Area multiplier for biomes. 10 means area is 10 times larger (side length about 3.16 times)")]
+    public float biomeAreaMultiplier = 10f;
 
     [Header("Noise settings")]
     public float offsetX = 0f;
@@ -60,12 +64,19 @@ public class TerrainController : MonoBehaviour {
         cubeGrid = new GameObject[size, size];
         lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
 
+        // 根據面積倍率計算實際的雜訊縮放比例
+        // 面積擴大 N 倍，代表邊長（線性尺寸）要擴大 根號N 倍，因此雜訊頻率（scale）要除以 根號N
+        float actualScale = scale;
+        if (biomeAreaMultiplier > 0f) {
+            actualScale = scale / Mathf.Sqrt(biomeAreaMultiplier);
+        }
+
         // 雙層迴圈生成 X 與 Z 軸的地形 (Unity 中 3D 平面通常是 X 和 Z)
         for (int x = 0; x < size; x++) {
             for (int z = 0; z < size; z++) {
                 // 計算高度與濕度雜訊 (疊加兩層 Octaves 簡化版)
-                float h = CalculateNoise(x, z, seed, scale);
-                float m = CalculateNoise(x, z, seed + 100, scale * 1.5f);
+                float h = CalculateNoise(x, z, seed, actualScale);
+                float m = CalculateNoise(x, z, seed + 100, actualScale * 1.5f);
 
                 // 決定生態域與顏色
                 Color biomeColor = GetBiomeColor(h, m);
