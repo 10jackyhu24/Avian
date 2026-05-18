@@ -65,4 +65,13 @@ public class MenuManager : MonoBehaviour {
             SetActivePanelOnly(previousPanel);
         }
     }
+
+    public void HideMenu() {
+        foreach (var pair in panelDict) {
+            if (pair.Value != null) {
+                pair.Value.SetActive(false);
+            }
+        }
+        Debug.Log("Hiding all UI panels.");
+    }
 }
