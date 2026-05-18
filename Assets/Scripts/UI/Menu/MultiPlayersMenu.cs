@@ -7,11 +7,7 @@ public class MultiPlayersMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
     }
 
-    public void MultiRoomList() {
+    public void SwitchToRoomList() {
         menuManager.SwitchToPanel(PanelType.MultiplayerRoomList);
-    }
-
-    public void Cancel() {
-        menuManager.SwitchToPanel(PanelType.MainMenu);
     }
 }

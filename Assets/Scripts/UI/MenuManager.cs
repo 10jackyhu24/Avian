@@ -6,6 +6,7 @@ public enum PanelType {
     SinglePlayer,
     Multiplayer,
     MultiplayerRoomList,
+    CreateWorldOptions,
     Options
 }
 
@@ -19,6 +20,7 @@ public class MenuManager : MonoBehaviour {
     [Header("UI Elements")]
     [SerializeField] private PanelData[] uiPanels;
 
+    private Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
     private Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
     
     private void Awake() {
@@ -42,10 +44,25 @@ public class MenuManager : MonoBehaviour {
             Debug.LogError("Panel not found: " + panelType, this);
             return;
         }
+        pageHistoryStack.Push(panelType);
+        SetActivePanelOnly(panelType);
+    }
+
+    private void SetActivePanelOnly(PanelType panelType) {
         foreach (var pair in panelDict) {
             pair.Value.SetActive(pair.Key == panelType);
         }
         Debug.Log("Switch to panel:" + panelType);
     }
 
+    public void Back() {
+        if (pageHistoryStack.Count <= 1) {
+            return;
+        }
+        pageHistoryStack.Pop();
+        PanelType previousPanel = pageHistoryStack.Peek();
+        if (panelDict.ContainsKey(previousPanel)) {
+            SetActivePanelOnly(previousPanel);
+        }
+    }
 }

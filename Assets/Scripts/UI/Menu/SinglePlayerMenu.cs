@@ -6,8 +6,8 @@ public class SinglePlayerMenu : MonoBehaviour {
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
     }
-
-    public void Cancel() {
-        menuManager.SwitchToPanel(PanelType.MainMenu);
+    
+    public void SwitchToCreateWorldOptions() {
+        menuManager.SwitchToPanel(PanelType.CreateWorldOptions);
     }
 }

@@ -7,20 +7,24 @@ public class MainMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
     }
 
-    public void SinglePlayer() {
+    public void SwitchToSinglePlayer() {
         menuManager.SwitchToPanel(PanelType.SinglePlayer);
     }
 
-    public void Multiplayer() {
+    public void SwitchToMultiPlayer() {
         menuManager.SwitchToPanel(PanelType.Multiplayer);
     }
 
-    public void OptionsPanel() {
+    public void SwitchToOptions() {
         menuManager.SwitchToPanel(PanelType.Options);
     }
 
     public void QuitGame() {
         Debug.Log("Quit Game");
-        Application.Quit();
+        #if UNITY_EDITOR
+            UnityEditor.EditorApplication.isPlaying = false;
+        #else
+            Application.Quit();
+        #endif
     }
 }
