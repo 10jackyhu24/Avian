@@ -12,7 +12,7 @@ public enum PanelType {
 
 public class MenuManager : MonoBehaviour {
     [System.Serializable]
-    public struct PanelData {
+    private struct PanelData {
         public PanelType panelType;
         public GameObject panelObject;
     }
