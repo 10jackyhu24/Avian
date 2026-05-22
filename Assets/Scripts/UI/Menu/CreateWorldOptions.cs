@@ -7,10 +7,12 @@ public class CreateWorldOptions : MonoBehaviour {
 
     private MenuManager menuManager;
     private TerrainController terrainController;
+    private PlayerSpawner playerSpawner;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
         terrainController = FindFirstObjectByType<TerrainController>();
+        playerSpawner = FindFirstObjectByType<PlayerSpawner>();
     }
 
     public void OnGenerateWorldClicked() {
@@ -31,6 +33,12 @@ public class CreateWorldOptions : MonoBehaviour {
 
         Debug.Log($"[CreateWorld] Seed: {seed}");
         terrainController.GenerateWorld(seed);
+        if (playerSpawner != null) {
+            playerSpawner.SpawnPlayerAtConfiguredPosition();
+        }
+        else {
+            Debug.LogWarning("No PlayerSpawner found in the scene, so no player was spawned.", this);
+        }
         
         menuManager.HideMenu();
     }
