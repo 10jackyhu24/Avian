@@ -8,10 +8,12 @@ public class CreateWorldOptions : MonoBehaviour {
 
     private MenuManager menuManager;
     private TerrainController terrainController;
+    private PlayerSpawner playerSpawner;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
         terrainController = FindFirstObjectByType<TerrainController>();
+        playerSpawner = FindFirstObjectByType<PlayerSpawner>();
     }
 
     public void OnGenerateWorldClicked() {
@@ -32,6 +34,7 @@ public class CreateWorldOptions : MonoBehaviour {
 
         Debug.Log($"[CreateWorld] Seed: {seed}");
         terrainController.GenerateWorld(seed);
+        playerSpawner.SpawnPlayerAtConfiguredPosition();
 
         menuManager.HideMenu();
         GameState.isPlaying = true;
