@@ -2,6 +2,7 @@ using UnityEngine;
 using TMPro;
 
 public class CreateWorldOptions : MonoBehaviour {
+
     [Header("UI Elements")]
     [SerializeField] private TMP_InputField seedInputField;
 
@@ -31,7 +32,8 @@ public class CreateWorldOptions : MonoBehaviour {
 
         Debug.Log($"[CreateWorld] Seed: {seed}");
         terrainController.GenerateWorld(seed);
-        
+
         menuManager.HideMenu();
+        GameState.isPlaying = true;
     }
 }

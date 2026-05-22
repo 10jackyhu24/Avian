@@ -1,15 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class TerrainController : MonoBehaviour 
-{
+public class TerrainController : MonoBehaviour {
     [Header("Basic Settings")]
     [SerializeField] private GameObject cubePrefab;
     [SerializeField] private int size = 1000;
     
     [Header("Dynamic Loading")]
-    [SerializeField] private int viewDistance = 20;             // Loading Radius
-    [SerializeField] private float rotationThreshold = 3f;      // Camera rotate threshold
+    [SerializeField] private int viewDistance = 20;
+    [SerializeField] private float rotationThreshold = 3f;
 
     private Camera mainCamera;
     private Transform mainCameraTransform;
@@ -33,45 +32,32 @@ public class TerrainController : MonoBehaviour
     private readonly Color mountain = new Color(0.4f, 0.2f, 0f);
     private readonly Color snowPeak = Color.white;
 
-    private void Start()
-    {
+    private void Start() {
         mainCamera = Camera.main;
-        if (mainCamera != null) mainCameraTransform = mainCamera.transform;
+        mainCameraTransform = mainCamera.transform;
     }
 
-    public void GenerateWorld(int seed) 
-    {
-        if (mainCamera == null) Start();
-
-        // Reset camera position to center
-        if (mainCameraTransform != null)
-        {
-            mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
-        }
+    public void GenerateWorld(int seed) {
+        mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
 
         // Clean up old terrain
         terrainParent = GameObject.Find("Terrain");
-        if (terrainParent != null) {
-            foreach (Transform child in terrainParent.transform) Destroy(child.gameObject);
-        } else {
-            terrainParent = new GameObject("Terrain");
-        }
+        foreach (Transform child in terrainParent.transform) Destroy(child.gameObject);
 
         // Initialize
         cubeGrid = new GameObject[size, size];
         inRangePositions.Clear();
         visiblePositions.Clear();
-        lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
+        // Initialize lastCameraGridPos using integer grid coordinates consistent with Update()
+        lastCameraGridPos = new Vector3Int(0, 0, 0);
         lastCameraRotation = Quaternion.identity;
 
         // Trigger the first terrain load
         UpdateDynamicLoading(true);
     }
 
-    private void Update() 
-    {
-        if (cubeGrid == null || mainCameraTransform == null) return;
-
+    private void Update() {
+        if (!GameState.isPlaying) return;
         // Calculate the camera's current grid coordinates
         int camGridX = Mathf.RoundToInt(mainCameraTransform.position.x) + size / 2;
         int camGridZ = Mathf.RoundToInt(mainCameraTransform.position.z) + size / 2;
@@ -80,16 +66,14 @@ public class TerrainController : MonoBehaviour
         bool rotChanged = Quaternion.Angle(mainCameraTransform.rotation, lastCameraRotation) > rotationThreshold;
 
         // When the camera position or rotation angle exceeds the threshold, update the frustum culling
-        if (posChanged || rotChanged) 
-        {
+        if (posChanged || rotChanged) {
             lastCameraGridPos = new Vector3Int(camGridX, 0, camGridZ);
             lastCameraRotation = mainCameraTransform.rotation;
             UpdateDynamicLoading(false);
         }
     }
 
-    private void UpdateDynamicLoading(bool forceUpdate)
-    {
+    private void UpdateDynamicLoading(bool forceUpdate) {
         int camX = lastCameraGridPos.x;
         int camZ = lastCameraGridPos.z;
 
@@ -150,8 +134,7 @@ public class TerrainController : MonoBehaviour
         visiblePositions = newVisible;
     }
 
-    private bool IsInFrustum(int x, int z, Plane[] planes) 
-    {
+    private bool IsInFrustum(int x, int z, Plane[] planes) {
         float worldX = x - (size / 2);
         float worldZ = z - (size / 2);
 
@@ -160,8 +143,7 @@ public class TerrainController : MonoBehaviour
         return GeometryUtility.TestPlanesAABB(planes, blockBounds);
     }
 
-    private void CreateBlockAt(int x, int z) 
-    {
+    private void CreateBlockAt(int x, int z) {
         // Fixed noise scaling ratio to remove redundant multiplication
         float h = Mathf.PerlinNoise(x * 0.05f, z * 0.05f);
         float m = Mathf.PerlinNoise(x * 0.075f, z * 0.075f);
@@ -178,8 +160,7 @@ public class TerrainController : MonoBehaviour
         cubeGrid[x, z] = newCube;
     }
 
-    private Color GetBiomeColor(float h, float m)
-    {
+    private Color GetBiomeColor(float h, float m) {
         if (h < 0.4f) return (h < 0.25f) ? deepOcean : shallowWater;
         if (h > 0.65f) return (m > 0.55f) ? snowPeak : mountain;
         
