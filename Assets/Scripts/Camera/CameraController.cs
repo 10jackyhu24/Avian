@@ -5,8 +5,6 @@ public class CameraController : MonoBehaviour {
     [SerializeField] private Transform target;
     [SerializeField] private Vector3 followOffset = new Vector3(0, 16.2999992f, -11.8999996f);
     [SerializeField] private float followSmoothTime = 0.2f;
-    [SerializeField] private bool lookAtTarget = true;
-    [SerializeField] private bool useCurrentOffsetWhenTargetAssigned = true;
 
     private Vector3 followVelocity;
 
@@ -28,10 +26,6 @@ public class CameraController : MonoBehaviour {
             ref followVelocity,
             followSmoothTime
         );
-
-        if (lookAtTarget) {
-            transform.LookAt(target);
-        }
     }
 
     public void SetTarget(Transform newTarget) {
@@ -39,11 +33,6 @@ public class CameraController : MonoBehaviour {
             target = null;
             return;
         }
-
-        if (useCurrentOffsetWhenTargetAssigned) {
-            followOffset = transform.position - newTarget.position;
-        }
-
         target = newTarget;
     }
 }

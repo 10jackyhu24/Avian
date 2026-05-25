@@ -7,7 +7,7 @@ public class TerrainController : MonoBehaviour {
     [SerializeField] private int size = 1000;
     
     [Header("Dynamic Loading")]
-    [SerializeField] private int viewDistance = 20;
+    [SerializeField] private int viewDistance = 50;
     [SerializeField] private float rotationThreshold = 3f;
 
     private Camera mainCamera;
