@@ -5,6 +5,10 @@ public class TerrainController : MonoBehaviour {
     [Header("Basic Settings")]
     [SerializeField] private GameObject cubePrefab;
     [SerializeField] private int size = 1000;
+    [SerializeField] private float flatHeight = 0f;
+    [SerializeField] private float biomeScale = 0.03f;
+    [SerializeField] private int updateStride = 4;
+    [SerializeField] private int generationBiasZ = 40;
     
     [Header("Dynamic Loading")]
     [SerializeField] private int viewDistance = 50;
@@ -14,14 +18,15 @@ public class TerrainController : MonoBehaviour {
     private Transform mainCameraTransform;
     private GameObject[,] cubeGrid;
     private GameObject terrainParent;
+    private Material[] biomeMaterials;
 
     // Record the camera state last time to avoid repeated calculations
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
     private Quaternion lastCameraRotation = Quaternion.identity;
+    private int currentSeed;
 
     // Track the currently loaded and displayed coordinates
     private HashSet<Vector2Int> inRangePositions = new HashSet<Vector2Int>();
-    private HashSet<Vector2Int> visiblePositions = new HashSet<Vector2Int>();
 
     // Color definitions (fixed constants, no need to generate new Color objects every time)
     private readonly Color deepOcean = new Color(0f, 0.2f, 0.4f);
@@ -37,7 +42,30 @@ public class TerrainController : MonoBehaviour {
         mainCameraTransform = mainCamera.transform;
     }
 
+    private void EnsureBiomeMaterials() {
+        if (biomeMaterials != null) return;
+
+        Renderer prefabRenderer = cubePrefab.GetComponent<Renderer>();
+        Material baseMaterial = prefabRenderer.sharedMaterial;
+
+        biomeMaterials = new Material[6];
+        biomeMaterials[0] = CreateBiomeMaterial(baseMaterial, deepOcean);
+        biomeMaterials[1] = CreateBiomeMaterial(baseMaterial, shallowWater);
+        biomeMaterials[2] = CreateBiomeMaterial(baseMaterial, desert);
+        biomeMaterials[3] = CreateBiomeMaterial(baseMaterial, grassland);
+        biomeMaterials[4] = CreateBiomeMaterial(baseMaterial, rainforest);
+        biomeMaterials[5] = CreateBiomeMaterial(baseMaterial, mountain);
+    }
+
+    private Material CreateBiomeMaterial(Material baseMaterial, Color color) {
+        Material material = new Material(baseMaterial);
+        material.color = color;
+        return material;
+    }
+
     public void GenerateWorld(int seed) {
+        currentSeed = seed;
+        EnsureBiomeMaterials();
         mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
 
         // Clean up old terrain
@@ -47,7 +75,6 @@ public class TerrainController : MonoBehaviour {
         // Initialize
         cubeGrid = new GameObject[size, size];
         inRangePositions.Clear();
-        visiblePositions.Clear();
         // Initialize lastCameraGridPos using integer grid coordinates consistent with Update()
         lastCameraGridPos = new Vector3Int(0, 0, 0);
         lastCameraRotation = Quaternion.identity;
@@ -61,23 +88,23 @@ public class TerrainController : MonoBehaviour {
         // Calculate the camera's current grid coordinates
         int camGridX = Mathf.RoundToInt(mainCameraTransform.position.x) + size / 2;
         int camGridZ = Mathf.RoundToInt(mainCameraTransform.position.z) + size / 2;
+        int coarseCamX = camGridX / updateStride;
+        int coarseCamZ = camGridZ / updateStride;
 
-        bool posChanged = (camGridX != lastCameraGridPos.x || camGridZ != lastCameraGridPos.z);
+        bool posChanged = (coarseCamX != lastCameraGridPos.x || coarseCamZ != lastCameraGridPos.z);
         bool rotChanged = Quaternion.Angle(mainCameraTransform.rotation, lastCameraRotation) > rotationThreshold;
 
-        // When the camera position or rotation angle exceeds the threshold, update the frustum culling
+        // Only refresh terrain when the camera crosses a larger update cell.
         if (posChanged || rotChanged) {
-            lastCameraGridPos = new Vector3Int(camGridX, 0, camGridZ);
+            lastCameraGridPos = new Vector3Int(coarseCamX, 0, coarseCamZ);
             lastCameraRotation = mainCameraTransform.rotation;
             UpdateDynamicLoading(false);
         }
     }
 
     private void UpdateDynamicLoading(bool forceUpdate) {
-        int camX = lastCameraGridPos.x;
-        int camZ = lastCameraGridPos.z;
-
-        Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(mainCamera);
+        int camX = lastCameraGridPos.x * updateStride;
+        int camZ = lastCameraGridPos.z * updateStride + generationBiasZ;
 
         // Define loading boundary
         int startX = Mathf.Max(0, camX - viewDistance);
@@ -86,44 +113,25 @@ public class TerrainController : MonoBehaviour {
         int endZ   = Mathf.Min(size - 1, camZ + viewDistance);
 
         HashSet<Vector2Int> newInRange = new HashSet<Vector2Int>();
-        HashSet<Vector2Int> newVisible = new HashSet<Vector2Int>();
 
-        // 1. Filter out the coordinates within the range and the coordinates within the frustum
+        // Build or reuse blocks in the active range.
         for (int x = startX; x <= endX; x++) {
             for (int z = startZ; z <= endZ; z++) {
                 var pos = new Vector2Int(x, z);
                 newInRange.Add(pos);
-                if (IsInFrustum(x, z, frustumPlanes)) {
-                    newVisible.Add(pos);
-                }
             }
         }
 
-        // 2. Instantiate new blocks that enter the range (hide them if they are outside the frustum)
         foreach (Vector2Int pos in newInRange) {
             if (cubeGrid[pos.x, pos.y] == null) {
                 CreateBlockAt(pos.x, pos.y);
-                if (!newVisible.Contains(pos)) {
-                    cubeGrid[pos.x, pos.y].SetActive(false);
-                }
             }
-        }
-
-        // 3. Show new blocks that enter the frustum
-        foreach (Vector2Int pos in newVisible) {
-            if (cubeGrid[pos.x, pos.y] != null && !cubeGrid[pos.x, pos.y].activeSelf) {
+            if (!cubeGrid[pos.x, pos.y].activeSelf) {
                 cubeGrid[pos.x, pos.y].SetActive(true);
             }
         }
 
-        // 4. Hide blocks that leave the frustum
-        foreach (Vector2Int pos in visiblePositions) {
-            if (!newVisible.Contains(pos) && cubeGrid[pos.x, pos.y] != null) {
-                cubeGrid[pos.x, pos.y].SetActive(false);
-            }
-        }
-
-        // 5. Hide blocks that leave the generation radius completely
+        // Deactivate blocks that fall outside the active range.
         foreach (Vector2Int pos in inRangePositions) {
             if (!newInRange.Contains(pos) && cubeGrid[pos.x, pos.y] != null) {
                 cubeGrid[pos.x, pos.y].SetActive(false);
@@ -131,41 +139,34 @@ public class TerrainController : MonoBehaviour {
         }
 
         inRangePositions = newInRange;
-        visiblePositions = newVisible;
-    }
-
-    private bool IsInFrustum(int x, int z, Plane[] planes) {
-        float worldX = x - (size / 2);
-        float worldZ = z - (size / 2);
-
-        // Simplified bounding box calculation: assume block height is between 0 and 5
-        Bounds blockBounds = new Bounds(new Vector3(worldX, 2.5f, worldZ), new Vector3(1f, 6f, 1f));
-        return GeometryUtility.TestPlanesAABB(planes, blockBounds);
     }
 
     private void CreateBlockAt(int x, int z) {
-        // Fixed noise scaling ratio to remove redundant multiplication
-        float h = Mathf.PerlinNoise(x * 0.05f, z * 0.05f);
-        float m = Mathf.PerlinNoise(x * 0.075f, z * 0.075f);
+        float biomeNoise = Mathf.PerlinNoise(
+            (x + currentSeed) * biomeScale,
+            (z + currentSeed) * biomeScale
+        );
+        float moistureNoise = Mathf.PerlinNoise(
+            (x + currentSeed * 2) * (biomeScale * 1.5f),
+            (z + currentSeed * 2) * (biomeScale * 1.5f)
+        );
 
-        // Calculate 3D wave height
-        float yPos = (h >= 0.4f) ? (h - 0.4f) * 10f : 0f;
-
-        Vector3 position = new Vector3(x - (size / 2), yPos, z - (size / 2));
+        Vector3 position = new Vector3(x - (size / 2), flatHeight, z - (size / 2));
         GameObject newCube = Instantiate(cubePrefab, position, Quaternion.identity);
         
         newCube.transform.parent = terrainParent.transform;
-        newCube.GetComponent<Renderer>().material.color = GetBiomeColor(h, m);
+        Renderer renderer = newCube.GetComponent<Renderer>();
+        renderer.sharedMaterial = GetBiomeMaterial(biomeNoise, moistureNoise);
 
         cubeGrid[x, z] = newCube;
     }
 
-    private Color GetBiomeColor(float h, float m) {
-        if (h < 0.4f) return (h < 0.25f) ? deepOcean : shallowWater;
-        if (h > 0.65f) return (m > 0.55f) ? snowPeak : mountain;
-        
-        if (m < 0.35f) return desert;
-        if (m < 0.65f) return grassland;
-        return rainforest;
+    private Material GetBiomeMaterial(float h, float m) {
+        if (h < 0.18f) return biomeMaterials[0];
+        if (h < 0.30f) return biomeMaterials[1];
+        if (h < 0.48f) return biomeMaterials[2];
+        if (h < 0.66f) return biomeMaterials[3];
+        if (m < 0.55f) return biomeMaterials[4];
+        return biomeMaterials[5];
     }
 }
