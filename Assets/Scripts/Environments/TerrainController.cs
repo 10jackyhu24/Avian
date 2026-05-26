@@ -80,7 +80,7 @@ public class TerrainController : MonoBehaviour {
         lastCameraRotation = Quaternion.identity;
 
         // Trigger the first terrain load
-        UpdateDynamicLoading(true);
+        UpdateDynamicLoading();
     }
 
     private void Update() {
@@ -98,11 +98,11 @@ public class TerrainController : MonoBehaviour {
         if (posChanged || rotChanged) {
             lastCameraGridPos = new Vector3Int(coarseCamX, 0, coarseCamZ);
             lastCameraRotation = mainCameraTransform.rotation;
-            UpdateDynamicLoading(false);
+            UpdateDynamicLoading();
         }
     }
 
-    private void UpdateDynamicLoading(bool forceUpdate) {
+    private void UpdateDynamicLoading() {
         int camX = lastCameraGridPos.x * updateStride;
         int camZ = lastCameraGridPos.z * updateStride + generationBiasZ;
 
@@ -113,12 +113,20 @@ public class TerrainController : MonoBehaviour {
         int endZ   = Mathf.Min(size - 1, camZ + viewDistance);
 
         HashSet<Vector2Int> newInRange = new HashSet<Vector2Int>();
+        Plane[] cameraPlanes = GeometryUtility.CalculateFrustumPlanes(mainCamera);
 
         // Build or reuse blocks in the active range.
         for (int x = startX; x <= endX; x++) {
             for (int z = startZ; z <= endZ; z++) {
-                var pos = new Vector2Int(x, z);
-                newInRange.Add(pos);
+                // Check if the block is within the camera's view frustum
+                Vector3 blockCenter = new Vector3(x - (size / 2f), flatHeight, z - (size / 2f));
+                // Expand bounds by a larger margin (e.g., 20) to generate an extra ring/padding outside the view
+                Bounds blockBounds = new Bounds(blockCenter, Vector3.one * 20f); 
+
+                if (GeometryUtility.TestPlanesAABB(cameraPlanes, blockBounds)) {
+                    var pos = new Vector2Int(x, z);
+                    newInRange.Add(pos);
+                }
             }
         }
 
