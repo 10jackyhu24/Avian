@@ -1,42 +1,57 @@
 using UnityEngine;
 using TMPro;
+using Unity.Netcode;
 
-public class CreateWorldOptions : MonoBehaviour {
-
+public class CreateWorldOptions : MonoBehaviour
+{
     [Header("UI Elements")]
     [SerializeField] private TMP_InputField seedInputField;
 
     private MenuManager menuManager;
     private TerrainController terrainController;
-    private PlayerSpawner playerSpawner;
 
-    private void Awake() {
+    private void Awake()
+    {
         menuManager = FindFirstObjectByType<MenuManager>();
         terrainController = FindFirstObjectByType<TerrainController>();
-        playerSpawner = FindFirstObjectByType<PlayerSpawner>();
     }
 
-    public void OnGenerateWorldClicked() {
+    public void OnGenerateWorldClicked()
+    {
         int seed;
 
-        if (seedInputField != null && !string.IsNullOrWhiteSpace(seedInputField.text)) {
+        if (seedInputField != null &&
+            !string.IsNullOrWhiteSpace(seedInputField.text))
+        {
             string rawText = seedInputField.text.Trim();
-            if (int.TryParse(rawText, out int parsedSeed)) {
+
+            if (int.TryParse(rawText, out int parsedSeed))
+            {
                 seed = parsedSeed;
             }
-            else {
+            else
+            {
                 seed = rawText.GetHashCode();
             }
         }
-        else {
+        else
+        {
             seed = Random.Range(0, 999999);
         }
 
         Debug.Log($"[CreateWorld] Seed: {seed}");
+
+        // 先生成地圖
         terrainController.GenerateWorld(seed);
-        playerSpawner.SpawnPlayerAtConfiguredPosition();
+
+        // 啟動 NGO Host
+        if (!NetworkManager.Singleton.IsListening)
+        {
+            NetworkManager.Singleton.StartHost();
+        }
 
         menuManager.HideMenu();
+
         GameState.isPlaying = true;
     }
 }

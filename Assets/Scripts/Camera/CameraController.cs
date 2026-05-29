@@ -8,14 +8,14 @@ public class CameraController : MonoBehaviour {
 
     private Vector3 followVelocity;
 
-    private void Start() {
-        if (target == null) {
-            PlayerController player = FindFirstObjectByType<PlayerController>();
-            if (player != null) {
-                SetTarget(player.transform);
-            }
-        }
-    }
+    // private void Start() {
+    //     if (target == null) {
+    //         PlayerController player = FindFirstObjectByType<PlayerController>();
+    //         if (player != null) {
+    //             SetTarget(player.transform);
+    //         }
+    //     }
+    // }
 
     private void LateUpdate() {
         if (!GameState.isPlaying) return;

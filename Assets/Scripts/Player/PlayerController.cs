@@ -1,7 +1,10 @@
 using UnityEngine;
+using Unity.Netcode; // for NGO
 
 [RequireComponent(typeof(CharacterController))]
-public class PlayerController : MonoBehaviour {
+
+//原本是MonoBehaviour 為了適配NGO改成 NetworkBehaviour
+public class PlayerController : NetworkBehaviour {
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float jumpHeight = 1.5f;
@@ -16,6 +19,9 @@ public class PlayerController : MonoBehaviour {
     }
 
     private void Update() {
+        //IsOwner 來判定是否是玩家本人操控的
+        if(!IsOwner) return;
+
         HandleMovement();
     }
 
