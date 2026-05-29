@@ -35,6 +35,7 @@ public class CreateWorldOptions : MonoBehaviour {
         Debug.Log($"[CreateWorld] Seed: {seed}");
         terrainController.GenerateWorld(seed);
         playerSpawner.SpawnPlayerAtConfiguredPosition();
+        playerSpawner.SpawnSinglePlayerEnemies();
 
         menuManager.HideMenu();
         GameState.isPlaying = true;
