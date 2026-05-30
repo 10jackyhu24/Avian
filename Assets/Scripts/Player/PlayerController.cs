@@ -10,12 +10,16 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private float jumpHeight = 1.5f;
     [SerializeField] private float gravity = -20f;
     [SerializeField] private float rotationSpeed = 12f;
-
+    Animator animator;
+    SpriteRenderer spriteRenderer;
     private CharacterController characterController;
     private float verticalVelocity;
-
+    bool previousFlipX = false;
+    
     private void Awake() {
         characterController = GetComponent<CharacterController>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
+        animator = GetComponent<Animator>();
     }
 
     private void Update() {
@@ -29,19 +33,30 @@ public class PlayerController : NetworkBehaviour {
         if (characterController.isGrounded && verticalVelocity < 0f) {
             verticalVelocity = -2f;
         }
-
+        
         float horizontal = Input.GetAxisRaw("Horizontal");
+        
         float vertical = Input.GetAxisRaw("Vertical");
 
         Vector3 moveDirection = new Vector3(horizontal, 0f, vertical).normalized;
 
         if (moveDirection.sqrMagnitude > 0f) {
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                targetRotation,
-                rotationSpeed * Time.deltaTime
-            );
+            if(horizontal <=0) {
+            if(!previousFlipX) {
+                spriteRenderer.flipX = true;
+                previousFlipX = true;
+            }
+        }
+        else {
+            if(previousFlipX) {
+                spriteRenderer.flipX = false;
+                previousFlipX = false;
+            }
+        }
+            animator.SetBool("isMoving", true);
+        }
+        else {
+            animator.SetBool("isMoving", false);
         }
 
         if (Input.GetButtonDown("Jump") && characterController.isGrounded) {
@@ -49,10 +64,12 @@ public class PlayerController : NetworkBehaviour {
         }
 
         verticalVelocity += gravity * Time.deltaTime;
-
+        transform.rotation=new Quaternion(0,0,0,0);
         Vector3 velocity = moveDirection * moveSpeed;
         velocity.y = verticalVelocity;
-
+        
         characterController.Move(velocity * Time.deltaTime);
+        
+        
     }
 }
