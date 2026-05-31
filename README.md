@@ -123,17 +123,15 @@ kubectl logs <pod-name>
     * **Solution:** Go to Unity **Preferences > External Tools** and change **External Script Editor Args** from `$(File)` to `$(ProjectPath) $(File)`.
 
 ### K8s Issue
-1. **`kubectl` Error: Connection Refused (TCP localhost:8080)**
 
-    * **Cause**: `kubectl` lost connection to the Kind cluster.
-    * **Solution**: Run `kind export kubeconfig --name avian-cluster` to reconnect.
+1. **Cluster Creation Timeout or "cgroups disabled" Error**
 
-2. **Cluster Creation Timeout or "cgroups disabled" Error**
-
-    * **Cause**: WSL/Docker memory is full, or there's a compatibility issue with the newest Kubernetes version on Windows.
-    * **Solution A (Use Stable Version)**: Delete the broken cluster and force a stable version:
-    ```powershell
-    kind delete cluster --all
-    kind create cluster --config backend/kind-config.yaml --name avian-cluster --image kindest/node:v1.30.0
-    ```
-    * **Solution B (Restart WSL)**: Open PowerShell and run `wsl --shutdown`, then restart Docker Desktop.
+    * **Cause:** WSL/Docker memory is full, or there's a compatibility issue with the newest Kubernetes version on Windows.
+    * **Solution (Update WSL):**
+        1. Close Docker Desktop completely. (Make sure to click the up-arrow in the Windows system tray at the bottom right, right-click the Docker icon, and select **Quit Docker Desktop**).
+        2. Open PowerShell **as Administrator** and run:
+           ```powershell
+           wsl --update
+           wsl --shutdown
+           ```
+        3. Reopen Docker Desktop and wait for it to fully start.
