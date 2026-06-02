@@ -1,64 +1,24 @@
 # =======================================================
-# 1. PostgreSQL Database (Persistent, internal only)
+# 0. External Database Bridge (Connects K8s to standalone Docker PostgreSQL)
 # =======================================================
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: avian-postgres-deployment
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: avian-postgres
-  template:
-    metadata:
-      labels:
-        app: avian-postgres
-    spec:
-      containers:
-      - name: postgres
-        image: postgres:15
-        env:
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: postgres-user
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: postgres-password
-        - name: POSTGRES_DB
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: postgres-db
-        ports:
-        - containerPort: 5432
----
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-service # Internal URL for K8s Python connections
+  name: postgres-service # Lobby manager will connect to http://postgres-service:5432
 spec:
-  type: ClusterIP
-  ports:
-  - port: 5432
-    targetPort: 5432
-  selector:
-    app: avian-postgres
+  type: ExternalName
+  externalName: host.docker.internal
 
 ---
 # =======================================================
-# 2. Game Lobby Manager (Handles room creation/join requests from Unity)
+# 1. Game Lobby Manager (Handles room creation/join requests from Unity)
 # =======================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: avian-lobby-deployment
 spec:
-  replicas: 1 # 1 Lobby Manager instance is enough
+  replicas: 1
   selector:
     matchLabels:
       app: avian-lobby
@@ -69,43 +29,65 @@ spec:
     spec:
       containers:
       - name: lobby-manager
-        image: avian-lobby:v1 # This will be your built Lobby Manager Docker Image
+        image: avian-lobby:v1
         ports:
         - containerPort: 8000
+        env:
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: avian-db-secret
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: avian-db-secret
+              key: DB_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: avian-db-secret
+              key: DB_NAME
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: avian-db-secret
+              key: DB_HOST
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: lobby-service # Expose this service so Unity can connect
+  name: lobby-service
 spec:
-  type: NodePort # Map the internal K8s port to the local host via NodePort
+  type: NodePort
   ports:
   - port: 8000
     targetPort: 8000
-    nodePort: 30080 # 💡 This allows your local Unity to connect to http://localhost:30080 directly
+    nodePort: 30080
   selector:
     app: avian-lobby
 
 ---
 # =======================================================
-# 3. Game Room Pool (Pre-warm 3 clean empty rooms, auto-replenish on termination)
+# 2. Game Room Pool (Pre-warm 3 clean empty rooms, auto-replenish on termination)
 # =======================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: avian-rooms-pool-deployment
 spec:
-  replicas: 3 # [Key] Pre-create 3 independent game room Docker containers!
+  replicas: 3
   selector:
     matchLabels:
       app: avian-game-room
   template:
     metadata:
       labels:
-        app: avian-game-room # Apply room label
+        app: avian-game-room
     spec:
       containers:
       - name: game-room
-        image: avian-world:v1 # This is your previously built Python game logic Image
+        image: avian-world:v1
         ports:
         - containerPort: 5000

@@ -112,3 +112,4 @@ InitTestScene*.unity*
 
 # backend
 secret.yaml
+.env

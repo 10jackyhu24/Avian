@@ -3,14 +3,14 @@
 ## Prerequisites
 
 * **Unity Version:** `6000.3.15f1 LTS` (Please check `ProjectSettings/ProjectVersion.txt` for the exact version).
-*   **Git LFS:** Ensure you have [Git Large File Storage](https://git-lfs.github.com/) installed to handle high-quality assets.
+* **Git LFS:** Ensure you have [Git Large File Storage](https://git-lfs.github.com/) installed to handle high-quality assets.
 
 ## Getting Started
 
 ### Unity
 
 **Clone the Repository:**
-1. git clone [https://github.com/10jackyhu24/Avian.git](https://github.com/10jackyhu24/Avian.git)
+1. git clone https://github.com/10jackyhu24/Avian.git
 
 2. **Add to Unity Hub:**
     * Open Unity Hub.
@@ -33,7 +33,7 @@
 
 ### K8s (Local Backend Setup)
 
-To run the game backend locally, we use **Docker** and **Kind** (Kubernetes IN Docker).
+To run the game backend locally, we adopt the industry-standard architecture: the **PostgreSQL database runs in a standalone Docker container** (simulating a cloud-managed database like AWS RDS), while the **Game Lobby and Room Pool are deployed inside Kubernetes (Kind)**.
 
 **Step 1: Install Required Tools**
 
@@ -46,45 +46,53 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**Step 2: Create the Local Cluster Ensure Docker Desktop is opened and running.**
+**Step 2: Start the Standalone Database**
 
-Open a normal PowerShell terminal in the project folder:
+Before starting, configure your local environment credentials:
+* Copy the file `./backend/.env.example` to `./backend/.env` and fill in your custom values. Ensure `DB_HOST` is set to `postgres-service`.
 
+Now, Ensure Docker Desktop is running, spin up the standalone PostgreSQL database outside of Kubernetes:
 ```powershell
-# Create the cluster using our custom config
+docker compose -f ./backend/docker-compose.yml up -d
+```
+
+**Step 3: Create the K8s Cluster**
+
+In your project root folder, generate a local secret file from your env, and create the Kind cluster:
+```powershell
+# 1. Generate a real secret.yaml file from your local .env for project documentation
+kubectl create secret generic avian-db-secret --from-env-file=backend/.env --dry-run=client -o yaml > backend/secret.yaml
+
+# 2. Create the cluster using our custom config
 kind create cluster --config backend/kind-config.yaml
 
-# Link kubectl to the new cluster
+# 3. Link kubectl to the new cluster
 kind export kubeconfig --name avian-cluster
 ```
 
-**Step 3: Deploy the Services Deploy the database and game servers:**
+**Step 4: Deploy Game Servers and Secrets**
 
-Before deploying, you need to set up your database credentials:
-
-* Rename or copy the file `./backend/secret.yaml.example` to `./backend/secret.yaml`.
-
-* Open `./backend/secret.yaml` in your editor and change the placeholder values (username, password, db name) to your own.
-
-Once configured, deploy the database and game servers:
-
+Deploy the secret blueprint and the game application components to Kubernetes:
 ```powershell
+# 1. Deploy the secret insurance box into Kubernetes
 kubectl apply -f backend/secret.yaml
+
+# 2. Deploy External Database Bridge, Lobby Manager and Game Rooms into Kubernetes
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**Step 4: Verify the Deployment** 
+**Step 5: Verify the Deployment**
 
-Because Kubernetes runs inside a single Docker container, you won't see the individual database or game servers in the Docker Desktop UI. Use the following `kubectl` commands to check their status:
+Verify that all backend components are healthy and properly interconnected:
 ```powershell
-# Check if servers are running (Wait for the STATUS to become 'Running')
+# Check if the standalone database is active
+docker compose -f backend/docker-compose.yml ps
+
+# Check if Kubernetes components are running (Wait for STATUS to become 'Running')
 kubectl get pods
 
-# Check network and ports (Ensure lobby-service is mapped to 30080)
+# Check network services (Ensure lobby-service nodePort is successfully mapped to 30080)
 kubectl get svc
-
-# Check console logs for a specific server (Replace with your actual pod name from 'get pods')
-kubectl logs <pod-name>
 ```
 
 ## Common Issues & Troubleshooting
@@ -124,7 +132,7 @@ kubectl logs <pod-name>
 
 ### K8s Issue
 
-1. **Cluster Creation Timeout or "cgroups disabled" Error**
+1. **Cluster Creation Timeout or \"cgroups disabled\" Error**
 
     * **Cause:** WSL/Docker memory is full, or there's a compatibility issue with the newest Kubernetes version on Windows.
     * **Solution (Update WSL):**
