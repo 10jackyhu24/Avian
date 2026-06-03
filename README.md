@@ -86,7 +86,7 @@ kubectl apply -f backend/avian-cluster.yaml
 Verify that all backend components are healthy and properly interconnected:
 ```powershell
 # Check if the standalone database is active
-docker compose -f backend/docker-compose.yml ps
+docker compose -f backend/docker-compose.yaml ps
 
 # Check if Kubernetes components are running (Wait for STATUS to become 'Running')
 kubectl get pods
