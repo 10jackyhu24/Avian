@@ -53,7 +53,7 @@ Before starting, configure your local environment credentials:
 
 Now, Ensure Docker Desktop is running, spin up the standalone PostgreSQL database outside of Kubernetes:
 ```powershell
-docker compose -f ./backend/docker-compose.yml up -d
+docker compose -f ./backend/docker-compose.yaml up -d
 ```
 
 **Step 3: Create the K8s Cluster**
