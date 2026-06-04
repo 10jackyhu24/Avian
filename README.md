@@ -122,6 +122,16 @@ kubectl logs <pod-name>
 
     * **Solution:** Go to Unity **Preferences > External Tools** and change **External Script Editor Args** from `$(File)` to `$(ProjectPath) $(File)`.
 
+5. **Missing 'Unity.Netcode' Namespace / IDE0005 Reference Error**
+
+    If your code editor shows errors like `The type or namespace name 'Netcode' does not exist` or `Using directive is unnecessary` on `using Unity.Netcode;`.
+
+    * **Cause:** The IDE project files (`.csproj`) are out of sync with Unity's Package Manager.
+    * **Solution:**
+        1. In Unity Editor, go to **Edit > Preferences > External Tools**.
+        2. Under **Generate .csproj files for:**, ensure both **Registry packages** and **Git packages** are checked.
+        3. Click the **Regenerate project files** button.
+
 ### K8s Issue
 
 1. **Cluster Creation Timeout or "cgroups disabled" Error**
