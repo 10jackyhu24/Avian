@@ -56,9 +56,20 @@ Now, Ensure Docker Desktop is running, spin up the standalone PostgreSQL databas
 docker compose -f ./backend/docker-compose.yaml up -d
 ```
 
-**Step 3: Create the K8s Cluster**
+**Step 3: Build Python Docker Images (Scheme A)**
 
-In your project root folder, generate a local secret file from your env, and create the Kind cluster:
+Build the isolated Docker images for the Lobby Manager and Game Room from their respective subdirectories (No local Python installation required):
+```powershell
+# Build Lobby Manager Image
+docker build -t avian-lobby:v1 ./backend/lobby
+
+# Build Game Room Image
+docker build -t avian-world:v1 ./backend/world
+```
+
+**Step 4: Create the K8s Cluster & Load Local Images**
+
+In your project root folder, generate a local secret file from your env, create the Kind cluster, and inject your images:
 ```powershell
 # 1. Generate a real secret.yaml file from your local .env for project documentation
 kubectl create secret generic avian-db-secret --from-env-file=backend/.env --dry-run=client -o yaml > backend/secret.yaml
@@ -68,9 +79,13 @@ kind create cluster --config backend/kind-config.yaml
 
 # 3. Link kubectl to the new cluster
 kind export kubeconfig --name avian-cluster
+
+# 4. [CRITICAL] Load your locally built images into Kind's internal cache so K8s can find them
+kind load docker-image avian-lobby:v1 --name avian-cluster
+kind load docker-image avian-world:v1 --name avian-cluster
 ```
 
-**Step 4: Deploy Game Servers and Secrets**
+**Step 5: Deploy Game Servers and Secrets**
 
 Deploy the secret blueprint and the game application components to Kubernetes:
 ```powershell
@@ -81,7 +96,7 @@ kubectl apply -f backend/secret.yaml
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**Step 5: Verify the Deployment**
+**Step 6: Verify the Deployment**
 
 Verify that all backend components are healthy and properly interconnected:
 ```powershell
@@ -93,6 +108,27 @@ kubectl get pods
 
 # Check network services (Ensure lobby-service nodePort is successfully mapped to 30080)
 kubectl get svc
+```
+
+### How to Update the Backend Deployment
+
+Whenever you or your team members modify any Python code in the `lobby/` or `world/` folders, run this simple script to update the running servers instantly without deleting or recreating the K8s cluster:
+
+```powershell
+# 1. Rebuild the images with your new code changes
+docker build -t avian-lobby:v1 ./backend/lobby
+docker build -t avian-world:v1 ./backend/world
+
+# 2. Re-inject the updated images into Kind's cache
+kind load docker-image avian-lobby:v1 --name avian-cluster
+kind load docker-image avian-world:v1 --name avian-cluster
+
+# 3. Force Kubernetes to perform a rolling update using the new images
+kubectl rollout restart deployment avian-lobby-deployment
+kubectl rollout restart deployment avian-rooms-pool-deployment
+
+# 4. Monitor the restart progress until all pods are 'Running'
+kubectl get pods -w
 ```
 
 ## Common Issues & Troubleshooting
@@ -130,9 +166,19 @@ kubectl get svc
 
     * **Solution:** Go to Unity **Preferences > External Tools** and change **External Script Editor Args** from `$(File)` to `$(ProjectPath) $(File)`.
 
+5. **Missing 'Unity.Netcode' Namespace / IDE0005 Reference Error**
+
+    If your code editor shows errors like `The type or namespace name 'Netcode' does not exist` or `Using directive is unnecessary` on `using Unity.Netcode;`.
+
+    * **Cause:** The IDE project files (`.csproj`) are out of sync with Unity's Package Manager.
+    * **Solution:**
+        1. In Unity Editor, go to **Edit > Preferences > External Tools**.
+        2. Under **Generate .csproj files for:**, ensure both **Registry packages** and **Git packages** are checked.
+        3. Click the **Regenerate project files** button.
+
 ### K8s Issue
 
-1. **Cluster Creation Timeout or \"cgroups disabled\" Error**
+1. **Cluster Creation Timeout or "cgroups disabled" Error**
 
     * **Cause:** WSL/Docker memory is full, or there's a compatibility issue with the newest Kubernetes version on Windows.
     * **Solution (Update WSL):**
