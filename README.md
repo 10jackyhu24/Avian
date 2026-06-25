@@ -110,6 +110,41 @@ kubectl get pods
 kubectl get svc
 ```
 
+### Authentication Flow
+
+The lobby backend now exposes a simple account system for Unity:
+
+* `POST /auth/register`
+  * Creates a new user account.
+  * Stores only a salted password hash in PostgreSQL.
+  * Returns a `session_token` after success.
+
+* `POST /auth/login`
+  * Verifies the username and password.
+  * Returns a new `session_token` after success.
+
+* `GET /auth/validate?token=...`
+  * Confirms whether a session token is still valid.
+
+* `GET /health`
+  * Lightweight health check for Kubernetes and local debugging.
+
+Recommended Unity startup flow:
+
+1. Show a login panel first.
+2. Ask the player for username and password.
+3. Call `/auth/login`.
+4. If login succeeds, store the returned `session_token` in memory for the current session.
+5. If login fails, show the error and keep the login panel open.
+6. Only continue into the main menu or multiplayer flow after authentication succeeds.
+
+Why this design:
+
+* Passwords are never stored as plain text.
+* A token lets Unity stay logged in after the first request without sending the password repeatedly.
+* Keeping auth inside `lobby` matches the intended architecture: lobby owns player identity, room servers focus on gameplay.
+* The database stays authoritative, which makes future features like bans, profiles, and saved progress much easier.
+
 ### How to Update the Backend Deployment
 
 Whenever you or your team members modify any Python code in the `lobby/` or `world/` folders, run this simple script to update the running servers instantly without deleting or recreating the K8s cluster:
