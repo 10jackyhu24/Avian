@@ -31,11 +31,73 @@
     ```
     The location of unityYAMLMerge.exe may be `"C:/Program Files/Unity/Hub/Editor/6000.3.15f1/Editor/Data/Tools/UnityYAMLMerge.exe"`
 
-### K8s (Local Backend Setup)
+### Backend Setup
 
-To run the game backend locally, we adopt the industry-standard architecture: the **PostgreSQL database runs in a standalone Docker container** (simulating a cloud-managed database like AWS RDS), while the **Game Lobby and Room Pool are deployed inside Kubernetes (Kind)**.
+For local development, there are currently two backend paths:
+
+* **Recommended for auth testing:** run PostgreSQL and the lobby API together in Docker Compose, then point Unity to `http://localhost:8000`.
+* **Kubernetes path:** run the lobby and room pool in Kind. This is closer to the intended future architecture, but the external database bridge is more fragile for local setup.
+
+### Docker Compose (Recommended Local Auth Flow)
+
+This is the simplest working path for login/register testing.
 
 **Step 1: Install Required Tools**
+
+Ensure Docker Desktop is installed and running.
+
+**Step 2: Configure Local Environment**
+
+Copy the file `./backend/.env.example` to `./backend/.env` and fill in your local values. For example:
+
+```env
+DB_USER=avian_user
+DB_PASSWORD=avian_password
+DB_NAME=avian_db
+DB_HOST=postgres-service
+DB_PORT=5432
+PASSWORD_HASH_ITERATIONS=210000
+```
+
+`backend/.env` is ignored by Git and should stay local to each machine.
+
+**Step 3: Start Postgres and Lobby API**
+
+From the project root:
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+This starts:
+
+* `postgres_db` on `localhost:5432`
+* `avian_lobby` on `localhost:8000`
+
+**Step 4: Verify the API**
+
+```powershell
+curl.exe http://localhost:8000/health
+```
+
+Expected result:
+
+```json
+{"ok":true}
+```
+
+**Step 5: Point Unity to the Local Auth API**
+
+Make sure the `BackendAuthClient` component in Unity uses:
+
+```text
+Base Url = http://localhost:8000
+```
+
+Registering a new account should route to the multiplayer panel on success.
+
+### K8s (Alternative Local Backend Setup)
+
+The Kubernetes path is still useful for future multiplayer infrastructure work, but it is not the simplest path for local auth testing.
 
 Open PowerShell **as Administrator** and run the following to install Chocolatey, Kind, and Kubectl:
 ```powershell
@@ -46,28 +108,20 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**Step 2: Start the Standalone Database**
-
 Before starting, configure your local environment credentials:
-* Copy the file `./backend/.env.example` to `./backend/.env` and fill in your custom values. Ensure `DB_HOST` is set to `postgres-service`.
+* Copy the file `./backend/.env.example` to `./backend/.env` and fill in your custom values.
+* The current K8s manifest expects the database bridge hostname `postgres-service`.
 
-Now, Ensure Docker Desktop is running, spin up the standalone PostgreSQL database outside of Kubernetes:
+**Step 1: Build Python Docker Images**
+
+Build the isolated Docker images for the Lobby Manager and Game Room from their respective subdirectories:
+
 ```powershell
-docker compose -f ./backend/docker-compose.yaml up -d
-```
-
-**Step 3: Build Python Docker Images (Scheme A)**
-
-Build the isolated Docker images for the Lobby Manager and Game Room from their respective subdirectories (No local Python installation required):
-```powershell
-# Build Lobby Manager Image
 docker build -t avian-lobby:v1 ./backend/lobby
-
-# Build Game Room Image
 docker build -t avian-world:v1 ./backend/world
 ```
 
-**Step 4: Create the K8s Cluster & Load Local Images**
+**Step 2: Create the K8s Cluster & Load Local Images**
 
 In your project root folder, generate a local secret file from your env, create the Kind cluster, and inject your images:
 ```powershell
@@ -85,7 +139,7 @@ kind load docker-image avian-lobby:v1 --name avian-cluster
 kind load docker-image avian-world:v1 --name avian-cluster
 ```
 
-**Step 5: Deploy Game Servers and Secrets**
+**Step 3: Deploy Game Servers and Secrets**
 
 Deploy the secret blueprint and the game application components to Kubernetes:
 ```powershell
@@ -96,7 +150,7 @@ kubectl apply -f backend/secret.yaml
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**Step 6: Verify the Deployment**
+**Step 4: Verify the Deployment**
 
 Verify that all backend components are healthy and properly interconnected:
 ```powershell
@@ -108,6 +162,12 @@ kubectl get pods
 
 # Check network services (Ensure lobby-service nodePort is successfully mapped to 30080)
 kubectl get svc
+```
+
+If you test Unity against this path, the `BackendAuthClient` base URL should be:
+
+```text
+http://localhost:30080
 ```
 
 ### Authentication Flow
@@ -138,6 +198,12 @@ Recommended Unity startup flow:
 5. If login fails, show the error and keep the login panel open.
 6. Only continue into the main menu or multiplayer flow after authentication succeeds.
 
+Notes about the current Unity auth implementation:
+
+* `BackendAuthClient` can optionally persist the session token in `PlayerPrefs`.
+* If `Persist Session Token` is enabled, clicking `Multiplayer` may skip the auth panel when a token already exists locally.
+* For repeated auth testing, you can disable `Persist Session Token` in the Unity Inspector.
+
 Why this design:
 
 * Passwords are never stored as plain text.
@@ -164,6 +230,12 @@ kubectl rollout restart deployment avian-rooms-pool-deployment
 
 # 4. Monitor the restart progress until all pods are 'Running'
 kubectl get pods -w
+```
+
+If you are using the Docker-only auth path instead, update the running backend with:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
 ```
 
 ## Common Issues & Troubleshooting

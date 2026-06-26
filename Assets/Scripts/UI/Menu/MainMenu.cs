@@ -2,9 +2,11 @@ using UnityEngine;
 
 public class MainMenu : MonoBehaviour {
     private MenuManager menuManager;
+    private BackendAuthClient backendAuthClient;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
+        backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
     }
 
     public void SwitchToSinglePlayer() {
@@ -12,7 +14,12 @@ public class MainMenu : MonoBehaviour {
     }
 
     public void SwitchToMultiPlayer() {
-        menuManager.SwitchToPanel(PanelType.Multiplayer);
+        if (backendAuthClient != null && !string.IsNullOrWhiteSpace(backendAuthClient.SessionToken)) {
+            menuManager.SwitchToPanel(PanelType.Multiplayer);
+            return;
+        }
+
+        menuManager.SwitchToPanel(PanelType.Auth);
     }
 
     public void SwitchToOptions() {

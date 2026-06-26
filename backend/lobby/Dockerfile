@@ -14,5 +14,5 @@ COPY . .
 # Expose the port that Lobby Manager listens on (FastAPI default)
 EXPOSE 8000
 
-# Command to run your Python script
-CMD ["python", "main.py"]
+# Run the FastAPI app so the container stays alive and serves HTTP requests.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

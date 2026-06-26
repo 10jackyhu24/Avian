@@ -32,7 +32,7 @@ public class BackendAuthClient : MonoBehaviour {
         public string detail;
     }
 
-    [SerializeField] private string baseUrl = "http://localhost:30080";
+    [SerializeField] private string baseUrl = "http://localhost:8000";
     [SerializeField] private bool persistSessionToken = true;
 
     public string SessionToken { get; private set; }
