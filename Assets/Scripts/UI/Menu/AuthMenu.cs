@@ -21,9 +21,9 @@ public class AuthMenu : MonoBehaviour {
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
     }
 
-    private void OnEnable() {
-        RefreshSessionStatus();
-    }
+    // private void OnEnable() {
+    //     RefreshSessionStatus();
+    // }
 
     public void Register() {
         if (!TryGetCredentials(out string username, out string password)) {
@@ -70,12 +70,21 @@ public class AuthMenu : MonoBehaviour {
     }
 
     public void ContinueToMultiplayer() {
-        if (backendAuthClient == null || string.IsNullOrWhiteSpace(backendAuthClient.SessionToken)) {
+        if (backendAuthClient == null || !backendAuthClient.HasStoredSessionToken()) {
             SetStatus("Please log in first.");
             return;
         }
 
-        menuManager.SwitchToPanel(successPanel);
+        backendAuthClient.ValidateCurrentSession(
+            _ => {
+                menuManager.SwitchToPanel(successPanel);
+            },
+            errorMessage => {
+                backendAuthClient.ClearSession();
+                SetStatus(errorMessage);
+                menuManager.SwitchToPanel(PanelType.Auth);
+            }
+        );
     }
 
     public void Logout() {

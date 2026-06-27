@@ -63,6 +63,10 @@ public class BackendAuthClient : MonoBehaviour {
         return StartCoroutine(ValidateSessionRoutine(onSuccess, onError));
     }
 
+    public bool HasStoredSessionToken() {
+        return !string.IsNullOrWhiteSpace(SessionToken);
+    }
+
     public void ClearSession() {
         SessionToken = string.Empty;
         if (persistSessionToken) {

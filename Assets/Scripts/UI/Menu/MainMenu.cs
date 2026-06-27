@@ -14,8 +14,16 @@ public class MainMenu : MonoBehaviour {
     }
 
     public void SwitchToMultiPlayer() {
-        if (backendAuthClient != null && !string.IsNullOrWhiteSpace(backendAuthClient.SessionToken)) {
-            menuManager.SwitchToPanel(PanelType.Multiplayer);
+        if (backendAuthClient != null && backendAuthClient.HasStoredSessionToken()) {
+            backendAuthClient.ValidateCurrentSession(
+                _ => {
+                    menuManager.SwitchToPanel(PanelType.Multiplayer);
+                },
+                _ => {
+                    backendAuthClient.ClearSession();
+                    menuManager.SwitchToPanel(PanelType.Auth);
+                }
+            );
             return;
         }
 
