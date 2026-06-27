@@ -5,15 +5,23 @@ public class CameraController : MonoBehaviour {
     [SerializeField] private Transform target;
     [SerializeField] private Vector3 followOffset = new Vector3(0, 16.2999992f, -11.8999996f);
     [SerializeField] private float followSmoothTime = 0.2f;
-
+    bool foundPlayer = false;
     private Vector3 followVelocity;
 
-    private void Start() {
-        if (target == null) {
-            PlayerController player = FindFirstObjectByType<PlayerController>();
-            if (player != null) {
-                SetTarget(player.transform);
-            }
+    // private void Start() {
+    //     if (target == null) {
+    //         PlayerController player = FindFirstObjectByType<PlayerController>();
+    //         if (player != null) {
+    //             SetTarget(player.transform);
+    //         }
+    //     }
+    // }
+
+    private void Update() {
+        if (foundPlayer) return;
+        if (GameState.isPlaying) {
+            target = GameObject.FindGameObjectWithTag("Player").transform;
+            foundPlayer = true;
         }
     }
 
