@@ -1,11 +1,14 @@
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Netcode;
 
-public class PlayerSpawner : MonoBehaviour {
+public class PlayerSpawner : NetworkBehaviour {
     [Header("Player Spawn")]
     [SerializeField] private GameObject playerPrefab;
+
     [Tooltip("World position where the player will spawn when the world is created.")]
-    [SerializeField] private Vector3 spawnPosition = new Vector3(0f, 5f, 10f);
+    [SerializeField]
+    private Vector3 spawnPosition = new Vector3(0f, 5f, 10f);
 
     [Header("Enemy Spawn")]
     [SerializeField] private GameObject enemyPrefab;
@@ -16,105 +19,53 @@ public class PlayerSpawner : MonoBehaviour {
     private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
     private readonly Color fallbackEnemyColor = new Color(0.85f, 0.2f, 0.2f);
 
-    public GameObject SpawnPlayerAtConfiguredPosition() {
-        return SpawnPlayer(spawnPosition);
+    private void Start() {
+        // Register callback to spawn a player when a client connects
+        NetworkManager.Singleton.OnClientConnectedCallback += SpawnPlayer;
     }
 
-    public GameObject SpawnPlayer(Vector3 position) {
+    private void OnDestroy() {
+        // Unregister callback on destruction
+        if (NetworkManager.Singleton != null) {
+            NetworkManager.Singleton.OnClientConnectedCallback -= SpawnPlayer;
+        }
+    }
+
+    private void SpawnPlayer(ulong clientId) {
+        // Only the server should perform spawning
+        if (!IsServer)
+            return;
+
         if (playerPrefab == null) {
-            Debug.LogError("PlayerSpawner is missing a player prefab reference.", this);
-            return null;
-        }
+            Debug.LogError(
+                "PlayerSpawner is missing a player prefab reference.",
+                this
+            );
 
-        PlayerController existingPlayer = FindFirstObjectByType<PlayerController>();
-        if (existingPlayer != null) {
-            Destroy(existingPlayer.gameObject);
-        }
-
-        spawnedPlayerInstance = Instantiate(playerPrefab, position, Quaternion.identity);
-        spawnedPlayerInstance.tag = "Player";
-
-        CameraController cameraController = FindFirstObjectByType<CameraController>();
-        if (cameraController != null) {
-            cameraController.SetTarget(spawnedPlayerInstance.transform);
-        }
-
-        return spawnedPlayerInstance;
-    }
-
-    public void SpawnSinglePlayerEnemies() {
-        ClearSpawnedEnemies();
-
-        if (enemyCount <= 0) {
             return;
         }
 
-        for (int i = 0; i < enemyCount; i++) {
-            float angle = (Mathf.PI * 2f * i) / enemyCount;
-            Vector3 offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * enemySpawnDistance;
-            Vector3 enemyPosition = spawnPosition + offset;
+        // Instantiate the player GameObject
+        spawnedPlayerInstance =
+            Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
 
-            GameObject enemyInstance = SpawnEnemy(enemyPosition, i);
-            if (enemyInstance != null) {
-                spawnedEnemies.Add(enemyInstance);
+        // Get the NetworkObject component
+        NetworkObject networkObject =
+            spawnedPlayerInstance.GetComponent<NetworkObject>();
+
+        // Spawn the networked player and assign ownership
+        networkObject.SpawnAsPlayerObject(clientId);
+
+        // If the spawned player belongs to the local host, bind the camera to it
+        if (clientId == NetworkManager.Singleton.LocalClientId) {
+            CameraController cameraController =
+                FindFirstObjectByType<CameraController>();
+
+            if (cameraController != null) {
+                cameraController.SetTarget(
+                    spawnedPlayerInstance.transform
+                );
             }
         }
-    }
-
-    private GameObject SpawnEnemy(Vector3 position, int enemyIndex) {
-        GameObject enemyInstance = enemyPrefab != null
-            ? Instantiate(enemyPrefab, position, Quaternion.identity)
-            : CreateFallbackEnemy(position, enemyIndex);
-
-        if (enemyInstance == null) {
-            return null;
-        }
-
-        enemyInstance.name = $"Enemy_{enemyIndex + 1}";
-
-        CharacterController characterController = enemyInstance.GetComponent<CharacterController>();
-        if (characterController == null) {
-            characterController = enemyInstance.AddComponent<CharacterController>();
-        }
-
-        characterController.height = 2f;
-        characterController.radius = 0.5f;
-        characterController.center = Vector3.zero;
-        characterController.stepOffset = 0.3f;
-        characterController.slopeLimit = 45f;
-
-        if (enemyInstance.GetComponent<EnemyController>() == null) {
-            enemyInstance.AddComponent<EnemyController>();
-        }
-
-        return enemyInstance;
-    }
-
-    private GameObject CreateFallbackEnemy(Vector3 position, int enemyIndex) {
-        GameObject enemyInstance = GameObject.CreatePrimitive(PrimitiveType.Capsule);
-        enemyInstance.name = $"Enemy_{enemyIndex + 1}";
-        enemyInstance.transform.position = position;
-
-        Collider primitiveCollider = enemyInstance.GetComponent<Collider>();
-        if (primitiveCollider != null) {
-            primitiveCollider.enabled = false;
-        }
-
-        Renderer renderer = enemyInstance.GetComponent<Renderer>();
-        if (renderer != null) {
-            renderer.material.color = fallbackEnemyColor;
-        }
-
-        return enemyInstance;
-    }
-
-    private void ClearSpawnedEnemies() {
-        for (int i = 0; i < spawnedEnemies.Count; i++) {
-            if (spawnedEnemies[i] != null) {
-                Destroy(spawnedEnemies[i]);
-            }
-        }
-
-        spawnedEnemies.Clear();
     }
 }

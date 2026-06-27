@@ -105,6 +105,9 @@ InitTestScene*.unity*
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
 
+# Auto-generated files by Unity when using the "Unity Merge Tool"
+*.orig
+
 # vscode settings
 *.lscache
 .vs/
