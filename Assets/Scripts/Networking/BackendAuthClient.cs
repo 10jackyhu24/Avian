@@ -32,7 +32,7 @@ public class BackendAuthClient : MonoBehaviour {
         public string detail;
     }
 
-    [SerializeField] private string baseUrl = "http://localhost:30080";
+    [SerializeField] private string baseUrl = "http://localhost:8000";
     [SerializeField] private bool persistSessionToken = true;
 
     public string SessionToken { get; private set; }
@@ -61,6 +61,10 @@ public class BackendAuthClient : MonoBehaviour {
 
     public Coroutine ValidateCurrentSession(Action<ValidateResponse> onSuccess, Action<string> onError) {
         return StartCoroutine(ValidateSessionRoutine(onSuccess, onError));
+    }
+
+    public bool HasStoredSessionToken() {
+        return !string.IsNullOrWhiteSpace(SessionToken);
     }
 
     public void ClearSession() {

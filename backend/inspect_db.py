@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 import subprocess
 import sys
 
@@ -10,7 +11,7 @@ def load_env_variables():
     """
     env_data = {}
     # Look for .env in the current directory or one level up
-    paths_to_try = [".env", "../.env"]
+    paths_to_try = [".env", "../.env", "backend/.env"]
     env_file_path = None
     
     for path in paths_to_try:
@@ -60,16 +61,36 @@ def run_docker_psql(sql_command):
     except FileNotFoundError:
         print("Error: 'docker' command not found.", file=sys.stderr)
 
+
+def format_table_name(table_name):
+    """
+    Return a safely quoted SQL identifier for a table name.
+    Only allows letters, numbers, and underscores to keep the command simple and safe.
+    """
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", table_name):
+        raise ValueError(
+            "Invalid table name. Use only letters, numbers, and underscores, and start with a letter or underscore."
+        )
+    return f'"{table_name}"'
+
 def main():
     parser = argparse.ArgumentParser(description="Inspect the PostgreSQL database inside Docker container.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--tables", action="store_true", help="List all tables in the database")
+    group.add_argument("--table", type=str, help="Show all rows from a specific table")
     group.add_argument("--query", type=str, help="Execute a custom SQL SELECT query")
 
     args = parser.parse_args()
 
     if args.tables:
         run_docker_psql("\\dt")
+    elif args.table:
+        try:
+            table_name = format_table_name(args.table)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
+        run_docker_psql(f"SELECT * FROM {table_name};")
     elif args.query:
         run_docker_psql(args.query)
 

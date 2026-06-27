@@ -31,13 +31,76 @@
     ```
     The location of unityYAMLMerge.exe may be `"C:/Program Files/Unity/Hub/Editor/6000.3.15f1/Editor/Data/Tools/UnityYAMLMerge.exe"`
 
-### K8s (Local Backend Setup)
+### Backend Setup
 
-To run the game backend locally, we adopt the industry-standard architecture: the **PostgreSQL database runs in a standalone Docker container** (simulating a cloud-managed database like AWS RDS), while the **Game Lobby and Room Pool are deployed inside Kubernetes (Kind)**.
+There are two backend paths:
 
-**Step 1: Install Required Tools**
+* **Docker Compose** is the recommended path for local auth testing.
+* **Kubernetes / Kind** is the more future-facing path, but it is more complex to set up locally.
 
-Open PowerShell **as Administrator** and run the following to install Chocolatey, Kind, and Kubectl:
+### Docker Compose
+
+Use this when you want the quickest working login/register flow.
+
+**1. Install prerequisites**
+
+Make sure Docker Desktop is installed and fully running.
+
+**2. Configure local environment**
+
+Copy `backend/.env.example` to `backend/.env`, then fill in your local values. Example:
+
+```env
+DB_USER=avian_user
+DB_PASSWORD=avian_password
+DB_NAME=avian_db
+DB_HOST=postgres-service
+DB_PORT=5432
+PASSWORD_HASH_ITERATIONS=210000
+```
+
+`backend/.env` is ignored by Git and should remain local.
+
+**3. Start the services**
+
+From the project root:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+This starts:
+
+* `postgres_db` on `localhost:5432`
+* `avian_lobby` on `localhost:8000`
+
+**4. Verify the API**
+
+```powershell
+curl.exe http://localhost:8000/health
+```
+
+Expected response:
+
+```json
+{"ok":true}
+```
+
+**5. Point Unity to the local API**
+
+Set `BackendAuthClient` to:
+
+```text
+Base Url = http://localhost:8000
+```
+
+After that, login and register should work against the local backend.
+
+### Kubernetes / Kind
+
+Use this path if you want to test the deployment model used by the larger backend architecture.
+
+Open PowerShell **as Administrator** and install Kind and Kubectl if needed:
 ```powershell
 # Install Chocolatey (if you don't have it)
 Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))
@@ -46,73 +109,70 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**Step 2: Start the Standalone Database**
+**1. Configure local environment**
 
-Before starting, configure your local environment credentials:
-* Copy the file `./backend/.env.example` to `./backend/.env` and fill in your custom values. Ensure `DB_HOST` is set to `postgres-service`.
+Copy `backend/.env.example` to `backend/.env` and fill in your local values.
 
-Now, Ensure Docker Desktop is running, spin up the standalone PostgreSQL database outside of Kubernetes:
+The current K8s manifest expects the database bridge hostname `postgres-service`.
+
+**2. Build the backend images**
+
+Build the isolated Docker images for the lobby and game room from their respective subdirectories:
+
 ```powershell
-docker compose -f ./backend/docker-compose.yaml up -d
-```
-
-**Step 3: Build Python Docker Images (Scheme A)**
-
-Build the isolated Docker images for the Lobby Manager and Game Room from their respective subdirectories (No local Python installation required):
-```powershell
-# Build Lobby Manager Image
 docker build -t avian-lobby:v1 ./backend/lobby
-
-# Build Game Room Image
 docker build -t avian-world:v1 ./backend/world
 ```
 
-**Step 4: Create the K8s Cluster & Load Local Images**
+**3. Create the cluster and load images**
 
-In your project root folder, generate a local secret file from your env, create the Kind cluster, and inject your images:
+In the project root, generate a local secret file from your env, create the Kind cluster, and inject your images:
 ```powershell
-# 1. Generate a real secret.yaml file from your local .env for project documentation
+# Generate secret.yaml from your local .env
 kubectl create secret generic avian-db-secret --from-env-file=backend/.env --dry-run=client -o yaml > backend/secret.yaml
 
-# 2. Create the cluster using our custom config
+# Create the cluster using the custom config
 kind create cluster --config backend/kind-config.yaml
 
-# 3. Link kubectl to the new cluster
+# Link kubectl to the new cluster
 kind export kubeconfig --name avian-cluster
 
-# 4. [CRITICAL] Load your locally built images into Kind's internal cache so K8s can find them
+# Load your locally built images into Kind's internal cache
 kind load docker-image avian-lobby:v1 --name avian-cluster
 kind load docker-image avian-world:v1 --name avian-cluster
 ```
 
-**Step 5: Deploy Game Servers and Secrets**
+**4. Deploy secrets and workloads**
 
-Deploy the secret blueprint and the game application components to Kubernetes:
+Deploy the secret and the game application components to Kubernetes:
 ```powershell
-# 1. Deploy the secret insurance box into Kubernetes
+# Apply the generated secret
 kubectl apply -f backend/secret.yaml
 
-# 2. Deploy External Database Bridge, Lobby Manager and Game Rooms into Kubernetes
+# Deploy the external database bridge, lobby manager, and room pool
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**Step 6: Verify the Deployment**
+**5. Verify the deployment**
 
 Verify that all backend components are healthy and properly interconnected:
 ```powershell
-# Check if the standalone database is active
-docker compose -f backend/docker-compose.yaml ps
-
-# Check if Kubernetes components are running (Wait for STATUS to become 'Running')
+# Check if Kubernetes components are running
 kubectl get pods
 
-# Check network services (Ensure lobby-service nodePort is successfully mapped to 30080)
+# Check network services
 kubectl get svc
+```
+
+If you test Unity against this path, the `BackendAuthClient` base URL should be:
+
+```text
+http://localhost:30080
 ```
 
 ### Authentication Flow
 
-The lobby backend now exposes a simple account system for Unity:
+The lobby backend exposes a simple account system for Unity:
 
 * `POST /auth/register`
   * Creates a new user account.
@@ -127,9 +187,9 @@ The lobby backend now exposes a simple account system for Unity:
   * Confirms whether a session token is still valid.
 
 * `GET /health`
-  * Lightweight health check for Kubernetes and local debugging.
+  * Lightweight health check for local debugging.
 
-Recommended Unity startup flow:
+Recommended Unity flow:
 
 1. Show a login panel first.
 2. Ask the player for username and password.
@@ -137,6 +197,12 @@ Recommended Unity startup flow:
 4. If login succeeds, store the returned `session_token` in memory for the current session.
 5. If login fails, show the error and keep the login panel open.
 6. Only continue into the main menu or multiplayer flow after authentication succeeds.
+
+Notes about the current Unity auth implementation:
+
+* `BackendAuthClient` can optionally persist the session token in `PlayerPrefs`.
+* If `Persist Session Token` is enabled, clicking `Multiplayer` can validate a locally stored token before entering the multiplayer flow.
+* For repeated auth testing, you can disable `Persist Session Token` in the Unity Inspector.
 
 Why this design:
 
@@ -147,22 +213,23 @@ Why this design:
 
 ### How to Update the Backend Deployment
 
-Whenever you or your team members modify any Python code in the `lobby/` or `world/` folders, run this simple script to update the running servers instantly without deleting or recreating the K8s cluster:
+Whenever you modify Python code in the `lobby/` or `world/` folders, use one of these update paths:
+
+**Docker Compose backend**
 
 ```powershell
-# 1. Rebuild the images with your new code changes
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+**Kubernetes / Kind backend**
+
+```powershell
 docker build -t avian-lobby:v1 ./backend/lobby
 docker build -t avian-world:v1 ./backend/world
-
-# 2. Re-inject the updated images into Kind's cache
 kind load docker-image avian-lobby:v1 --name avian-cluster
 kind load docker-image avian-world:v1 --name avian-cluster
-
-# 3. Force Kubernetes to perform a rolling update using the new images
 kubectl rollout restart deployment avian-lobby-deployment
 kubectl rollout restart deployment avian-rooms-pool-deployment
-
-# 4. Monitor the restart progress until all pods are 'Running'
 kubectl get pods -w
 ```
 
