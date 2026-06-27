@@ -109,3 +109,10 @@ InitTestScene*.unity*
 *.lscache
 .vs/
 .vscode/
+
+# python
+__pycache__/
+
+# backend
+secret.yaml
+.env

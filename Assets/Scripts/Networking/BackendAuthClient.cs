@@ -1,0 +1,144 @@
+using System;
+using System.Text;
+using System.Collections;
+using UnityEngine;
+using UnityEngine.Networking;
+
+public class BackendAuthClient : MonoBehaviour {
+    [Serializable]
+    public class AuthRequest {
+        public string username;
+        public string password;
+    }
+
+    [Serializable]
+    public class AuthResponse {
+        public int user_id;
+        public string username;
+        public string created_at;
+        public string session_token;
+    }
+
+    [Serializable]
+    public class ValidateResponse {
+        public string session_token;
+        public int user_id;
+        public string username;
+        public string expires_at;
+    }
+
+    [Serializable]
+    public class ErrorResponse {
+        public string detail;
+    }
+
+    [SerializeField] private string baseUrl = "http://localhost:8000";
+    [SerializeField] private bool persistSessionToken = true;
+
+    public string SessionToken { get; private set; }
+
+    private const string SessionTokenKey = "avian_session_token";
+
+    private void Awake() {
+        if (persistSessionToken) {
+            SessionToken = PlayerPrefs.GetString(SessionTokenKey, string.Empty);
+        }
+    }
+
+    public void ConfigureBaseUrl(string newBaseUrl) {
+        if (!string.IsNullOrWhiteSpace(newBaseUrl)) {
+            baseUrl = newBaseUrl.TrimEnd('/');
+        }
+    }
+
+    public Coroutine Register(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(SendAuthRequest("/auth/register", username, password, onSuccess, onError));
+    }
+
+    public Coroutine Login(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(SendAuthRequest("/auth/login", username, password, onSuccess, onError));
+    }
+
+    public Coroutine ValidateCurrentSession(Action<ValidateResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(ValidateSessionRoutine(onSuccess, onError));
+    }
+
+    public bool HasStoredSessionToken() {
+        return !string.IsNullOrWhiteSpace(SessionToken);
+    }
+
+    public void ClearSession() {
+        SessionToken = string.Empty;
+        if (persistSessionToken) {
+            PlayerPrefs.DeleteKey(SessionTokenKey);
+            PlayerPrefs.Save();
+        }
+    }
+
+    private IEnumerator SendAuthRequest(string path, string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
+        AuthRequest body = new AuthRequest {
+            username = username,
+            password = password
+        };
+
+        string json = JsonUtility.ToJson(body);
+        byte[] payload = Encoding.UTF8.GetBytes(json);
+        string url = $"{baseUrl}{path}";
+
+        using UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
+        request.uploadHandler = new UploadHandlerRaw(payload);
+        request.downloadHandler = new DownloadHandlerBuffer();
+        request.SetRequestHeader("Content-Type", "application/json");
+
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success) {
+            onError?.Invoke(ExtractErrorMessage(request));
+            yield break;
+        }
+
+        AuthResponse response = JsonUtility.FromJson<AuthResponse>(request.downloadHandler.text);
+        SessionToken = response.session_token;
+
+        if (persistSessionToken) {
+            PlayerPrefs.SetString(SessionTokenKey, SessionToken);
+            PlayerPrefs.Save();
+        }
+
+        onSuccess?.Invoke(response);
+    }
+
+    private IEnumerator ValidateSessionRoutine(Action<ValidateResponse> onSuccess, Action<string> onError) {
+        if (string.IsNullOrWhiteSpace(SessionToken)) {
+            onError?.Invoke("No session token found.");
+            yield break;
+        }
+
+        string url = $"{baseUrl}/auth/validate?token={UnityWebRequest.EscapeURL(SessionToken)}";
+        using UnityWebRequest request = UnityWebRequest.Get(url);
+        yield return request.SendWebRequest();
+
+        if (request.result != UnityWebRequest.Result.Success) {
+            onError?.Invoke(ExtractErrorMessage(request));
+            yield break;
+        }
+
+        ValidateResponse response = JsonUtility.FromJson<ValidateResponse>(request.downloadHandler.text);
+        onSuccess?.Invoke(response);
+    }
+
+    private string ExtractErrorMessage(UnityWebRequest request) {
+        if (request.downloadHandler != null && !string.IsNullOrWhiteSpace(request.downloadHandler.text)) {
+            try {
+                ErrorResponse error = JsonUtility.FromJson<ErrorResponse>(request.downloadHandler.text);
+                if (!string.IsNullOrWhiteSpace(error?.detail)) {
+                    return error.detail;
+                }
+            }
+            catch {
+            }
+        }
+
+        return request.error;
+    }
+}

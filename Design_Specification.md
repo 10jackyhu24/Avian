@@ -160,9 +160,11 @@ Scene: MainWorld
 
 ### 4.2 流程圖
 
-![Avian遊戲流程圖 (1)](https://hackmd.io/_uploads/HJxMmmiAZe.jpg)
+![Avian遊戲流程圖](https://hackmd.io/_uploads/HJxMmmiAZe.jpg)
 
 ### 4.3 軟體系統架構圖
+![軟體系統架構圖](https://hackmd.io/_uploads/r1OR8asxMg.png)
+
 
 
 ## 5. 畫面與聲音規格 (Aesthetics & Audio)
@@ -189,4 +191,4 @@ Scene: MainWorld
 |VS Code|編輯程式|
 |Git|版本控制|
 |Docker|容器|
-|kubernetes|自動管理系統|# Avian 設計規格書
+|kubernetes|自動管理系統|
