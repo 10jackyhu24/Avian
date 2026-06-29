@@ -33,8 +33,20 @@ services:
     depends_on:
       avian-postgres:
         condition: service_healthy
+
+  avian-ngrok:
+    image: ngrok/ngrok:latest
+    container_name: avian_ngrok
+    restart: unless-stopped
+    depends_on:
+      - avian-lobby
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     ports:
-      - "8000:8000"
+      - "4040:4040"
+    command:
+      - http
+      - avian-lobby:8000
 
 volumes:
   pgdata:

@@ -32,16 +32,16 @@ public class BackendAuthClient : MonoBehaviour {
         public string detail;
     }
 
-    [SerializeField] private string baseUrl = "http://localhost:8000";
-    [SerializeField] private bool persistSessionToken = true;
+    private string baseUrl = URL.BaseUrl;
+    private bool persistSessionToken = false;
 
     public string SessionToken { get; private set; }
 
-    private const string SessionTokenKey = "avian_session_token";
+    private const string SessionTokenKey = "";
 
     private void Awake() {
         if (persistSessionToken) {
-            SessionToken = PlayerPrefs.GetString(SessionTokenKey, string.Empty);
+            SessionToken = PlayerPrefs.GetString(SessionTokenKey);
         }
     }
 

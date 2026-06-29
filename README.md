@@ -38,9 +38,9 @@ There are two backend paths:
 * **Docker Compose** is the recommended path for local auth testing.
 * **Kubernetes / Kind** is the more future-facing path, but it is more complex to set up locally.
 
-### Docker Compose
+### Docker Compose + ngrok
 
-Use this when you want the quickest working login/register flow.
+Use this when you want the quickest working login/register flow and a public HTTPS URL for Unity.
 
 **1. Install prerequisites**
 
@@ -61,6 +61,12 @@ PASSWORD_HASH_ITERATIONS=210000
 
 `backend/.env` is ignored by Git and should remain local.
 
+Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export it before starting Docker:
+
+```env
+NGROK_AUTHTOKEN=your_ngrok_token
+```
+
 **3. Start the services**
 
 From the project root:
@@ -72,29 +78,26 @@ docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --bu
 This starts:
 
 * `postgres_db` on `localhost:5432`
-* `avian_lobby` on `localhost:8000`
+* `avian_lobby` on the internal Docker network
+* `avian_ngrok` exposing a public HTTPS tunnel to the lobby
 
 **4. Verify the API**
 
+Open `localhost:4040` on the browser to get the public HTTPS URL. Then test:
+
 ```powershell
-curl.exe http://localhost:8000/health
-```
-
-Expected response:
-
-```json
-{"ok":true}
+curl.exe https://your-ngrok-url.ngrok.app/health
 ```
 
 **5. Point Unity to the local API**
 
-Set `BackendAuthClient` to:
+Set `URL.cs` to:
 
 ```text
-Base Url = http://localhost:8000
+BaseUrl = https://your-ngrok-url.ngrok.app
 ```
 
-After that, login and register should work against the local backend.
+After that, login and register should work against the backend through ngrok.
 
 ### Kubernetes / Kind
 
@@ -169,6 +172,8 @@ If you test Unity against this path, the `BackendAuthClient` base URL should be:
 ```text
 http://localhost:30080
 ```
+
+The K8s path is still HTTP unless you add a separate HTTPS ingress or proxy in front of the NodePort service.
 
 ### Authentication Flow
 
