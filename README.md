@@ -35,8 +35,8 @@
 
 There are two backend paths:
 
-* **Docker Compose** is the recommended path for local auth testing.
-* **Kubernetes / Kind** is the more future-facing path, but it is more complex to set up locally.
+* **Docker Compose** runs auth, ngrok exposure, database, and matchmaker.
+* **Kubernetes / Kind** now keeps only the world/game-room pool.
 
 ### Docker Compose + ngrok
 
@@ -80,6 +80,7 @@ This starts:
 * `postgres_db` on `localhost:5432`
 * `avian_lobby` on the internal Docker network
 * `avian_ngrok` exposing a public HTTPS tunnel to the lobby
+* `avian_matchmaker` on `localhost:8080`
 
 **4. Verify the API**
 
@@ -101,7 +102,7 @@ After that, login and register should work against the backend through ngrok.
 
 ### Kubernetes / Kind
 
-Use this path if you want to test the deployment model used by the larger backend architecture.
+Use this path if you want to test the world/game-room deployment model.
 
 Open PowerShell **as Administrator** and install Kind and Kubectl if needed:
 ```powershell
@@ -112,68 +113,42 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**1. Configure local environment**
+**1. Build the world image**
 
-Copy `backend/.env.example` to `backend/.env` and fill in your local values.
-
-The current K8s manifest expects the database bridge hostname `postgres-service`.
-
-**2. Build the backend images**
-
-Build the isolated Docker images for the lobby and game room from their respective subdirectories:
+Build the world image from its subdirectory:
 
 ```powershell
-docker build -t avian-lobby:v1 ./backend/lobby
 docker build -t avian-world:v1 ./backend/world
 ```
 
-**3. Create the cluster and load images**
+**2. Create the cluster and load the image**
 
-In the project root, generate a local secret file from your env, create the Kind cluster, and inject your images:
+In the project root, create the Kind cluster and inject your image:
+
 ```powershell
-# Generate secret.yaml from your local .env
-kubectl create secret generic avian-db-secret --from-env-file=backend/.env --dry-run=client -o yaml > backend/secret.yaml
-
-# Create the cluster using the custom config
 kind create cluster --config backend/kind-config.yaml
 
-# Link kubectl to the new cluster
 kind export kubeconfig --name avian-cluster
 
-# Load your locally built images into Kind's internal cache
-kind load docker-image avian-lobby:v1 --name avian-cluster
 kind load docker-image avian-world:v1 --name avian-cluster
 ```
 
-**4. Deploy secrets and workloads**
+**3. Deploy the world workload**
 
-Deploy the secret and the game application components to Kubernetes:
 ```powershell
-# Apply the generated secret
-kubectl apply -f backend/secret.yaml
-
-# Deploy the external database bridge, lobby manager, and room pool
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**5. Verify the deployment**
+**4. Verify the deployment**
 
-Verify that all backend components are healthy and properly interconnected:
+Verify that the world components are healthy:
 ```powershell
-# Check if Kubernetes components are running
 kubectl get pods
 
-# Check network services
 kubectl get svc
 ```
 
-If you test Unity against this path, the `BackendAuthClient` base URL should be:
-
-```text
-http://localhost:30080
-```
-
-The K8s path is still HTTP unless you add a separate HTTPS ingress or proxy in front of the NodePort service.
+The K8s path now only hosts the world/game-room pool. Lobby auth and matchmaking stay in Docker.
 
 ### Authentication Flow
 
@@ -229,11 +204,8 @@ docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --bu
 **Kubernetes / Kind backend**
 
 ```powershell
-docker build -t avian-lobby:v1 ./backend/lobby
 docker build -t avian-world:v1 ./backend/world
-kind load docker-image avian-lobby:v1 --name avian-cluster
 kind load docker-image avian-world:v1 --name avian-cluster
-kubectl rollout restart deployment avian-lobby-deployment
 kubectl rollout restart deployment avian-rooms-pool-deployment
 kubectl get pods -w
 ```

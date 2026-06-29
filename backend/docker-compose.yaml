@@ -48,6 +48,14 @@ services:
       - http
       - avian-lobby:8000
 
+  avian-matchmaker:
+    build:
+      context: ./matchmaker
+    container_name: avian_matchmaker
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+
 volumes:
   pgdata:
     driver: local
