@@ -53,39 +53,39 @@ public class AuthMenu : MonoBehaviour {
         backendAuthClient.Login(username, password, HandleAuthSuccess, HandleAuthError);
     }
 
-    public void ValidateSession() {
-        if (backendAuthClient == null) {
-            SetStatus("BackendAuthClient not found in scene.");
-            return;
-        }
+    // public void ValidateSession() {
+    //     if (backendAuthClient == null) {
+    //         SetStatus("BackendAuthClient not found in scene.");
+    //         return;
+    //     }
 
-        SetStatus("Validating session...");
-        backendAuthClient.ValidateCurrentSession(
-            response => {
-                SetStatus($"Session valid for {response.username}.");
-                RefreshSessionStatus();
-            },
-            HandleAuthError
-        );
-    }
+    //     SetStatus("Validating session...");
+    //     backendAuthClient.ValidateCurrentSession(
+    //         response => {
+    //             SetStatus($"Session valid for {response.username}.");
+    //             RefreshSessionStatus();
+    //         },
+    //         HandleAuthError
+    //     );
+    // }
 
-    public void ContinueToMultiplayer() {
-        if (backendAuthClient == null || !backendAuthClient.HasStoredSessionToken()) {
-            SetStatus("Please log in first.");
-            return;
-        }
+    // public void ContinueToMultiplayer() {
+    //     if (backendAuthClient == null || !backendAuthClient.HasStoredSessionToken()) {
+    //         SetStatus("Please log in first.");
+    //         return;
+    //     }
 
-        backendAuthClient.ValidateCurrentSession(
-            _ => {
-                menuManager.SwitchToPanel(successPanel);
-            },
-            errorMessage => {
-                backendAuthClient.ClearSession();
-                SetStatus(errorMessage);
-                menuManager.SwitchToPanel(PanelType.Auth);
-            }
-        );
-    }
+    //     backendAuthClient.ValidateCurrentSession(
+    //         _ => {
+    //             menuManager.SwitchToPanel(successPanel);
+    //         },
+    //         errorMessage => {
+    //             backendAuthClient.ClearSession();
+    //             SetStatus(errorMessage);
+    //             menuManager.SwitchToPanel(PanelType.Auth);
+    //         }
+    //     );
+    // }
 
     public void Logout() {
         if (backendAuthClient == null) {

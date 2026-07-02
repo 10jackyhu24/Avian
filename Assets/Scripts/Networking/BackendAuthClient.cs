@@ -36,6 +36,8 @@ public class BackendAuthClient : MonoBehaviour {
     private bool persistSessionToken = false;
 
     public string SessionToken { get; private set; }
+    public int CachedUserId { get; private set; }
+    public string CachedUsername { get; private set; } = string.Empty;
 
     private const string SessionTokenKey = "";
 
@@ -69,6 +71,8 @@ public class BackendAuthClient : MonoBehaviour {
 
     public void ClearSession() {
         SessionToken = string.Empty;
+        CachedUserId = 0;
+        CachedUsername = string.Empty;
         if (persistSessionToken) {
             PlayerPrefs.DeleteKey(SessionTokenKey);
             PlayerPrefs.Save();
@@ -99,6 +103,8 @@ public class BackendAuthClient : MonoBehaviour {
 
         AuthResponse response = JsonUtility.FromJson<AuthResponse>(request.downloadHandler.text);
         SessionToken = response.session_token;
+        CachedUserId = response.user_id;
+        CachedUsername = response.username;
 
         if (persistSessionToken) {
             PlayerPrefs.SetString(SessionTokenKey, SessionToken);
@@ -124,7 +130,17 @@ public class BackendAuthClient : MonoBehaviour {
         }
 
         ValidateResponse response = JsonUtility.FromJson<ValidateResponse>(request.downloadHandler.text);
+        CachedUserId = response.user_id;
+        CachedUsername = response.username;
         onSuccess?.Invoke(response);
+    }
+
+    public int GetCachedUserId() {
+        return CachedUserId;
+    }
+
+    public string GetCachedUsername() {
+        return CachedUsername;
     }
 
     private string ExtractErrorMessage(UnityWebRequest request) {

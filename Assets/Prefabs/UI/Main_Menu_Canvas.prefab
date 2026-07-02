@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 6432830095188885898}
   - component: {fileID: 6061963267173667022}
   - component: {fileID: 2626162214950630603}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Button_Quit_Game
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -145,7 +145,7 @@ GameObject:
   - component: {fileID: 5841029141818749079}
   - component: {fileID: 2134402876481386629}
   - component: {fileID: 2383635644838709312}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Main_Menu_Canvas
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -197,7 +197,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_TargetDisplay: 0
 --- !u!114 &2134402876481386629
 MonoBehaviour:
@@ -250,7 +250,7 @@ GameObject:
   - component: {fileID: 2630909690043236123}
   - component: {fileID: 1549734619828706253}
   - component: {fileID: 3837089972084598123}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Text (TMP)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -387,7 +387,7 @@ GameObject:
   - component: {fileID: 5613822675008146882}
   - component: {fileID: 2551123927367865701}
   - component: {fileID: 273257889884375548}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: TextMeshPro_Title
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -524,7 +524,7 @@ GameObject:
   - component: {fileID: 1438166272067726948}
   - component: {fileID: 2238921382867764518}
   - component: {fileID: 1276054933561983279}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Text (TMP)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -661,7 +661,7 @@ GameObject:
   - component: {fileID: 1055530070781398306}
   - component: {fileID: 28693316967340117}
   - component: {fileID: 6104836051587856803}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Text (TMP)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -799,7 +799,7 @@ GameObject:
   - component: {fileID: 4911168266220259480}
   - component: {fileID: 1793916227609301019}
   - component: {fileID: 1505961119524215716}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Button_Multiplayer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -910,7 +910,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: MainMenu, Assembly-CSharp
-        m_MethodName: Multiplayer
+        m_MethodName: SwitchToMultiPlayer
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -931,7 +931,7 @@ GameObject:
   - component: {fileID: 1018078414783094263}
   - component: {fileID: 6041008217278822148}
   - component: {fileID: 409988073371920543}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Text (TMP)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1069,7 +1069,7 @@ GameObject:
   - component: {fileID: 4309805589231340172}
   - component: {fileID: 3695465659988389844}
   - component: {fileID: 8124956811853575506}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Button_Single_Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1180,7 +1180,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: MainMenu, Assembly-CSharp
-        m_MethodName: SinglePlayer
+        m_MethodName: SwitchToSinglePlayer
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
@@ -1202,7 +1202,7 @@ GameObject:
   - component: {fileID: 649506301892844968}
   - component: {fileID: 8898033803997443942}
   - component: {fileID: 4876739698954531627}
-  m_Layer: 0
+  m_Layer: 5
   m_Name: Button_Options
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -1313,7 +1313,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 0}
         m_TargetAssemblyTypeName: MainMenu, Assembly-CSharp
-        m_MethodName: OptionsPanel
+        m_MethodName: SwitchToOptions
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}
