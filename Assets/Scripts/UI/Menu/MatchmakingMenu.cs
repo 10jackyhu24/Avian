@@ -45,6 +45,10 @@ public class MatchmakingMenu : MonoBehaviour {
                 latestResponse = response;
                 requestDone = true;
             },
+            response => {
+                latestResponse = response;
+                requestDone = true;
+            },
             error => {
                 errorMessage = error;
                 requestDone = true;

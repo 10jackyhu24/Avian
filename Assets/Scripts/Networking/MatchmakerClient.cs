@@ -27,15 +27,27 @@ public class MatchmakerClient : MonoBehaviour {
         public string username;
     }
 
-    public Coroutine JoinQueue(int userId, string username, Action<MatchResponse> onMatched, Action<string> onError) {
-        return StartCoroutine(JoinQueueRoutine(userId, username, onMatched, onError));
+    public Coroutine JoinQueue(
+        int userId,
+        string username,
+        Action<MatchResponse> onMatched,
+        Action<MatchResponse> onQueued,
+        Action<string> onError
+    ) {
+        return StartCoroutine(JoinQueueRoutine(userId, username, onMatched, onQueued, onError));
     }
 
     public Coroutine PollStatus(int userId, Action<MatchResponse> onMatched, Action<MatchResponse> onQueued, Action<string> onError) {
         return StartCoroutine(PollStatusRoutine(userId, onMatched, onQueued, onError));
     }
 
-    private IEnumerator JoinQueueRoutine(int userId, string username, Action<MatchResponse> onMatched, Action<string> onError) {
+    private IEnumerator JoinQueueRoutine(
+        int userId,
+        string username,
+        Action<MatchResponse> onMatched,
+        Action<MatchResponse> onQueued,
+        Action<string> onError
+    ) {
         string url = $"{URL.BaseUrl}{URL.MatchJoinPath}";
         JoinRequest body = new JoinRequest { user_id = userId, username = username };
         string json = JsonUtility.ToJson(body);
@@ -55,6 +67,9 @@ public class MatchmakerClient : MonoBehaviour {
         MatchResponse response = JsonUtility.FromJson<MatchResponse>(request.downloadHandler.text);
         if (response.status == "matched") {
             onMatched?.Invoke(response);
+        }
+        else {
+            onQueued?.Invoke(response);
         }
     }
 

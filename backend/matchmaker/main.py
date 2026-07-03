@@ -51,9 +51,12 @@ def join_match(payload: JoinRequest):
     global next_room_id, next_seed
 
     with queue_lock:
-        existing = matches_by_user_id.get(payload.user_id)
-        if existing is not None:
-            return existing
+        # Re-joining should always start a fresh matchmaking attempt.
+        matches_by_user_id.pop(payload.user_id, None)
+
+        # Remove any stale queue entry for the same user before re-adding.
+        global queue
+        queue = deque(entry for entry in queue if entry.user_id != payload.user_id)
 
         entry = QueueEntry(user_id=payload.user_id, username=payload.username)
         queue.append(entry)
