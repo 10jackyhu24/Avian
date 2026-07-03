@@ -36,7 +36,7 @@ public class MatchmakerClient : MonoBehaviour {
     }
 
     private IEnumerator JoinQueueRoutine(int userId, string username, Action<MatchResponse> onMatched, Action<string> onError) {
-        string url = $"{URL.MatchmakerUrl}/match/join";
+        string url = $"{URL.BaseUrl}{URL.MatchJoinPath}";
         JoinRequest body = new JoinRequest { user_id = userId, username = username };
         string json = JsonUtility.ToJson(body);
 
@@ -56,13 +56,10 @@ public class MatchmakerClient : MonoBehaviour {
         if (response.status == "matched") {
             onMatched?.Invoke(response);
         }
-        // else {
-        //     onQueued?.Invoke(response);
-        // }
     }
 
     private IEnumerator PollStatusRoutine(int userId, Action<MatchResponse> onMatched, Action<MatchResponse> onQueued, Action<string> onError) {
-        string url = $"{URL.MatchmakerUrl}/match/status/{userId}";
+        string url = $"{URL.BaseUrl}{URL.MatchStatusPath}/{userId}";
         using UnityWebRequest request = UnityWebRequest.Get(url);
 
         yield return request.SendWebRequest();

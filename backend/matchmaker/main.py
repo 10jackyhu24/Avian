@@ -31,6 +31,21 @@ def health():
     return {"ok": True, "queue_size": len(queue)}
 
 
+@app.get("/match/queue/size")
+def queue_size():
+    with queue_lock:
+        return {"queue_size": len(queue)}
+
+
+@app.get("/match/queue/user")
+def queue_users():
+    with queue_lock:
+        return {
+            "queue_size": len(queue),
+            "users": [asdict(entry) for entry in queue],
+        }
+
+
 @app.post("/match/join")
 def join_match(payload: JoinRequest):
     global next_room_id, next_seed

@@ -54,11 +54,11 @@ public class BackendAuthClient : MonoBehaviour {
     }
 
     public Coroutine Register(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
-        return StartCoroutine(SendAuthRequest("/auth/register", username, password, onSuccess, onError));
+        return StartCoroutine(SendAuthRequest(URL.AuthRegisterPath, username, password, onSuccess, onError));
     }
 
     public Coroutine Login(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
-        return StartCoroutine(SendAuthRequest("/auth/login", username, password, onSuccess, onError));
+        return StartCoroutine(SendAuthRequest(URL.AuthLoginPath, username, password, onSuccess, onError));
     }
 
     public Coroutine ValidateCurrentSession(Action<ValidateResponse> onSuccess, Action<string> onError) {
@@ -120,7 +120,7 @@ public class BackendAuthClient : MonoBehaviour {
             yield break;
         }
 
-        string url = $"{baseUrl}/auth/validate?token={UnityWebRequest.EscapeURL(SessionToken)}";
+        string url = $"{baseUrl}{URL.AuthValidatePath}?token={UnityWebRequest.EscapeURL(SessionToken)}";
         using UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 

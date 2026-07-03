@@ -34,19 +34,31 @@ services:
       avian-postgres:
         condition: service_healthy
 
+  avian-caddy:
+    image: caddy:2
+    container_name: avian_caddy
+    restart: unless-stopped
+    depends_on:
+      - avian-lobby
+      - avian-matchmaker
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+
   avian-ngrok:
     image: ngrok/ngrok:latest
     container_name: avian_ngrok
     restart: unless-stopped
     depends_on:
-      - avian-lobby
+      - avian-caddy
     environment:
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
     ports:
       - "4040:4040"
     command:
       - http
-      - avian-lobby:8000
+      - avian-caddy:8000
 
   avian-matchmaker:
     build:
