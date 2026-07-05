@@ -1,5 +1,5 @@
 public static class URL {
-    public static string BaseUrl = "https://e38e-219-69-234-133.ngrok-free.app";
+    public static string BaseUrl = "https://perspirable-adaline-nonimperious.ngrok-free.dev";
 
     public static string AuthRegisterPath = "/auth/register";
     public static string AuthLoginPath = "/auth/login";

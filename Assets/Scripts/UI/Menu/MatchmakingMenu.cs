@@ -8,7 +8,8 @@ public class MatchmakingMenu : MonoBehaviour {
     private MatchmakerClient matchmakerClient;
 
     [Header("UI")]
-    [SerializeField] private TMP_Text statusText;
+    [SerializeField] private TMP_Text inQueueText;
+    [SerializeField] private TMP_Text MatchmakingStatusText;
     [SerializeField] private float pollIntervalSeconds = 2f;
 
     private void Awake() {
@@ -19,12 +20,12 @@ public class MatchmakingMenu : MonoBehaviour {
 
     public void Matchmaking() {
         if (backendAuthClient == null || string.IsNullOrWhiteSpace(backendAuthClient.SessionToken)) {
-            SetStatus("Please log in first.");
+            // SetStatus(MatchmakingStatusText, "Please log in first.");
             return;
         }
 
         if (matchmakerClient == null) {
-            SetStatus("MatchmakerClient not found in scene.");
+            // SetStatus(MatchmakingStatusText, "MatchmakerClient not found in scene.");
             return;
         }
 
@@ -32,7 +33,7 @@ public class MatchmakingMenu : MonoBehaviour {
     }
 
     private IEnumerator JoinAndWait() {
-        SetStatus("Joining queue...");
+        SetStatus(MatchmakingStatusText, "Joining queue...");
 
         bool requestDone = false;
         string errorMessage = null;
@@ -58,7 +59,7 @@ public class MatchmakingMenu : MonoBehaviour {
         yield return new WaitUntil(() => requestDone);
 
         if (!string.IsNullOrWhiteSpace(errorMessage)) {
-            SetStatus(errorMessage);
+            SetStatus(MatchmakingStatusText, errorMessage);
             yield break;
         }
 
@@ -67,7 +68,7 @@ public class MatchmakingMenu : MonoBehaviour {
             yield break;
         }
 
-        SetStatus("Queued. Waiting for another player...");
+        SetStatus(MatchmakingStatusText, "Matching...");
 
         while (true) {
             yield return new WaitForSeconds(pollIntervalSeconds);
@@ -94,7 +95,7 @@ public class MatchmakingMenu : MonoBehaviour {
             yield return new WaitUntil(() => pollDone);
 
             if (!string.IsNullOrWhiteSpace(errorMessage)) {
-                SetStatus(errorMessage);
+                SetStatus(MatchmakingStatusText, errorMessage);
                 yield break;
             }
 
@@ -103,25 +104,25 @@ public class MatchmakingMenu : MonoBehaviour {
                 yield break;
             }
 
-            SetStatus($"Queue position: {latestResponse?.queue_position ?? 1}, waiting...");
+            SetStatus(inQueueText, $"Matching Player: {latestResponse?.queue_position ?? 1}");
         }
     }
 
     private void EnterWorld(MatchmakerClient.MatchResponse response) {
         if (response == null) {
-            SetStatus("Match response missing.");
+            SetStatus(MatchmakingStatusText, "Match response missing.");
             return;
         }
 
         Debug.Log($"[Matchmaking] Matched successfully: room={response.room_id}, seed={response.seed}, endpoint={response.world_endpoint}", this);
-        SetStatus($"Matched successfully: {response.room_id}");
+        SetStatus(MatchmakingStatusText, $"Matched successfully: {response.room_id}");
         menuManager.HideMenu();
     }
 
-    private void SetStatus(string message) {
+    private void SetStatus(TMP_Text textComponent, string message) {
         Debug.Log($"[MatchmakingMenu] {message}", this);
-        if (statusText != null) {
-            statusText.text = message;
+        if (textComponent != null) {
+            textComponent.text = message;
         }
     }
 }
