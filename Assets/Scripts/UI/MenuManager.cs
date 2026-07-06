@@ -8,7 +8,8 @@ public enum PanelType {
     MultiplayerRoomList,
     CreateWorldOptions,
     Options,
-    Auth
+    Auth,
+    MultiplayerMatchmaking
 }
 
 public class MenuManager : MonoBehaviour {

@@ -1,0 +1,19 @@
+{
+	auto_https off
+}
+
+:8000 {
+	handle /auth/* {
+		reverse_proxy avian-lobby:8000
+	}
+
+	handle /match/* {
+		reverse_proxy avian-matchmaker:8080
+	}
+
+	handle /health {
+		respond "ok" 200
+	}
+
+	respond "not found" 404
+}

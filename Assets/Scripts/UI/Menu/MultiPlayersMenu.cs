@@ -10,4 +10,8 @@ public class MultiPlayersMenu : MonoBehaviour {
     public void SwitchToRoomList() {
         menuManager.SwitchToPanel(PanelType.MultiplayerRoomList);
     }
+
+    public void SwitchToMatchmaking() {
+        menuManager.SwitchToPanel(PanelType.MultiplayerMatchmaking);
+    }
 }

@@ -32,16 +32,18 @@ public class BackendAuthClient : MonoBehaviour {
         public string detail;
     }
 
-    [SerializeField] private string baseUrl = "http://localhost:8000";
-    [SerializeField] private bool persistSessionToken = true;
+    private string baseUrl = URL.BaseUrl;
+    private bool persistSessionToken = false;
 
     public string SessionToken { get; private set; }
+    public int CachedUserId { get; private set; }
+    public string CachedUsername { get; private set; } = string.Empty;
 
-    private const string SessionTokenKey = "avian_session_token";
+    private const string SessionTokenKey = "";
 
     private void Awake() {
         if (persistSessionToken) {
-            SessionToken = PlayerPrefs.GetString(SessionTokenKey, string.Empty);
+            SessionToken = PlayerPrefs.GetString(SessionTokenKey);
         }
     }
 
@@ -52,11 +54,11 @@ public class BackendAuthClient : MonoBehaviour {
     }
 
     public Coroutine Register(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
-        return StartCoroutine(SendAuthRequest("/auth/register", username, password, onSuccess, onError));
+        return StartCoroutine(SendAuthRequest(URL.AuthRegisterPath, username, password, onSuccess, onError));
     }
 
     public Coroutine Login(string username, string password, Action<AuthResponse> onSuccess, Action<string> onError) {
-        return StartCoroutine(SendAuthRequest("/auth/login", username, password, onSuccess, onError));
+        return StartCoroutine(SendAuthRequest(URL.AuthLoginPath, username, password, onSuccess, onError));
     }
 
     public Coroutine ValidateCurrentSession(Action<ValidateResponse> onSuccess, Action<string> onError) {
@@ -69,6 +71,8 @@ public class BackendAuthClient : MonoBehaviour {
 
     public void ClearSession() {
         SessionToken = string.Empty;
+        CachedUserId = 0;
+        CachedUsername = string.Empty;
         if (persistSessionToken) {
             PlayerPrefs.DeleteKey(SessionTokenKey);
             PlayerPrefs.Save();
@@ -99,6 +103,8 @@ public class BackendAuthClient : MonoBehaviour {
 
         AuthResponse response = JsonUtility.FromJson<AuthResponse>(request.downloadHandler.text);
         SessionToken = response.session_token;
+        CachedUserId = response.user_id;
+        CachedUsername = response.username;
 
         if (persistSessionToken) {
             PlayerPrefs.SetString(SessionTokenKey, SessionToken);
@@ -114,7 +120,7 @@ public class BackendAuthClient : MonoBehaviour {
             yield break;
         }
 
-        string url = $"{baseUrl}/auth/validate?token={UnityWebRequest.EscapeURL(SessionToken)}";
+        string url = $"{baseUrl}{URL.AuthValidatePath}?token={UnityWebRequest.EscapeURL(SessionToken)}";
         using UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 
@@ -124,7 +130,17 @@ public class BackendAuthClient : MonoBehaviour {
         }
 
         ValidateResponse response = JsonUtility.FromJson<ValidateResponse>(request.downloadHandler.text);
+        CachedUserId = response.user_id;
+        CachedUsername = response.username;
         onSuccess?.Invoke(response);
+    }
+
+    public int GetCachedUserId() {
+        return CachedUserId;
+    }
+
+    public string GetCachedUsername() {
+        return CachedUsername;
     }
 
     private string ExtractErrorMessage(UnityWebRequest request) {

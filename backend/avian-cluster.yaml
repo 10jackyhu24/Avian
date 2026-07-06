@@ -1,76 +1,5 @@
 # =======================================================
-# 0. External Database Bridge (Connects K8s to standalone Docker PostgreSQL)
-# =======================================================
-apiVersion: v1
-kind: Service
-metadata:
-  name: postgres-service # Lobby manager will connect to http://postgres-service:5432
-spec:
-  type: ExternalName
-  externalName: host.docker.internal
-
----
-# =======================================================
-# 1. Game Lobby Manager (Handles room creation/join requests from Unity)
-# =======================================================
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: avian-lobby-deployment
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: avian-lobby
-  template:
-    metadata:
-      labels:
-        app: avian-lobby
-    spec:
-      containers:
-      - name: lobby-manager
-        image: avian-lobby:v1
-        ports:
-        - containerPort: 8000
-        env:
-        - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: DB_USER
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: DB_PASSWORD
-        - name: DB_NAME
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: DB_NAME
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: avian-db-secret
-              key: DB_HOST
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: lobby-service
-spec:
-  type: NodePort
-  ports:
-  - port: 8000
-    targetPort: 8000
-    nodePort: 30080
-  selector:
-    app: avian-lobby
-
----
-# =======================================================
-# 2. Game Room Pool (Pre-warm 3 clean empty rooms, auto-replenish on termination)
+# Avian K8s cluster: world/game-room only
 # =======================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -89,5 +18,20 @@ spec:
       containers:
       - name: game-room
         image: avian-world:v1
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 5000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: world-service
+spec:
+  type: ClusterIP
+  selector:
+    app: avian-game-room
+  ports:
+  - name: http
+    port: 5000
+    targetPort: 5000

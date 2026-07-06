@@ -14,5 +14,5 @@ COPY . .
 # Expose the internal port for game room communication (WebSocket)
 EXPOSE 5000
 
-# Command to run your game room script
-CMD ["python", "room.py"]
+# Command to run the world room API
+CMD ["uvicorn", "room:app", "--host", "0.0.0.0", "--port", "5000"]
