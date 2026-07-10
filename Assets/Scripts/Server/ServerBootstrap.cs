@@ -8,11 +8,10 @@ public class ServerBootstrap : MonoBehaviour {
     [SerializeField] private bool startServerOnStart = true;
     [SerializeField] private ushort defaultPort = 7777;
     [SerializeField] private string listenAddress = "0.0.0.0";
+    [SerializeField] private int fallbackSeed = 100000;
     [SerializeField] private TerrainController terrainController;
 
     private void Start() {
-        LoadSeedFromEnvironment();
-
         if (!startServerOnStart) {
             return;
         }
@@ -22,6 +21,12 @@ public class ServerBootstrap : MonoBehaviour {
             return;
         }
 
+        if (NetworkManager.Singleton.IsListening && NetworkManager.Singleton.IsClient && !NetworkManager.Singleton.IsServer) {
+            Debug.Log("[ServerBootstrap] Client instance detected; server startup skipped.", this);
+            return;
+        }
+
+        LoadSeed();
         ConfigureTransport();
 
         if (!NetworkManager.Singleton.IsListening) {
@@ -52,13 +57,13 @@ public class ServerBootstrap : MonoBehaviour {
         Debug.Log($"[ServerBootstrap] Client disconnected: {clientId}", this);
     }
 
-    private void LoadSeedFromEnvironment() {
+    private void LoadSeed() {
         string mapSeed = Environment.GetEnvironmentVariable("MAP_SEED");
-        if (!int.TryParse(mapSeed, out int seed)) {
-            return;
-        }
+        int seed = int.TryParse(mapSeed, out int parsedSeed)
+            ? parsedSeed
+            : fallbackSeed;
 
-        GameState.currentSeed = seed;
+        GameState.SetWorld(GameState.currentRoomId, seed);
 
         TerrainController targetTerrain = terrainController != null
             ? terrainController
@@ -68,7 +73,7 @@ public class ServerBootstrap : MonoBehaviour {
             targetTerrain.GenerateWorld(seed);
         }
 
-        Debug.Log($"[ServerBootstrap] Loaded MAP_SEED={seed}", this);
+        Debug.Log($"[ServerBootstrap] Loaded room seed={seed}", this);
     }
 
     private void ConfigureTransport() {

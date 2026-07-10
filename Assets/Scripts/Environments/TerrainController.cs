@@ -13,6 +13,7 @@ public class TerrainController : MonoBehaviour {
     [Header("Dynamic Loading")]
     [SerializeField] private int viewDistance = 50;
     [SerializeField] private float rotationThreshold = 3f;
+    [SerializeField] private bool generateOnStartFromGameState = true;
 
     private Camera mainCamera;
     private Transform mainCameraTransform;
@@ -38,14 +39,42 @@ public class TerrainController : MonoBehaviour {
     private readonly Color snowPeak = Color.white;
 
     private void Start() {
+        EnsureCameraReference();
+
+        if (generateOnStartFromGameState && GameState.hasWorldSeed) {
+            GenerateWorld(GameState.currentSeed);
+        }
+    }
+
+    private bool EnsureCameraReference() {
+        if (mainCamera != null && mainCameraTransform != null) {
+            return true;
+        }
+
         mainCamera = Camera.main;
+        if (mainCamera == null) {
+            Debug.LogWarning("[TerrainController] Main Camera not found. Terrain generation is waiting for a camera.", this);
+            return false;
+        }
+
         mainCameraTransform = mainCamera.transform;
+        return true;
     }
 
     private void EnsureBiomeMaterials() {
         if (biomeMaterials != null) return;
 
+        if (cubePrefab == null) {
+            Debug.LogError("[TerrainController] Cube Prefab is not assigned.", this);
+            return;
+        }
+
         Renderer prefabRenderer = cubePrefab.GetComponent<Renderer>();
+        if (prefabRenderer == null) {
+            Debug.LogError("[TerrainController] Cube Prefab is missing a Renderer.", this);
+            return;
+        }
+
         Material baseMaterial = prefabRenderer.sharedMaterial;
 
         biomeMaterials = new Material[6];
@@ -64,12 +93,24 @@ public class TerrainController : MonoBehaviour {
     }
 
     public void GenerateWorld(int seed) {
+        if (!EnsureCameraReference()) {
+            return;
+        }
+
         currentSeed = seed;
         EnsureBiomeMaterials();
+        if (biomeMaterials == null) {
+            return;
+        }
+
         mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
 
         // Clean up old terrain
         terrainParent = GameObject.Find("Terrain");
+        if (terrainParent == null) {
+            terrainParent = new GameObject("Terrain");
+        }
+
         foreach (Transform child in terrainParent.transform) Destroy(child.gameObject);
 
         // Initialize
@@ -81,10 +122,14 @@ public class TerrainController : MonoBehaviour {
 
         // Trigger the first terrain load
         UpdateDynamicLoading();
+        Debug.Log($"[TerrainController] Generated world with seed={seed}.", this);
     }
 
     private void Update() {
         if (!GameState.isPlaying) return;
+        if (cubeGrid == null) return;
+        if (!EnsureCameraReference()) return;
+
         // Calculate the camera's current grid coordinates
         int camGridX = Mathf.RoundToInt(mainCameraTransform.position.x) + size / 2;
         int camGridZ = Mathf.RoundToInt(mainCameraTransform.position.z) + size / 2;

@@ -8,7 +8,6 @@ public class MatchmakingMenu : MonoBehaviour {
     private MenuManager menuManager;
     private BackendAuthClient backendAuthClient;
     private MatchmakerClient matchmakerClient;
-    private TerrainController terrainController;
 
     [Header("UI")]
     [SerializeField] private TMP_Text statusText;
@@ -18,7 +17,6 @@ public class MatchmakingMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         matchmakerClient = FindFirstObjectByType<MatchmakerClient>();
-        terrainController = FindFirstObjectByType<TerrainController>();
     }
 
     public void Matchmaking() {
@@ -122,13 +120,7 @@ public class MatchmakingMenu : MonoBehaviour {
     }
 
     private IEnumerator EnterWorldRoutine(MatchmakerClient.MatchResponse response) {
-        GameState.currentRoomId = response.room_id;
-        GameState.currentSeed = response.seed;
-        GameState.isPlaying = true;
-
-        if (terrainController != null) {
-            terrainController.GenerateWorld(response.seed);
-        }
+        GameState.SetWorld(response.room_id, response.seed);
 
         string endpoint = string.IsNullOrWhiteSpace(URL.WorldServer)
             ? response.world_endpoint
