@@ -16,6 +16,9 @@ public class PlayerController : NetworkBehaviour {
     private float verticalVelocity;
     bool previousFlipX = false;
     private bool loggedFirstMovementInput;
+    private float serverHorizontalInput;
+    private float serverVerticalInput;
+    private bool serverJumpRequested;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -38,25 +41,30 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void Update() {
-        if (!IsOwner || !IsClient) {
-            return;
+        if (IsServer) {
+            HandleMovement(serverHorizontalInput, serverVerticalInput, serverJumpRequested);
+            serverJumpRequested = false;
         }
 
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
-        bool jumpPressed = Input.GetButtonDown("Jump");
+        if (IsOwner && IsClient) {
+            float horizontal = Input.GetAxisRaw("Horizontal");
+            float vertical = Input.GetAxisRaw("Vertical");
+            bool jumpPressed = Input.GetButtonDown("Jump");
 
-        if (!loggedFirstMovementInput && (Mathf.Abs(horizontal) > 0f || Mathf.Abs(vertical) > 0f || jumpPressed)) {
-            loggedFirstMovementInput = true;
-            Debug.Log($"[PlayerController] Sending movement input. h={horizontal}, v={vertical}, jump={jumpPressed}", this);
+            if (!loggedFirstMovementInput && (Mathf.Abs(horizontal) > 0f || Mathf.Abs(vertical) > 0f || jumpPressed)) {
+                loggedFirstMovementInput = true;
+                Debug.Log($"[PlayerController] Sending movement input. h={horizontal}, v={vertical}, jump={jumpPressed}", this);
+            }
+
+            SubmitMovementServerRpc(horizontal, vertical, jumpPressed);
         }
-
-        SubmitMovementServerRpc(horizontal, vertical, jumpPressed);
     }
 
     [ServerRpc]
     private void SubmitMovementServerRpc(float horizontal, float vertical, bool jumpPressed) {
-        HandleMovement(horizontal, vertical, jumpPressed);
+        serverHorizontalInput = Mathf.Clamp(horizontal, -1f, 1f);
+        serverVerticalInput = Mathf.Clamp(vertical, -1f, 1f);
+        serverJumpRequested |= jumpPressed;
     }
 
     private void HandleMovement(float horizontal, float vertical, bool jumpPressed) {
