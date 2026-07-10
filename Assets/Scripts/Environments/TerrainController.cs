@@ -23,7 +23,7 @@ public class TerrainController : MonoBehaviour {
 
     // Record the camera state last time to avoid repeated calculations
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
-    private Quaternion lastCameraRotation = Quaternion.identity;
+    private readonly HashSet<Vector2Int> lastLoadCenters = new HashSet<Vector2Int>();
     private int currentSeed;
 
     // Track the currently loaded and displayed coordinates
@@ -39,21 +39,24 @@ public class TerrainController : MonoBehaviour {
     private readonly Color snowPeak = Color.white;
 
     private void Start() {
-        EnsureCameraReference();
+        EnsureCameraReference(false);
 
         if (generateOnStartFromGameState && GameState.hasWorldSeed) {
             GenerateWorld(GameState.currentSeed);
         }
     }
 
-    private bool EnsureCameraReference() {
+    private bool EnsureCameraReference(bool warnIfMissing = true) {
         if (mainCamera != null && mainCameraTransform != null) {
             return true;
         }
 
         mainCamera = Camera.main;
         if (mainCamera == null) {
-            Debug.LogWarning("[TerrainController] Main Camera not found. Terrain generation is waiting for a camera.", this);
+            if (warnIfMissing) {
+                Debug.LogWarning("[TerrainController] Main Camera not found. Terrain will fall back to player positions.", this);
+            }
+
             return false;
         }
 
@@ -93,17 +96,16 @@ public class TerrainController : MonoBehaviour {
     }
 
     public void GenerateWorld(int seed) {
-        if (!EnsureCameraReference()) {
-            return;
-        }
-
         currentSeed = seed;
+        EnsureCameraReference(false);
         EnsureBiomeMaterials();
         if (biomeMaterials == null) {
             return;
         }
 
-        mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
+        if (mainCameraTransform != null) {
+            mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
+        }
 
         // Clean up old terrain
         terrainParent = GameObject.Find("Terrain");
@@ -118,7 +120,7 @@ public class TerrainController : MonoBehaviour {
         inRangePositions.Clear();
         // Initialize lastCameraGridPos using integer grid coordinates consistent with Update()
         lastCameraGridPos = new Vector3Int(0, 0, 0);
-        lastCameraRotation = Quaternion.identity;
+        lastLoadCenters.Clear();
 
         // Trigger the first terrain load
         UpdateDynamicLoading();
@@ -128,49 +130,67 @@ public class TerrainController : MonoBehaviour {
     private void Update() {
         if (!GameState.isPlaying) return;
         if (cubeGrid == null) return;
-        if (!EnsureCameraReference()) return;
 
-        // Calculate the camera's current grid coordinates
-        int camGridX = Mathf.RoundToInt(mainCameraTransform.position.x) + size / 2;
-        int camGridZ = Mathf.RoundToInt(mainCameraTransform.position.z) + size / 2;
-        int coarseCamX = camGridX / updateStride;
-        int coarseCamZ = camGridZ / updateStride;
+        HashSet<Vector2Int> loadCenters = GetLoadCenters();
+        if (loadCenters.Count == 0) return;
 
-        bool posChanged = (coarseCamX != lastCameraGridPos.x || coarseCamZ != lastCameraGridPos.z);
-        bool rotChanged = Quaternion.Angle(mainCameraTransform.rotation, lastCameraRotation) > rotationThreshold;
+        bool loadCentersChanged = !loadCenters.SetEquals(lastLoadCenters);
 
-        // Only refresh terrain when the camera crosses a larger update cell.
-        if (posChanged || rotChanged) {
-            lastCameraGridPos = new Vector3Int(coarseCamX, 0, coarseCamZ);
-            lastCameraRotation = mainCameraTransform.rotation;
+        if (loadCentersChanged) {
             UpdateDynamicLoading();
         }
     }
 
-    private void UpdateDynamicLoading() {
-        int camX = lastCameraGridPos.x * updateStride;
-        int camZ = lastCameraGridPos.z * updateStride + generationBiasZ;
+    private HashSet<Vector2Int> GetLoadCenters() {
+        HashSet<Vector2Int> centers = new HashSet<Vector2Int>();
+        PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
 
-        // Define loading boundary
-        int startX = Mathf.Max(0, camX - viewDistance);
-        int endX   = Mathf.Min(size - 1, camX + viewDistance);
-        int startZ = Mathf.Max(0, camZ - viewDistance);
-        int endZ   = Mathf.Min(size - 1, camZ + viewDistance);
+        foreach (PlayerController player in players) {
+            if (!player.gameObject.activeInHierarchy) {
+                continue;
+            }
+
+            centers.Add(WorldToCoarseGrid(player.transform.position, 0));
+        }
+
+        if (centers.Count > 0) {
+            return centers;
+        }
+
+        if (EnsureCameraReference(false)) {
+            centers.Add(WorldToCoarseGrid(mainCameraTransform.position, generationBiasZ));
+        }
+
+        return centers;
+    }
+
+    private Vector2Int WorldToCoarseGrid(Vector3 worldPosition, int zBias) {
+        int gridX = Mathf.RoundToInt(worldPosition.x) + size / 2;
+        int gridZ = Mathf.RoundToInt(worldPosition.z) + size / 2 + zBias;
+        return new Vector2Int(gridX / updateStride, gridZ / updateStride);
+    }
+
+    private void UpdateDynamicLoading() {
+        HashSet<Vector2Int> loadCenters = GetLoadCenters();
+        if (loadCenters.Count == 0) {
+            loadCenters.Add(new Vector2Int(size / (2 * updateStride), size / (2 * updateStride)));
+        }
 
         HashSet<Vector2Int> newInRange = new HashSet<Vector2Int>();
-        Plane[] cameraPlanes = GeometryUtility.CalculateFrustumPlanes(mainCamera);
 
-        // Build or reuse blocks in the active range.
-        for (int x = startX; x <= endX; x++) {
-            for (int z = startZ; z <= endZ; z++) {
-                // Check if the block is within the camera's view frustum
-                Vector3 blockCenter = new Vector3(x - (size / 2f), flatHeight, z - (size / 2f));
-                // Expand bounds by a larger margin (e.g., 20) to generate an extra ring/padding outside the view
-                Bounds blockBounds = new Bounds(blockCenter, Vector3.one * 20f); 
+        foreach (Vector2Int center in loadCenters) {
+            int centerX = center.x * updateStride;
+            int centerZ = center.y * updateStride;
 
-                if (GeometryUtility.TestPlanesAABB(cameraPlanes, blockBounds)) {
-                    var pos = new Vector2Int(x, z);
-                    newInRange.Add(pos);
+            // Define loading boundary around each player/server authority position.
+            int startX = Mathf.Max(0, centerX - viewDistance);
+            int endX   = Mathf.Min(size - 1, centerX + viewDistance);
+            int startZ = Mathf.Max(0, centerZ - viewDistance);
+            int endZ   = Mathf.Min(size - 1, centerZ + viewDistance);
+
+            for (int x = startX; x <= endX; x++) {
+                for (int z = startZ; z <= endZ; z++) {
+                    newInRange.Add(new Vector2Int(x, z));
                 }
             }
         }
@@ -192,6 +212,10 @@ public class TerrainController : MonoBehaviour {
         }
 
         inRangePositions = newInRange;
+        lastLoadCenters.Clear();
+        foreach (Vector2Int center in loadCenters) {
+            lastLoadCenters.Add(center);
+        }
     }
 
     private void CreateBlockAt(int x, int z) {
