@@ -15,6 +15,7 @@ public class PlayerController : NetworkBehaviour {
     private CharacterController characterController;
     private float verticalVelocity;
     bool previousFlipX = false;
+    private bool loggedFirstMovementInput;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -22,21 +23,46 @@ public class PlayerController : NetworkBehaviour {
         animator = GetComponent<Animator>();
     }
 
-    private void Update() {
-        // Use IsOwner to check whether this client controls the player
-        if (!IsOwner) return;
+    public override void OnNetworkSpawn() {
+        Debug.Log($"[PlayerController] Spawned. OwnerClientId={OwnerClientId}, IsOwner={IsOwner}, IsLocalPlayer={IsLocalPlayer}", this);
 
-        HandleMovement();
+        if (!IsOwner) {
+            return;
+        }
+
+        CameraController cameraController = FindFirstObjectByType<CameraController>();
+        if (cameraController != null) {
+            cameraController.SetTarget(transform);
+            Debug.Log("[PlayerController] Local owner assigned camera target.", this);
+        }
     }
 
-    private void HandleMovement() {
-        if (characterController.isGrounded && verticalVelocity < 0f) {
-            verticalVelocity = -2f;
+    private void Update() {
+        if (!IsOwner || !IsClient) {
+            return;
         }
 
         float horizontal = Input.GetAxisRaw("Horizontal");
-
         float vertical = Input.GetAxisRaw("Vertical");
+        bool jumpPressed = Input.GetButtonDown("Jump");
+
+        if (!loggedFirstMovementInput && (Mathf.Abs(horizontal) > 0f || Mathf.Abs(vertical) > 0f || jumpPressed)) {
+            loggedFirstMovementInput = true;
+            Debug.Log($"[PlayerController] Sending movement input. h={horizontal}, v={vertical}, jump={jumpPressed}", this);
+        }
+
+        SubmitMovementServerRpc(horizontal, vertical, jumpPressed);
+    }
+
+    [ServerRpc]
+    private void SubmitMovementServerRpc(float horizontal, float vertical, bool jumpPressed) {
+        HandleMovement(horizontal, vertical, jumpPressed);
+    }
+
+    private void HandleMovement(float horizontal, float vertical, bool jumpPressed) {
+        if (characterController.isGrounded && verticalVelocity < 0f) {
+            verticalVelocity = -2f;
+        }
 
         Vector3 moveDirection = new Vector3(horizontal, 0f, vertical).normalized;
 
@@ -61,12 +87,12 @@ public class PlayerController : NetworkBehaviour {
         }
 
         // Jump input handling
-        if (Input.GetButtonDown("Jump") && characterController.isGrounded) {
+        if (jumpPressed && characterController.isGrounded) {
             verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
         }
 
         verticalVelocity += gravity * Time.deltaTime;
-        transform.rotation = new Quaternion(0, 0, 0, 0);
+        transform.rotation = Quaternion.identity;
         Vector3 velocity = moveDirection * moveSpeed;
         velocity.y = verticalVelocity;
 
