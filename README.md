@@ -38,6 +38,31 @@ There are two backend paths:
 * **Docker Compose** runs auth, ngrok exposure, database, and matchmaker.
 * **Kubernetes / Kind** now keeps only the world/game-room pool.
 
+### Current Tested Multiplayer Flow
+
+The current local multiplayer test flow is:
+
+1. Docker Compose runs the account/login backend, matchmaker, Postgres database, Caddy, and optional ngrok tunnel.
+2. Kind/Kubernetes runs the Unity dedicated server as a game-room pod.
+3. Unity clients call the backend to log in and join matchmaking.
+4. When two players are matched, the matchmaker returns:
+
+```json
+{
+  "status": "matched",
+  "room_id": "room-1",
+  "seed": 100000,
+  "world_endpoint": "127.0.0.1:30080"
+}
+```
+
+5. Unity reads `world_endpoint` from the matchmaking response and connects to the Unity dedicated server.
+
+For local testing, the important ports are:
+
+* `localhost:8000` for Unity HTTP requests to auth and matchmaking through Caddy.
+* `127.0.0.1:30080` for Unity Netcode UDP traffic to the Kubernetes game-room server.
+
 ### Docker Compose + ngrok
 
 Use this when you want the quickest working login/register flow and a public HTTPS URL for Unity.
@@ -65,6 +90,7 @@ Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export i
 
 ```env
 NGROK_AUTHTOKEN=your_ngrok_token
+WORLD_ENDPOINT=127.0.0.1:30080
 ```
 
 **3. Start the services**
@@ -82,6 +108,12 @@ This starts:
 * `avian_ngrok` exposing a public HTTPS tunnel to the lobby
 * `avian_matchmaker` on `localhost:8080`
 
+`WORLD_ENDPOINT` is the game-room endpoint that matchmaking returns to Unity after two players are matched. For local Kind testing, use:
+
+```env
+WORLD_ENDPOINT=127.0.0.1:30080
+```
+
 **4. Verify the API**
 
 Open `localhost:4040` on the browser to get the public HTTPS URL. Then test:
@@ -92,13 +124,19 @@ curl.exe https://your-ngrok-url.ngrok.app/health
 
 **5. Point Unity to the local API**
 
-Set `URL.cs` to:
+For same-computer local testing, set `URL.cs` to:
+
+```text
+BaseUrl = http://localhost:8000
+```
+
+If you need another computer to reach your backend through ngrok, set `URL.cs` to your ngrok URL instead:
 
 ```text
 BaseUrl = https://your-ngrok-url.ngrok.app
 ```
 
-After that, login and register should work against the backend through ngrok.
+`URL.WorldServer` should normally stay empty. The client should use `world_endpoint` from the matchmaking response.
 
 ### Kubernetes / Kind + Unity Dedicated Server
 
@@ -217,7 +255,8 @@ For the Windows client build:
 
 * Make sure `Assets/Scenes/SampleScene.unity` is the first scene.
 * Keep `Assets/Scenes/GameRoon_Server.unity` included in the build list so Netcode scene synchronization can load it.
-* Set `URL.WorldServer` to:
+* Keep `URL.WorldServer` empty unless you intentionally need a local fallback override.
+* Confirm the matchmaker returns this endpoint through `WORLD_ENDPOINT`:
 
 ```text
 127.0.0.1:30080
@@ -286,6 +325,12 @@ Whenever you modify Python backend code or the Unity dedicated server, use the m
 
 ```powershell
 docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+If you change `WORLD_ENDPOINT`, restart Docker Compose so the matchmaker gets the new value:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
 ```
 
 **Kubernetes / Kind Unity dedicated server**

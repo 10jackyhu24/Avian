@@ -10,7 +10,6 @@ public static class URL {
 
     public static string WorldRoomConfigPath = "/room";
 
-    // Step 3 MVP: use one fixed Unity dedicated server while we prove client -> server works.
-    // Later, this can be replaced by the matchmaker's world_endpoint per room.
-    public static string WorldServer = "127.0.0.1:30080";
+    // Optional local fallback. Prefer the matchmaker's world_endpoint for real matches.
+    public static string WorldServer = "";
 }

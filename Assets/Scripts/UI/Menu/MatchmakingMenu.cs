@@ -127,7 +127,7 @@ public class MatchmakingMenu : MonoBehaviour {
     private IEnumerator EnterWorldRoutine(MatchmakerClient.MatchResponse response) {
         GameState.SetWorld(response.room_id, response.seed);
 
-        string endpoint = string.IsNullOrWhiteSpace(URL.WorldServer)
+        string endpoint = !string.IsNullOrWhiteSpace(response.world_endpoint)
             ? response.world_endpoint
             : URL.WorldServer;
 
