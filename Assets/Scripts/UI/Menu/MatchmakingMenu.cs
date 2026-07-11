@@ -8,6 +8,7 @@ public class MatchmakingMenu : MonoBehaviour {
     private MenuManager menuManager;
     private BackendAuthClient backendAuthClient;
     private MatchmakerClient matchmakerClient;
+    private bool isConnectingToWorldServer;
 
     [Header("UI")]
     [SerializeField] private TMP_Text statusText;
@@ -17,6 +18,10 @@ public class MatchmakingMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         matchmakerClient = FindFirstObjectByType<MatchmakerClient>();
+    }
+
+    private void OnDestroy() {
+        UnregisterNetworkCallbacks();
     }
 
     public void Matchmaking() {
@@ -132,7 +137,6 @@ public class MatchmakingMenu : MonoBehaviour {
 
         SetStatus($"Connecting to {endpoint}...");
         yield return null;
-        menuManager.HideMenu();
     }
 
     private bool TryConnectToDedicatedServer(string endpoint) {
@@ -157,14 +161,65 @@ public class MatchmakingMenu : MonoBehaviour {
         }
 
         unityTransport.SetConnectionData(host, port);
+        RegisterNetworkCallbacks();
+        isConnectingToWorldServer = true;
+
         bool started = NetworkManager.Singleton.StartClient();
 
         Debug.Log($"[MatchmakingMenu] StartClient={started}, endpoint={host}:{port}", this);
         if (!started) {
+            isConnectingToWorldServer = false;
             SetStatus("Failed to start client.");
         }
 
         return started;
+    }
+
+    private void RegisterNetworkCallbacks() {
+        if (NetworkManager.Singleton == null) {
+            return;
+        }
+
+        NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+        NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
+    }
+
+    private void UnregisterNetworkCallbacks() {
+        if (NetworkManager.Singleton == null) {
+            return;
+        }
+
+        NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+        NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
+    }
+
+    private void HandleClientConnected(ulong clientId) {
+        if (NetworkManager.Singleton == null || clientId != NetworkManager.Singleton.LocalClientId) {
+            return;
+        }
+
+        isConnectingToWorldServer = false;
+        SetStatus($"Connected to game server as client {clientId}.");
+
+        if (menuManager != null) {
+            menuManager.HideMenu();
+        }
+    }
+
+    private void HandleClientDisconnected(ulong clientId) {
+        if (NetworkManager.Singleton == null || clientId != NetworkManager.Singleton.LocalClientId) {
+            return;
+        }
+
+        string message = isConnectingToWorldServer
+            ? "Disconnected while joining game server. Check server build, scene list, and k8s logs."
+            : "Disconnected from game server.";
+
+        isConnectingToWorldServer = false;
+        Debug.LogWarning($"[MatchmakingMenu] {message}", this);
+        SetStatus(message);
     }
 
     private static bool TryParseEndpoint(string endpoint, out string host, out ushort port) {

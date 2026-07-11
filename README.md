@@ -100,9 +100,15 @@ BaseUrl = https://your-ngrok-url.ngrok.app
 
 After that, login and register should work against the backend through ngrok.
 
-### Kubernetes / Kind
+### Kubernetes / Kind + Unity Dedicated Server
 
-Use this path if you want to test the world/game-room deployment model.
+Use this path if you want to test the world/game-room deployment model with a Unity dedicated server running inside Kubernetes.
+
+Current tested flow:
+
+* Docker Compose still runs auth, lobby, matchmaking, Postgres, Caddy, and ngrok.
+* Kind/Kubernetes runs the Unity game-room server.
+* Unity clients authenticate and match through the backend, then connect to the game-room server through UDP port `30080`.
 
 Open PowerShell **as Administrator** and install Kind and Kubectl if needed:
 ```powershell
@@ -113,42 +119,123 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**1. Build the world image**
+**1. Build the Unity Linux Dedicated Server**
 
-Build the world image from its subdirectory:
+In Unity, open **File > Build Profiles**.
 
-```powershell
-docker build -t avian-world:v1 ./backend/world
+For the Linux dedicated server build:
+
+* Use the `Linux Dedicated Server` profile.
+* Make sure `Assets/Scenes/GameRoon_Server.unity` is included.
+* Make sure `GameRoon_Server` is the first scene for the server build.
+* Build to:
+
+```text
+Builds/LinuxServer
 ```
 
-**2. Create the cluster and load the image**
+The output should include files like:
+
+```text
+Builds/LinuxServer/AvianServer.x86_64
+Builds/LinuxServer/AvianServer_Data/
+Builds/LinuxServer/UnityPlayer.so
+```
+
+**2. Build the Docker image**
+
+From the project root:
+
+```powershell
+docker build -t avian-dedicated-server:v1 -f backend/Linux_Dedicated_Server/Dockerfile Builds/LinuxServer
+```
+
+Optional local Docker smoke test:
+
+```powershell
+docker run --rm -p 7777:7777/udp -e GAME_PORT=7777 -e MAP_SEED=100000 avian-dedicated-server:v1
+```
+
+If this works, the server logs should show:
+
+```text
+[ServerBootstrap] Loaded room seed=100000
+[ServerBootstrap] Listening on 0.0.0.0:7777
+[ServerBootstrap] StartServer=True
+```
+
+**3. Create the cluster and load the image**
 
 In the project root, create the Kind cluster and inject your image:
 
 ```powershell
+kind delete cluster --name avian-cluster
+
 kind create cluster --config backend/kind-config.yaml
 
 kind export kubeconfig --name avian-cluster
 
-kind load docker-image avian-world:v1 --name avian-cluster
+kind load docker-image avian-dedicated-server:v1 --name avian-cluster
 ```
 
-**3. Deploy the world workload**
+**4. Deploy the world workload**
 
 ```powershell
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**4. Verify the deployment**
+**5. Verify the deployment**
 
 Verify that the world components are healthy:
 ```powershell
 kubectl get pods
 
 kubectl get svc
+
+kubectl logs -f deployment/avian-rooms-pool-deployment
 ```
 
-The K8s path now only hosts the world/game-room pool. Lobby auth and matchmaking stay in Docker.
+Expected service output should include:
+
+```text
+world-service   NodePort   ...   7777:30080/UDP
+```
+
+Expected server logs should include:
+
+```text
+[ServerBootstrap] Loaded room seed=100000
+[ServerBootstrap] Listening on 0.0.0.0:7777
+[ServerBootstrap] StartServer=True
+```
+
+The K8s path currently hosts one game-room pod. Lobby auth and matchmaking stay in Docker.
+
+**6. Build and test the Windows client**
+
+For the Windows client build:
+
+* Make sure `Assets/Scenes/SampleScene.unity` is the first scene.
+* Keep `Assets/Scenes/GameRoon_Server.unity` included in the build list so Netcode scene synchronization can load it.
+* Set `URL.WorldServer` to:
+
+```text
+127.0.0.1:30080
+```
+
+Then start two Windows clients, log in with different accounts, and press **Match** on both clients.
+
+Successful k8s test signs:
+
+* Both clients enter the same server scene.
+* Both clients can see each other.
+* Movement and jumping sync between clients.
+* Kubernetes logs show client connections, for example:
+
+```text
+[ServerBootstrap] Client connected: 1
+[ServerBootstrap] Client connected: 2
+```
 
 ### Authentication Flow
 
@@ -193,7 +280,7 @@ Why this design:
 
 ### How to Update the Backend Deployment
 
-Whenever you modify Python code in the `lobby/` or `world/` folders, use one of these update paths:
+Whenever you modify Python backend code or the Unity dedicated server, use the matching update path:
 
 **Docker Compose backend**
 
@@ -201,11 +288,19 @@ Whenever you modify Python code in the `lobby/` or `world/` folders, use one of 
 docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
 ```
 
-**Kubernetes / Kind backend**
+**Kubernetes / Kind Unity dedicated server**
+
+First rebuild the Linux Dedicated Server from Unity into:
+
+```text
+Builds/LinuxServer
+```
+
+Then rebuild and reload the Docker image:
 
 ```powershell
-docker build -t avian-world:v1 ./backend/world
-kind load docker-image avian-world:v1 --name avian-cluster
+docker build -t avian-dedicated-server:v1 -f backend/Linux_Dedicated_Server/Dockerfile Builds/LinuxServer
+kind load docker-image avian-dedicated-server:v1 --name avian-cluster
 kubectl rollout restart deployment avian-rooms-pool-deployment
 kubectl get pods -w
 ```

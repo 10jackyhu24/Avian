@@ -6,7 +6,7 @@ kind: Deployment
 metadata:
   name: avian-rooms-pool-deployment
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: avian-game-room
