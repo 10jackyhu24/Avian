@@ -63,6 +63,45 @@ For local testing, the important ports are:
 * `localhost:8000` for Unity HTTP requests to auth and matchmaking through Caddy.
 * `127.0.0.1:30080` for Unity Netcode UDP traffic to the Kubernetes game-room server.
 
+For public two-computer testing, the important public addresses are:
+
+* an **ngrok HTTPS URL** for Unity HTTP requests to auth and matchmaking.
+* a **Playit UDP address** for Unity Netcode traffic to the dedicated server.
+
+Example public flow:
+
+```text
+Computer B Unity client
+-> ngrok HTTPS backend URL
+-> Docker Compose matchmaker on Computer A
+-> matchmaker returns Playit world_endpoint
+-> Playit UDP tunnel
+-> Kind/K8s Unity dedicated server on Computer A
+```
+
+### Host vs Player Machine
+
+The host machine is the computer running the backend and dedicated server. A player machine only needs the client build.
+
+**Host machine needs:**
+
+* Docker Desktop.
+* Docker Compose backend services.
+* Kind/Kubernetes game server.
+* Unity Linux Dedicated Server build.
+* Docker image `avian-dedicated-server:v1`.
+* Playit agent open for UDP game traffic.
+* ngrok tunnel open for public HTTP backend traffic, if testing across different networks.
+* `backend/.env` configured with `WORLD_ENDPOINT`.
+
+**Player machine needs:**
+
+* Windows Unity client `.exe`.
+* Internet connection.
+* The client must be built with a reachable `URL.BaseUrl`.
+
+The player machine does **not** need Docker, Kubernetes, Playit, ngrok, `backend/.env`, or a Linux dedicated server build.
+
 ### Docker Compose + ngrok
 
 Use this when you want the quickest working login/register flow and a public HTTPS URL for Unity.
@@ -92,6 +131,14 @@ Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export i
 NGROK_AUTHTOKEN=your_ngrok_token
 WORLD_ENDPOINT=127.0.0.1:30080
 ```
+
+For public Playit testing, replace `WORLD_ENDPOINT` with your Playit UDP address:
+
+```env
+WORLD_ENDPOINT=your-playit-address.ply.gg:12345
+```
+
+Do not include `http://` or `https://` in `WORLD_ENDPOINT`. It is a UDP game endpoint, not an HTTP URL.
 
 **3. Start the services**
 
@@ -137,6 +184,14 @@ BaseUrl = https://your-ngrok-url.ngrok.app
 ```
 
 `URL.WorldServer` should normally stay empty. The client should use `world_endpoint` from the matchmaking response.
+
+Changing `backend/.env` does not require rebuilding the Unity client. Restart the matchmaker instead:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+Changing `URL.BaseUrl` does require rebuilding the Windows client because that value is compiled into the client build.
 
 ### Kubernetes / Kind + Unity Dedicated Server
 
@@ -249,6 +304,14 @@ Expected server logs should include:
 
 The K8s path currently hosts one game-room pod. Lobby auth and matchmaking stay in Docker.
 
+The deployment intentionally uses one replica:
+
+```yaml
+replicas: 1
+```
+
+For the current proof-of-concept, one replica means one Unity dedicated server room. This keeps both matched players on the same server. Do not raise this to `3` yet unless the matchmaker also knows how to assign players to specific pods/endpoints. Multiple replicas behind one UDP service can route players unpredictably for room-based gameplay.
+
 **6. Build and test the Windows client**
 
 For the Windows client build:
@@ -275,6 +338,96 @@ Successful k8s test signs:
 [ServerBootstrap] Client connected: 1
 [ServerBootstrap] Client connected: 2
 ```
+
+### Public Two-Computer Test With ngrok + Playit
+
+Use this when two players are on different internet connections.
+
+**Computer A: host**
+
+1. Start Docker Compose:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+2. Make sure the Kind game server is running:
+
+```powershell
+kubectl get pods
+kubectl get svc
+```
+
+Expected:
+
+```text
+avian-rooms-pool-deployment ... Running
+world-service ... 7777:30080/UDP
+```
+
+3. Keep the Playit agent open. The tunnel should point to:
+
+```text
+127.0.0.1:30080
+```
+
+Example:
+
+```text
+your-playit-address.ply.gg:12345 -> 127.0.0.1:30080
+```
+
+4. Set `backend/.env`:
+
+```env
+WORLD_ENDPOINT=your-playit-address.ply.gg:12345
+```
+
+5. Restart the matchmaker:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+6. Open the ngrok inspector and copy the HTTPS forwarding URL:
+
+```text
+http://localhost:4040
+```
+
+Example:
+
+```text
+https://your-ngrok-url.ngrok-free.app
+```
+
+7. Set `URL.cs` before building the Windows client:
+
+```csharp
+public static string BaseUrl = "https://your-ngrok-url.ngrok-free.app";
+public static string WorldServer = "";
+```
+
+8. Rebuild the Windows client and send the same build to Computer B.
+
+**Computer B: player**
+
+1. Run the Windows client `.exe`.
+2. Log in or register through the ngrok backend.
+3. Press **Match** with a different account from Computer A.
+
+Expected result:
+
+* Computer A and Computer B can log in through the same backend.
+* Both clients are matched by the same matchmaker.
+* Both clients connect through the Playit UDP endpoint.
+* Both clients enter the same Unity dedicated server room and can see each other.
+
+Known current limitations:
+
+* Two clients using the same account should not be used for matchmaking. The matchmaker keys queue entries by `user_id`, so use different accounts.
+* The public tunnel test may lag because traffic is routed through ngrok, Playit, Docker, and Kind.
+* The current setup exposes one room server, not multiple simultaneous room pods.
 
 ### Authentication Flow
 
