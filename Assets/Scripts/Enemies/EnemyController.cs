@@ -5,6 +5,14 @@ public class EnemyController : MonoBehaviour {
     private enum EnemyState {
         Patrol,
         Chase,
+        TelegraphAttack,
+        AttackRecover,
+        Cooldown
+    }
+
+    private enum EnemyControlMode {
+        Navigation,
+        Combat,
         Cooldown
     }
 
@@ -19,6 +27,13 @@ public class EnemyController : MonoBehaviour {
     [SerializeField] private float chaseSpeed = 4.5f;
     [SerializeField] private float chaseDuration = 5f;
     [SerializeField] private float chaseCooldown = 3f;
+
+    [Header("Combat")]
+    [SerializeField] private float attackRange = 2.5f;
+    [SerializeField] private float attackTelegraphDuration = 0.7f;
+    [SerializeField] private float attackRecoverDuration = 0.8f;
+    [SerializeField] private float attackDamage = 10f;
+    [SerializeField] private Color attackTelegraphColor = new Color(1f, 0.7f, 0.7f, 0.45f);
 
     [Header("Movement")]
     [SerializeField] private float rotationSpeed = 8f;
@@ -37,6 +52,7 @@ public class EnemyController : MonoBehaviour {
     private bool[] colliderEnabledStates;
     private Transform playerTarget;
     private EnemyState currentState = EnemyState.Patrol;
+    private EnemyControlMode currentControlMode = EnemyControlMode.Navigation;
     private Vector3 patrolCenter;
     private Vector3 currentPatrolPoint;
     private float verticalVelocity;
@@ -45,7 +61,11 @@ public class EnemyController : MonoBehaviour {
     private float patrolPauseTimer;
     private float nextTargetSearchTime;
     private float nextVisibilityCheckTime;
+    private float attackStateTimer;
     private bool isSuspendedByCamera;
+    private AttackTelegraphRenderer telegraphRenderer;
+
+    public bool IsInCombatMode => currentControlMode == EnemyControlMode.Combat;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -66,6 +86,11 @@ public class EnemyController : MonoBehaviour {
         patrolCenter = transform.position;
         currentPatrolPoint = patrolCenter;
         PickNextPatrolPoint();
+
+        telegraphRenderer = GetComponent<AttackTelegraphRenderer>();
+        if (telegraphRenderer == null) {
+            telegraphRenderer = gameObject.AddComponent<AttackTelegraphRenderer>();
+        }
     }
 
     private void Update() {
@@ -91,11 +116,31 @@ public class EnemyController : MonoBehaviour {
                 UpdateChase();
                 break;
 
+            case EnemyState.TelegraphAttack:
+                UpdateAttackTelegraph();
+                break;
+
+            case EnemyState.AttackRecover:
+                UpdateAttackRecover();
+                break;
+
             case EnemyState.Cooldown:
                 UpdateCooldown();
                 UpdatePatrol();
                 break;
         }
+    }
+
+    public void SetCombatMode(bool shouldEnterCombatMode) {
+        if (shouldEnterCombatMode) {
+            if (currentState == EnemyState.Patrol || currentState == EnemyState.Cooldown) {
+                BeginChase();
+            }
+
+            return;
+        }
+
+        BeginCooldown();
     }
 
     private void RefreshVisibilityState() {
@@ -154,6 +199,7 @@ public class EnemyController : MonoBehaviour {
 
     private void BeginChase() {
         currentState = EnemyState.Chase;
+        currentControlMode = EnemyControlMode.Combat;
         chaseTimer = chaseDuration;
     }
 
@@ -194,8 +240,85 @@ public class EnemyController : MonoBehaviour {
             MoveCharacter(Vector3.zero, 0f);
         }
 
+        if (toPlayer.sqrMagnitude <= attackRange * attackRange) {
+            BeginAttackTelegraph();
+            return;
+        }
+
         if (chaseTimer <= 0f) {
             BeginCooldown();
+        }
+    }
+
+    private void BeginAttackTelegraph() {
+        currentState = EnemyState.TelegraphAttack;
+        currentControlMode = EnemyControlMode.Combat;
+        attackStateTimer = attackTelegraphDuration;
+
+        if (telegraphRenderer != null) {
+            telegraphRenderer.ShowTelegraph(
+                attackRange,
+                attackTelegraphDuration,
+                attackTelegraphColor
+            );
+        }
+    }
+
+    private void UpdateAttackTelegraph() {
+        MoveCharacter(Vector3.zero, 0f);
+        attackStateTimer -= Time.deltaTime;
+
+        if (attackStateTimer > 0f) {
+            return;
+        }
+
+        ResolveAttack();
+        BeginAttackRecover();
+    }
+
+    private void BeginAttackRecover() {
+        currentState = EnemyState.AttackRecover;
+        currentControlMode = EnemyControlMode.Combat;
+        attackStateTimer = attackRecoverDuration;
+
+        if (telegraphRenderer != null) {
+            telegraphRenderer.HideTelegraph();
+        }
+    }
+
+    private void UpdateAttackRecover() {
+        MoveCharacter(Vector3.zero, 0f);
+        attackStateTimer -= Time.deltaTime;
+
+        if (attackStateTimer > 0f) {
+            return;
+        }
+
+        if (CanStartChase()) {
+            BeginChase();
+            return;
+        }
+
+        BeginCooldown();
+    }
+
+    private void ResolveAttack() {
+        if (playerTarget == null) {
+            return;
+        }
+
+        if (GetHorizontalDistanceTo(playerTarget.position) > attackRange) {
+            return;
+        }
+
+        playerTarget.SendMessage(
+            "OnEnemyAttackResolved",
+            attackDamage,
+            SendMessageOptions.DontRequireReceiver
+        );
+
+        if (telegraphRenderer != null) {
+            telegraphRenderer.HideTelegraph();
         }
     }
 
@@ -203,14 +326,20 @@ public class EnemyController : MonoBehaviour {
         cooldownTimer -= Time.deltaTime;
         if (cooldownTimer <= 0f) {
             currentState = EnemyState.Patrol;
+            currentControlMode = EnemyControlMode.Navigation;
         }
     }
 
     private void BeginCooldown() {
         currentState = EnemyState.Cooldown;
+        currentControlMode = EnemyControlMode.Cooldown;
         cooldownTimer = chaseCooldown;
         patrolPauseTimer = 0f;
         PickNextPatrolPoint();
+
+        if (telegraphRenderer != null) {
+            telegraphRenderer.HideTelegraph();
+        }
     }
 
     private void PickNextPatrolPoint() {
@@ -271,6 +400,9 @@ public class EnemyController : MonoBehaviour {
     private void OnDrawGizmosSelected() {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, detectionRange);
+
+        Gizmos.color = new Color(1f, 0.7f, 0.7f, 0.8f);
+        Gizmos.DrawWireSphere(transform.position, attackRange);
 
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, patrolRadius);
