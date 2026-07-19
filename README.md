@@ -503,6 +503,21 @@ kubectl rollout restart deployment avian-rooms-pool-deployment
 kubectl get pods -w
 ```
 
+## Quick Start
+
+If you don't want to type commands line by line, you can execute the following instructions:
+
+```python
+# Docker compose only
+python compose.py --docker
+
+# K8s only
+python compose.py --k8s
+
+# Docker compose + K8s
+python compose.py --all
+```
+
 ## Common Issues & Troubleshooting
 
 ### Unity Issues
