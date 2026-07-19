@@ -3,6 +3,7 @@ using TMPro;
 using System.Collections;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
+using Unity.VisualScripting;
 
 public class MatchmakingMenu : MonoBehaviour {
     private MenuManager menuManager;
@@ -13,7 +14,7 @@ public class MatchmakingMenu : MonoBehaviour {
     [Header("UI")]
     [SerializeField] private TMP_Text inQueueText;
     [SerializeField] private TMP_Text MatchmakingStatusText;
-    [SerializeField] private TMP_Text WarningText;
+    private WarningWindow warningWindow;
 
     [SerializeField] private float pollIntervalSeconds = 2f;
 
@@ -21,6 +22,7 @@ public class MatchmakingMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         matchmakerClient = FindFirstObjectByType<MatchmakerClient>();
+        warningWindow = FindFirstObjectByType<WarningWindow>();
     }
 
     private void OnDestroy() {
@@ -138,28 +140,28 @@ public class MatchmakingMenu : MonoBehaviour {
             yield break;
         }
 
-        // SetStatus(WarningText, $"Connecting to {endpoint}...");
+        // SetStatus($"Connecting to {endpoint}...");
         yield return null;
     }
 
     private bool TryConnectToDedicatedServer(string endpoint) {
         if (NetworkManager.Singleton == null) {
-            SetStatus(WarningText, "NetworkManager not found.");
+            warningWindow.Show("NetworkManager", "NetworkManager not found.");
             return false;
         }
 
         if (NetworkManager.Singleton.IsListening) {
-            SetStatus(WarningText, "NetworkManager is already running.");
+            warningWindow.Show("NetworkManager", "NetworkManager is already running.");
             return true;
         }
 
         if (NetworkManager.Singleton.NetworkConfig.NetworkTransport is not UnityTransport unityTransport) {
-            SetStatus(WarningText, "UnityTransport not found on NetworkManager.");
+            warningWindow.Show("NetworkManager", "UnityTransport not found on NetworkManager.");
             return false;
         }
 
         if (!TryParseEndpoint(endpoint, out string host, out ushort port)) {
-            SetStatus(WarningText, $"Invalid world server endpoint: {endpoint}");
+            warningWindow.Show("Connect Failed", $"Invalid world server endpoint: {endpoint}");
             return false;
         }
 
@@ -172,7 +174,7 @@ public class MatchmakingMenu : MonoBehaviour {
         Debug.Log($"[MatchmakingMenu] StartClient={started}, endpoint={host}:{port}", this);
         if (!started) {
             isConnectingToWorldServer = false;
-            SetStatus(WarningText, "Failed to start client.");
+            warningWindow.Show("Client Faild", "Failed to start client.");
         }
 
         return started;
@@ -204,7 +206,7 @@ public class MatchmakingMenu : MonoBehaviour {
         }
 
         isConnectingToWorldServer = false;
-        SetStatus(WarningText, $"Connected to game server as client {clientId}.");
+        warningWindow.Show("Client Connected",$"Connected to game server as client {clientId}.");
 
         if (menuManager != null) {
             menuManager.HideMenu();
@@ -222,7 +224,7 @@ public class MatchmakingMenu : MonoBehaviour {
 
         isConnectingToWorldServer = false;
         Debug.LogWarning($"[MatchmakingMenu] {message}", this);
-        SetStatus(WarningText, message);
+        warningWindow.Show("Warning", message);
     }
 
     private static bool TryParseEndpoint(string endpoint, out string host, out ushort port) {
