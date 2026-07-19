@@ -65,6 +65,10 @@ services:
       context: ./matchmaker
     container_name: avian_matchmaker
     restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      WORLD_ENDPOINT: ${WORLD_ENDPOINT:-127.0.0.1:30080}
     ports:
       - "8080:8080"
 

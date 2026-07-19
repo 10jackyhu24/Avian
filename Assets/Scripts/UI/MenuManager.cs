@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.UIElements;
 
 public enum PanelType {
     MainMenu,
@@ -21,6 +22,7 @@ public class MenuManager : MonoBehaviour {
 
     [Header("UI Elements")]
     [SerializeField] private PanelData[] uiPanels;
+    [SerializeField] private GameObject background;
 
     private Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
     private Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
@@ -51,6 +53,7 @@ public class MenuManager : MonoBehaviour {
     }
 
     private void SetActivePanelOnly(PanelType panelType) {
+        background.SetActive(true);
         foreach (var pair in panelDict) {
             pair.Value.SetActive(pair.Key == panelType);
         }
@@ -69,6 +72,7 @@ public class MenuManager : MonoBehaviour {
     }
 
     public void HideMenu() {
+        background.SetActive(false);
         foreach (var pair in panelDict) {
             if (pair.Value != null) {
                 pair.Value.SetActive(false);

@@ -13,7 +13,6 @@ GameObject:
   - component: {fileID: 8588243383838930314}
   - component: {fileID: 393711709446370195}
   - component: {fileID: 5965986747885414584}
-  - component: {fileID: 4773364997155492651}
   - component: {fileID: -2242094449183278105}
   - component: {fileID: -9093652275082908926}
   - component: {fileID: -1130482964751066315}
@@ -33,7 +32,7 @@ Transform:
   m_GameObject: {fileID: 386513580500606536}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 6.641, z: 0}
+  m_LocalPosition: {x: 0, y: 36.94, z: 0}
   m_LocalScale: {x: 11.686268, y: 11.686268, z: 11.686268}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -125,37 +124,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 6
-  jumpHeight: 1.5
+  moveSpeed: 9.85
+  jumpHeight: 3.11
   gravity: -20
-  rotationSpeed: 12
---- !u!54 &4773364997155492651
-Rigidbody:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 386513580500606536}
-  serializedVersion: 5
-  m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
-  m_CenterOfMass: {x: 0, y: 0, z: 0}
-  m_InertiaTensor: {x: 1, y: 1, z: 1}
-  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_IncludeLayers:
+  maxHealth: 100
+  respawnDelaySeconds: 2
+  attackDamage: 10
+  attackRadius: 7.06
+  attackCooldownSeconds: 0.6
+  attackCenterOffset: {x: 0, y: 1, z: 0}
+  attackLayerMask:
     serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ImplicitCom: 1
-  m_ImplicitTensor: 1
-  m_UseGravity: 1
-  m_IsKinematic: 0
-  m_Interpolate: 0
-  m_Constraints: 80
-  m_CollisionDetection: 0
+    m_Bits: 4294967295
+  healthLabelOffset: {x: 0, y: 2.2, z: 0}
 --- !u!114 &-2242094449183278105
 MonoBehaviour:
   m_ObjectHideFlags: 0

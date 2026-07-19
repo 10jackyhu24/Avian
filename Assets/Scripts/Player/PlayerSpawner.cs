@@ -20,8 +20,22 @@ public class PlayerSpawner : NetworkBehaviour {
     private readonly Color fallbackEnemyColor = new Color(0.85f, 0.2f, 0.2f);
 
     private void Start() {
-        // Register callback to spawn a player when a client connects
+        if (NetworkManager.Singleton == null) {
+            Debug.LogWarning("[PlayerSpawner] NetworkManager.Singleton not found.", this);
+            return;
+        }
+
+        if (!NetworkManager.Singleton.IsServer) {
+            Debug.Log("[PlayerSpawner] Not server, skipping spawn callback registration.", this);
+            return;
+        }
+
         NetworkManager.Singleton.OnClientConnectedCallback += SpawnPlayer;
+        Debug.Log("[PlayerSpawner] Server spawn callback registered.", this);
+
+        foreach (ulong clientId in NetworkManager.Singleton.ConnectedClientsIds) {
+            SpawnPlayer(clientId);
+        }
     }
 
     private void OnDestroy() {
@@ -33,8 +47,15 @@ public class PlayerSpawner : NetworkBehaviour {
 
     private void SpawnPlayer(ulong clientId) {
         // Only the server should perform spawning
-        if (!IsServer)
+        if (!IsServer) {
             return;
+        }
+
+        if (NetworkManager.Singleton.ConnectedClients.TryGetValue(clientId, out var connectedClient) &&
+            connectedClient.PlayerObject != null) {
+            Debug.Log($"[PlayerSpawner] Client {clientId} already has a player object.", this);
+            return;
+        }
 
         if (playerPrefab == null) {
             Debug.LogError(
@@ -53,8 +74,15 @@ public class PlayerSpawner : NetworkBehaviour {
         NetworkObject networkObject =
             spawnedPlayerInstance.GetComponent<NetworkObject>();
 
+        if (networkObject == null) {
+            Debug.LogError("[PlayerSpawner] Player prefab is missing NetworkObject.", this);
+            Destroy(spawnedPlayerInstance);
+            return;
+        }
+
         // Spawn the networked player and assign ownership
         networkObject.SpawnAsPlayerObject(clientId);
+        Debug.Log($"[PlayerSpawner] Spawned player for client {clientId}.", this);
 
         // If the spawned player belongs to the local host, bind the camera to it
         if (clientId == NetworkManager.Singleton.LocalClientId) {
