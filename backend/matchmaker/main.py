@@ -1,5 +1,6 @@
 from collections import deque
 from dataclasses import dataclass, asdict
+import os
 from threading import Lock
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -24,6 +25,10 @@ next_room_id = 1
 next_seed = 100000
 queue_lock = Lock()
 matches_by_user_id = {}
+
+
+def get_world_endpoint():
+    return os.getenv("WORLD_ENDPOINT", "127.0.0.1:30080")
 
 
 @app.get("/health")
@@ -74,7 +79,7 @@ def join_match(payload: JoinRequest):
                 "room_id": room_id,
                 "seed": room_seed,
                 "players": [asdict(player_a), asdict(player_b)],
-                "world_endpoint": "http://localhost:30081",
+                "world_endpoint": get_world_endpoint(),
             }
             matches_by_user_id[player_a.user_id] = match_payload
             matches_by_user_id[player_b.user_id] = match_payload

@@ -38,6 +38,70 @@ There are two backend paths:
 * **Docker Compose** runs auth, ngrok exposure, database, and matchmaker.
 * **Kubernetes / Kind** now keeps only the world/game-room pool.
 
+### Current Tested Multiplayer Flow
+
+The current local multiplayer test flow is:
+
+1. Docker Compose runs the account/login backend, matchmaker, Postgres database, Caddy, and optional ngrok tunnel.
+2. Kind/Kubernetes runs the Unity dedicated server as a game-room pod.
+3. Unity clients call the backend to log in and join matchmaking.
+4. When two players are matched, the matchmaker returns:
+
+```json
+{
+  "status": "matched",
+  "room_id": "room-1",
+  "seed": 100000,
+  "world_endpoint": "127.0.0.1:30080"
+}
+```
+
+5. Unity reads `world_endpoint` from the matchmaking response and connects to the Unity dedicated server.
+
+For local testing, the important ports are:
+
+* `localhost:8000` for Unity HTTP requests to auth and matchmaking through Caddy.
+* `127.0.0.1:30080` for Unity Netcode UDP traffic to the Kubernetes game-room server.
+
+For public two-computer testing, the important public addresses are:
+
+* an **ngrok HTTPS URL** for Unity HTTP requests to auth and matchmaking.
+* a **Playit UDP address** for Unity Netcode traffic to the dedicated server.
+
+Example public flow:
+
+```text
+Computer B Unity client
+-> ngrok HTTPS backend URL
+-> Docker Compose matchmaker on Computer A
+-> matchmaker returns Playit world_endpoint
+-> Playit UDP tunnel
+-> Kind/K8s Unity dedicated server on Computer A
+```
+
+### Host vs Player Machine
+
+The host machine is the computer running the backend and dedicated server. A player machine only needs the client build.
+
+**Host machine needs:**
+
+* Docker Desktop.
+* Docker Compose backend services.
+* Kind/Kubernetes game server.
+* Unity Linux Dedicated Server build.
+* Docker image `avian-dedicated-server:v1`.
+* Playit agent open for UDP game traffic.
+* ngrok tunnel open for public HTTP backend traffic, if testing across different networks.
+* `backend/.env` configured with `WORLD_ENDPOINT`.
+
+**Player machine needs:**
+
+* Windows Unity client `.exe`.
+* Internet connection.
+* The client must be built with a reachable `URL.BaseUrl`.
+
+The player machine does **not** need Docker, Kubernetes, Playit, ngrok, `backend/.env`, or a Linux dedicated server build.
+
 ### Docker Compose + ngrok
 
 Use this when you want the quickest working login/register flow and a public HTTPS URL for Unity.
@@ -65,7 +129,16 @@ Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export i
 
 ```env
 NGROK_AUTHTOKEN=your_ngrok_token
+WORLD_ENDPOINT=127.0.0.1:30080
 ```
+
+For public Playit testing, replace `WORLD_ENDPOINT` with your Playit UDP address:
+
+```env
+WORLD_ENDPOINT=your-playit-address.ply.gg:12345
+```
+
+Do not include `http://` or `https://` in `WORLD_ENDPOINT`. It is a UDP game endpoint, not an HTTP URL.
 
 **3. Start the services**
 
@@ -82,6 +155,12 @@ This starts:
 * `avian_ngrok` exposing a public HTTPS tunnel to the lobby
 * `avian_matchmaker` on `localhost:8080`
 
+`WORLD_ENDPOINT` is the game-room endpoint that matchmaking returns to Unity after two players are matched. For local Kind testing, use:
+
+```env
+WORLD_ENDPOINT=127.0.0.1:30080
+```
+
 **4. Verify the API**
 
 Open `localhost:4040` on the browser to get the public HTTPS URL. Then test:
@@ -92,17 +171,37 @@ curl.exe https://your-ngrok-url.ngrok.app/health
 
 **5. Point Unity to the local API**
 
-Set `URL.cs` to:
+For same-computer local testing, set `URL.cs` to:
+
+```text
+BaseUrl = http://localhost:8000
+```
+
+If you need another computer to reach your backend through ngrok, set `URL.cs` to your ngrok URL instead:
 
 ```text
 BaseUrl = https://your-ngrok-url.ngrok.app
 ```
 
-After that, login and register should work against the backend through ngrok.
+`URL.WorldServer` should normally stay empty. The client should use `world_endpoint` from the matchmaking response.
 
-### Kubernetes / Kind
+Changing `backend/.env` does not require rebuilding the Unity client. Restart the matchmaker instead:
 
-Use this path if you want to test the world/game-room deployment model.
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+Changing `URL.BaseUrl` does require rebuilding the Windows client because that value is compiled into the client build.
+
+### Kubernetes / Kind + Unity Dedicated Server
+
+Use this path if you want to test the world/game-room deployment model with a Unity dedicated server running inside Kubernetes.
+
+Current tested flow:
+
+* Docker Compose still runs auth, lobby, matchmaking, Postgres, Caddy, and ngrok.
+* Kind/Kubernetes runs the Unity game-room server.
+* Unity clients authenticate and match through the backend, then connect to the game-room server through UDP port `30080`.
 
 Open PowerShell **as Administrator** and install Kind and Kubectl if needed:
 ```powershell
@@ -113,42 +212,222 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManage
 choco install kind kubernetes-cli -y
 ```
 
-**1. Build the world image**
+**1. Build the Unity Linux Dedicated Server**
 
-Build the world image from its subdirectory:
+In Unity, open **File > Build Profiles**.
 
-```powershell
-docker build -t avian-world:v1 ./backend/world
+For the Linux dedicated server build:
+
+* Use the `Linux Dedicated Server` profile.
+* Make sure `Assets/Scenes/GameRoon_Server.unity` is included.
+* Make sure `GameRoon_Server` is the first scene for the server build.
+* Build to:
+
+```text
+Builds/LinuxServer
 ```
 
-**2. Create the cluster and load the image**
+The output should include files like:
+
+```text
+Builds/LinuxServer/AvianServer.x86_64
+Builds/LinuxServer/AvianServer_Data/
+Builds/LinuxServer/UnityPlayer.so
+```
+
+**2. Build the Docker image**
+
+From the project root:
+
+```powershell
+docker build -t avian-dedicated-server:v1 -f backend/Linux_Dedicated_Server/Dockerfile Builds/LinuxServer
+```
+
+Optional local Docker smoke test:
+
+```powershell
+docker run --rm -p 7777:7777/udp -e GAME_PORT=7777 -e MAP_SEED=100000 avian-dedicated-server:v1
+```
+
+If this works, the server logs should show:
+
+```text
+[ServerBootstrap] Loaded room seed=100000
+[ServerBootstrap] Listening on 0.0.0.0:7777
+[ServerBootstrap] StartServer=True
+```
+
+**3. Create the cluster and load the image**
 
 In the project root, create the Kind cluster and inject your image:
 
 ```powershell
+kind delete cluster --name avian-cluster
+
 kind create cluster --config backend/kind-config.yaml
 
 kind export kubeconfig --name avian-cluster
 
-kind load docker-image avian-world:v1 --name avian-cluster
+kind load docker-image avian-dedicated-server:v1 --name avian-cluster
 ```
 
-**3. Deploy the world workload**
+**4. Deploy the world workload**
 
 ```powershell
 kubectl apply -f backend/avian-cluster.yaml
 ```
 
-**4. Verify the deployment**
+**5. Verify the deployment**
 
 Verify that the world components are healthy:
 ```powershell
 kubectl get pods
 
 kubectl get svc
+
+kubectl logs -f deployment/avian-rooms-pool-deployment
 ```
 
-The K8s path now only hosts the world/game-room pool. Lobby auth and matchmaking stay in Docker.
+Expected service output should include:
+
+```text
+world-service   NodePort   ...   7777:30080/UDP
+```
+
+Expected server logs should include:
+
+```text
+[ServerBootstrap] Loaded room seed=100000
+[ServerBootstrap] Listening on 0.0.0.0:7777
+[ServerBootstrap] StartServer=True
+```
+
+The K8s path currently hosts one game-room pod. Lobby auth and matchmaking stay in Docker.
+
+The deployment intentionally uses one replica:
+
+```yaml
+replicas: 1
+```
+
+For the current proof-of-concept, one replica means one Unity dedicated server room. This keeps both matched players on the same server. Do not raise this to `3` yet unless the matchmaker also knows how to assign players to specific pods/endpoints. Multiple replicas behind one UDP service can route players unpredictably for room-based gameplay.
+
+**6. Build and test the Windows client**
+
+For the Windows client build:
+
+* Make sure `Assets/Scenes/SampleScene.unity` is the first scene.
+* Keep `Assets/Scenes/GameRoon_Server.unity` included in the build list so Netcode scene synchronization can load it.
+* Keep `URL.WorldServer` empty unless you intentionally need a local fallback override.
+* Confirm the matchmaker returns this endpoint through `WORLD_ENDPOINT`:
+
+```text
+127.0.0.1:30080
+```
+
+Then start two Windows clients, log in with different accounts, and press **Match** on both clients.
+
+Successful k8s test signs:
+
+* Both clients enter the same server scene.
+* Both clients can see each other.
+* Movement and jumping sync between clients.
+* Kubernetes logs show client connections, for example:
+
+```text
+[ServerBootstrap] Client connected: 1
+[ServerBootstrap] Client connected: 2
+```
+
+### Public Two-Computer Test With ngrok + Playit
+
+Use this when two players are on different internet connections.
+
+**Computer A: host**
+
+1. Start Docker Compose:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
+```
+
+2. Make sure the Kind game server is running:
+
+```powershell
+kubectl get pods
+kubectl get svc
+```
+
+Expected:
+
+```text
+avian-rooms-pool-deployment ... Running
+world-service ... 7777:30080/UDP
+```
+
+3. Keep the Playit agent open. The tunnel should point to:
+
+```text
+127.0.0.1:30080
+```
+
+Example:
+
+```text
+your-playit-address.ply.gg:12345 -> 127.0.0.1:30080
+```
+
+4. Set `backend/.env`:
+
+```env
+WORLD_ENDPOINT=your-playit-address.ply.gg:12345
+```
+
+5. Restart the matchmaker:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+6. Open the ngrok inspector and copy the HTTPS forwarding URL:
+
+```text
+http://localhost:4040
+```
+
+Example:
+
+```text
+https://your-ngrok-url.ngrok-free.app
+```
+
+7. Set `URL.cs` before building the Windows client:
+
+```csharp
+public static string BaseUrl = "https://your-ngrok-url.ngrok-free.app";
+public static string WorldServer = "";
+```
+
+8. Rebuild the Windows client and send the same build to Computer B.
+
+**Computer B: player**
+
+1. Run the Windows client `.exe`.
+2. Log in or register through the ngrok backend.
+3. Press **Match** with a different account from Computer A.
+
+Expected result:
+
+* Computer A and Computer B can log in through the same backend.
+* Both clients are matched by the same matchmaker.
+* Both clients connect through the Playit UDP endpoint.
+* Both clients enter the same Unity dedicated server room and can see each other.
+
+Known current limitations:
+
+* Two clients using the same account should not be used for matchmaking. The matchmaker keys queue entries by `user_id`, so use different accounts.
+* The public tunnel test may lag because traffic is routed through ngrok, Playit, Docker, and Kind.
+* The current setup exposes one room server, not multiple simultaneous room pods.
 
 ### Authentication Flow
 
@@ -193,7 +472,7 @@ Why this design:
 
 ### How to Update the Backend Deployment
 
-Whenever you modify Python code in the `lobby/` or `world/` folders, use one of these update paths:
+Whenever you modify Python backend code or the Unity dedicated server, use the matching update path:
 
 **Docker Compose backend**
 
@@ -201,11 +480,25 @@ Whenever you modify Python code in the `lobby/` or `world/` folders, use one of 
 docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
 ```
 
-**Kubernetes / Kind backend**
+If you change `WORLD_ENDPOINT`, restart Docker Compose so the matchmaker gets the new value:
 
 ```powershell
-docker build -t avian-world:v1 ./backend/world
-kind load docker-image avian-world:v1 --name avian-cluster
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+**Kubernetes / Kind Unity dedicated server**
+
+First rebuild the Linux Dedicated Server from Unity into:
+
+```text
+Builds/LinuxServer
+```
+
+Then rebuild and reload the Docker image:
+
+```powershell
+docker build -t avian-dedicated-server:v1 -f backend/Linux_Dedicated_Server/Dockerfile Builds/LinuxServer
+kind load docker-image avian-dedicated-server:v1 --name avian-cluster
 kubectl rollout restart deployment avian-rooms-pool-deployment
 kubectl get pods -w
 ```

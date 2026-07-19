@@ -5,7 +5,6 @@ public class CameraController : MonoBehaviour {
     [SerializeField] private Transform target;
     [SerializeField] private Vector3 followOffset = new Vector3(0, 16.2999992f, -11.8999996f);
     [SerializeField] private float followSmoothTime = 0.2f;
-    bool foundPlayer = false;
     private Vector3 followVelocity;
 
     // private void Start() {
@@ -18,15 +17,24 @@ public class CameraController : MonoBehaviour {
     // }
 
     private void Update() {
-        if (foundPlayer) return;
-        if (GameState.isPlaying) {
-            target = GameObject.FindGameObjectWithTag("Player").transform;
-            foundPlayer = true;
+        if (target != null || !GameState.isPlaying) {
+            return;
+        }
+
+        PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        foreach (PlayerController player in players) {
+            if (player.IsOwner) {
+                SetTarget(player.transform);
+                Debug.Log($"[CameraController] Following local player: {player.OwnerClientId}", this);
+                return;
+            }
         }
     }
 
     private void LateUpdate() {
         if (!GameState.isPlaying) return;
+        if (target == null) return;
+
         Vector3 desiredPosition = target.position + followOffset;
         transform.position = Vector3.SmoothDamp(
             transform.position,
@@ -41,6 +49,7 @@ public class CameraController : MonoBehaviour {
             target = null;
             return;
         }
+
         target = newTarget;
     }
 }
