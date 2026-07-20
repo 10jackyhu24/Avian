@@ -1,0 +1,151 @@
+using UnityEngine;
+using TMPro;
+using UnityEngine.UI;
+using System.Collections.Generic;
+using UnityEngine.InputSystem;
+
+public class OptionsMenu : MonoBehaviour {
+    private const string BindingOverridesPrefsKey = "InputBindingOverrides";
+
+    [SerializeField] private GameObject keyBindPrefab;
+    [SerializeField] private GameObject keyBindPrefabParent;
+
+    // Define a simple structure to hold action information
+    [System.Serializable]
+    public struct KeyBindInfo {
+        public string actionName; // e.g., "Move" or "Jump"
+        public int bindingIndex;  // 0 for single keys; 1,2,3,4 for composites (Up, Down, Left, Right)
+    }
+
+    // Display name -> Input System action/binding location.
+    private readonly Dictionary<string, KeyBindInfo> keyBindDict = new Dictionary<string, KeyBindInfo> {
+        { "Move Up",   new KeyBindInfo { actionName = "Move", bindingIndex = 1 } },
+        { "Move Down", new KeyBindInfo { actionName = "Move", bindingIndex = 2 } },
+        { "Move Left", new KeyBindInfo { actionName = "Move", bindingIndex = 3 } },
+        { "Move Right", new KeyBindInfo { actionName = "Move", bindingIndex = 4 } },
+    };
+
+    // Display name -> current key shown/used by the binding.
+    public IReadOnlyDictionary<string, string> KeyBindings => keyBindings;
+
+    private readonly Dictionary<string, string> keyBindings = new Dictionary<string, string>();
+    private GameInput inputActions;
+    private InputActionRebindingExtensions.RebindingOperation currentRebindOperation;
+
+    private void Awake() {
+        inputActions = new GameInput();
+        LoadBindingOverrides();
+        RefreshKeyBindingCache();
+    }
+
+    void Start() {
+        foreach (var pair in keyBindDict) {
+            string displayName = pair.Key;
+            KeyBindInfo info = pair.Value;
+
+            GameObject spawnPrefab = PrefabSpawn.SpawnInit(keyBindPrefab, keyBindPrefabParent.transform);
+            if (spawnPrefab == null) continue;
+            
+            // Find UI Components using your utility
+            TMP_Text keyNameText = spawnPrefab.FindComponentInChildren<TMP_Text>("Key_Name_Text");
+            TMP_Text bindBtnText = spawnPrefab.FindComponentInChildren<TMP_Text>("Key_Bind_Text");
+            Button keyBindButton = spawnPrefab.FindComponentInChildren<Button>("Key_Bind_Button");
+
+            // 1. Set the label (e.g., "Move Up")
+            if (keyNameText != null) {
+                keyNameText.text = displayName;
+            }
+
+            // 2. Display current key string (e.g., "W", "Space")
+            InputAction action = inputActions.FindAction(info.actionName);
+            if (action != null) {
+                // Show active key name on the button
+                if (bindBtnText != null) {
+                    bindBtnText.text = GetBindingDisplayString(action, info.bindingIndex);
+                }
+            }
+
+            // 3. Add Click Listener for interactive rebinding
+            if (keyBindButton != null && action != null) {
+                keyBindButton.onClick.AddListener(() => {
+                    StartRebind(action, info.bindingIndex, bindBtnText);
+                });
+            }
+        }
+    }
+
+    private void StartRebind(InputAction action, int bindingIndex, TMP_Text btnText) {
+        currentRebindOperation?.Cancel();
+        currentRebindOperation?.Dispose();
+
+        bool wasEnabled = action.enabled;
+        action.Disable();
+        if (btnText != null) btnText.text = "Press Any Key...";
+
+        currentRebindOperation = action.PerformInteractiveRebinding(bindingIndex)
+            .WithControlsExcluding("Mouse")
+            .WithCancelingThrough("<Keyboard>/escape")
+            .OnComplete(operation => {
+                // Save custom binding to disk
+                SaveBindingOverrides();
+                RefreshKeyBindingCache();
+
+                // Update button UI text immediately
+                if (btnText != null) {
+                    btnText.text = GetBindingDisplayString(action, bindingIndex);
+                }
+
+                operation.Dispose();
+                currentRebindOperation = null;
+                if (wasEnabled) action.Enable();
+            })
+            .OnCancel(operation => {
+                if (btnText != null) {
+                    btnText.text = GetBindingDisplayString(action, bindingIndex);
+                }
+
+                operation.Dispose();
+                currentRebindOperation = null;
+                if (wasEnabled) action.Enable();
+            })
+            .Start();
+    }
+
+    private void LoadBindingOverrides() {
+        string overridesJson = PlayerPrefs.GetString(BindingOverridesPrefsKey, string.Empty);
+        if (!string.IsNullOrEmpty(overridesJson)) {
+            inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
+        }
+    }
+
+    private void SaveBindingOverrides() {
+        PlayerPrefs.SetString(BindingOverridesPrefsKey, inputActions.asset.SaveBindingOverridesAsJson());
+        PlayerPrefs.Save();
+    }
+
+    private void RefreshKeyBindingCache() {
+        keyBindings.Clear();
+
+        foreach (var pair in keyBindDict) {
+            InputAction action = inputActions.FindAction(pair.Value.actionName);
+            if (action == null) continue;
+
+            keyBindings[pair.Key] = GetBindingDisplayString(action, pair.Value.bindingIndex);
+        }
+    }
+
+    private string GetBindingDisplayString(InputAction action, int bindingIndex) {
+        if (action == null || bindingIndex < 0 || bindingIndex >= action.bindings.Count) {
+            return string.Empty;
+        }
+
+        return action.GetBindingDisplayString(bindingIndex);
+    }
+
+    private void OnDestroy() {
+        currentRebindOperation?.Cancel();
+        currentRebindOperation?.Dispose();
+        inputActions?.Disable();
+        inputActions?.Dispose();
+    }
+}

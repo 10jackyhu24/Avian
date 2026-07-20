@@ -1,9 +1,12 @@
 using Unity.Netcode;
 using UnityEngine;
 using System.Collections;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : NetworkBehaviour {
+    private const string BindingOverridesPrefsKey = "InputBindingOverrides";
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float jumpHeight = 1.5f;
@@ -40,11 +43,14 @@ public class PlayerController : NetworkBehaviour {
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
     private GUIStyle healthLabelStyle;
+    private GameInput inputActions;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
+        inputActions = new GameInput();
+        LoadBindingOverrides();
     }
 
     public override void OnNetworkSpawn() {
@@ -63,10 +69,13 @@ public class PlayerController : NetworkBehaviour {
         if (cameraController != null) {
             cameraController.SetTarget(transform);
         }
+
+        inputActions.Player.Enable();
     }
 
     public override void OnNetworkDespawn() {
         currentHealth.OnValueChanged -= OnHealthChanged;
+        inputActions.Player.Disable();
     }
 
     private void Update() {
@@ -116,12 +125,11 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void SendInputToServer() {
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
-        bool jumpPressed = Input.GetButtonDown("Jump");
-        bool attackPressed = Input.GetMouseButtonDown(0);
+        Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
+        bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
+        bool attackPressed = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
 
-        SubmitMovementServerRpc(horizontal, vertical, jumpPressed);
+        SubmitMovementServerRpc(moveInput.x, moveInput.y, jumpPressed);
 
         if (attackPressed) {
             TryAttackServerRpc();
@@ -238,6 +246,18 @@ public class PlayerController : NetworkBehaviour {
 
     private void OnHealthChanged(int previousValue, int newValue) {
         Debug.Log($"[PlayerController] Client {OwnerClientId} health changed: {previousValue} -> {newValue}", this);
+    }
+
+    private void LoadBindingOverrides() {
+        string overridesJson = PlayerPrefs.GetString(BindingOverridesPrefsKey, string.Empty);
+        if (!string.IsNullOrEmpty(overridesJson)) {
+            inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
+        }
+    }
+
+    private void OnDestroy() {
+        inputActions?.Disable();
+        inputActions?.Dispose();
     }
 
     private void OnDrawGizmosSelected() {
