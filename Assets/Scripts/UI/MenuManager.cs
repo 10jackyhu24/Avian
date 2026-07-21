@@ -74,6 +74,7 @@ public class MenuManager : MonoBehaviour {
     }
 
     public void Start() {
+        HideMenu();
         SwitchToPanel(PanelType.MainMenu);
     }
 
