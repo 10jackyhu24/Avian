@@ -43,7 +43,8 @@ public class CreateWorldOptions : MonoBehaviour {
         }
 
         menuManager.HideMenu();
+        menuManager.clearHistory();
 
-        GameState.isPlaying = true;
+        GameState.SetWorld("singleplayer", seed);
     }
 }

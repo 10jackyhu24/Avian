@@ -53,6 +53,15 @@ public class PlayerController : NetworkBehaviour {
         LoadBindingOverrides();
     }
 
+    private void OnEnable() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        OptionsMenu.BindingOverridesChanged += HandleBindingOverridesChanged;
+    }
+
+    private void OnDisable() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+    }
+
     public override void OnNetworkSpawn() {
         if (IsServer) {
             spawnPosition = transform.position;
@@ -249,13 +258,31 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void LoadBindingOverrides() {
+        if (inputActions == null) {
+            return;
+        }
+
         string overridesJson = PlayerPrefs.GetString(BindingOverridesPrefsKey, string.Empty);
         if (!string.IsNullOrEmpty(overridesJson)) {
+            bool wasEnabled = inputActions.Player.enabled;
+            if (wasEnabled) {
+                inputActions.Player.Disable();
+            }
+
             inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
+
+            if (wasEnabled) {
+                inputActions.Player.Enable();
+            }
         }
     }
 
+    private void HandleBindingOverridesChanged() {
+        LoadBindingOverrides();
+    }
+
     private void OnDestroy() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         inputActions?.Disable();
         inputActions?.Dispose();
     }

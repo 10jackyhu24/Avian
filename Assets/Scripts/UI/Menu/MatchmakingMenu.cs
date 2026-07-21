@@ -140,7 +140,6 @@ public class MatchmakingMenu : MonoBehaviour {
             yield break;
         }
 
-        // SetStatus($"Connecting to {endpoint}...");
         yield return null;
     }
 
@@ -208,9 +207,8 @@ public class MatchmakingMenu : MonoBehaviour {
         isConnectingToWorldServer = false;
         warningWindow.Show("Client Connected",$"Connected to game server as client {clientId}.");
 
-        if (menuManager != null) {
-            menuManager.HideMenu();
-        }
+        menuManager.HideMenu();
+        menuManager.clearHistory();
     }
 
     private void HandleClientDisconnected(ulong clientId) {

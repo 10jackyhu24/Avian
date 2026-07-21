@@ -10,4 +10,11 @@ public static class GameState {
         hasWorldSeed = true;
         isPlaying = true;
     }
+
+    public static void ResetWorld() {
+        currentRoomId = string.Empty;
+        currentSeed = 0;
+        hasWorldSeed = false;
+        isPlaying = false;
+    }
 }
