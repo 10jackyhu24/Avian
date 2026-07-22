@@ -28,6 +28,7 @@ public class ServerBootstrap : MonoBehaviour {
 
         LoadSeed();
         ConfigureTransport();
+        NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
 
         if (!NetworkManager.Singleton.IsListening) {
             bool started = NetworkManager.Singleton.StartServer();
@@ -38,6 +39,13 @@ public class ServerBootstrap : MonoBehaviour {
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+
+        PlayerSpawner.RegisterPlayerSpawning(
+            NetworkManager.Singleton,
+            NetworkManager.Singleton.NetworkConfig.PlayerPrefab,
+            PlayerSpawner.DefaultSpawnPosition,
+            this
+        );
     }
 
     private void OnDestroy() {
@@ -45,6 +53,7 @@ public class ServerBootstrap : MonoBehaviour {
             return;
         }
 
+        PlayerSpawner.UnregisterPlayerSpawning(NetworkManager.Singleton);
         NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
     }
