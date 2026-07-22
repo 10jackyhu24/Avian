@@ -6,8 +6,6 @@ using System;
 using UnityEngine.InputSystem;
 
 public class OptionsMenu : MonoBehaviour {
-    private const string BindingOverridesPrefsKey = "InputBindingOverrides";
-
     public static event Action BindingOverridesChanged;
 
     [SerializeField] private GameObject keyBindPrefab;
@@ -46,7 +44,7 @@ public class OptionsMenu : MonoBehaviour {
 
     private void Awake() {
         inputActions = new GameInput();
-        LoadBindingOverrides();
+        KeyBinding.LoadBindingOverrides(inputActions);
         RefreshKeyBindingCache();
     }
 
@@ -111,8 +109,8 @@ public class OptionsMenu : MonoBehaviour {
             .WithControlsExcluding("Mouse")
             .WithCancelingThrough("<Keyboard>/escape")
             .OnComplete(operation => {
-                // Save custom binding to disk
-                SaveBindingOverrides();
+            // Save custom binding to disk
+                KeyBinding.SaveBindingOverrides(inputActions);
                 RefreshKeyBindingCache();
                 RefreshDisplayedBindings();
                 BindingOverridesChanged?.Invoke();
@@ -137,18 +135,6 @@ public class OptionsMenu : MonoBehaviour {
                 if (wasEnabled) action.Enable();
             })
             .Start();
-    }
-
-    private void LoadBindingOverrides() {
-        string overridesJson = PlayerPrefs.GetString(BindingOverridesPrefsKey, string.Empty);
-        if (!string.IsNullOrEmpty(overridesJson)) {
-            inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
-        }
-    }
-
-    private void SaveBindingOverrides() {
-        PlayerPrefs.SetString(BindingOverridesPrefsKey, inputActions.asset.SaveBindingOverridesAsJson());
-        PlayerPrefs.Save();
     }
 
     private void RefreshKeyBindingCache() {

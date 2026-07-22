@@ -5,8 +5,6 @@ using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : NetworkBehaviour {
-    private const string BindingOverridesPrefsKey = "InputBindingOverrides";
-
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 6f;
     [SerializeField] private float jumpHeight = 1.5f;
@@ -50,7 +48,7 @@ public class PlayerController : NetworkBehaviour {
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
         inputActions = new GameInput();
-        LoadBindingOverrides();
+        KeyBinding.LoadBindingOverrides(inputActions);
     }
 
     private void OnEnable() {
@@ -257,28 +255,8 @@ public class PlayerController : NetworkBehaviour {
         Debug.Log($"[PlayerController] Client {OwnerClientId} health changed: {previousValue} -> {newValue}", this);
     }
 
-    private void LoadBindingOverrides() {
-        if (inputActions == null) {
-            return;
-        }
-
-        string overridesJson = PlayerPrefs.GetString(BindingOverridesPrefsKey, string.Empty);
-        if (!string.IsNullOrEmpty(overridesJson)) {
-            bool wasEnabled = inputActions.Player.enabled;
-            if (wasEnabled) {
-                inputActions.Player.Disable();
-            }
-
-            inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
-
-            if (wasEnabled) {
-                inputActions.Player.Enable();
-            }
-        }
-    }
-
     private void HandleBindingOverridesChanged() {
-        LoadBindingOverrides();
+        KeyBinding.LoadBindingOverrides(inputActions);
     }
 
     private void OnDestroy() {

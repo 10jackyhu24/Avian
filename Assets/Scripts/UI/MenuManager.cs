@@ -54,7 +54,7 @@ public class MenuManager : MonoBehaviour {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         OptionsMenu.BindingOverridesChanged += HandleBindingOverridesChanged;
         inputActions.Player.Cancel.performed += OnCancelPerformed;
-        LoadBindingOverrides();
+        KeyBinding.LoadBindingOverrides(inputActions);
         inputActions.Player.Enable();
     }
 
@@ -186,29 +186,7 @@ public class MenuManager : MonoBehaviour {
         inputActions.Dispose();
     }
 
-    private void LoadBindingOverrides() {
-        if (inputActions == null) {
-            return;
-        }
-
-        string overridesJson = PlayerPrefs.GetString("InputBindingOverrides", string.Empty);
-        if (string.IsNullOrEmpty(overridesJson)) {
-            return;
-        }
-
-        bool wasEnabled = inputActions.Player.enabled;
-        if (wasEnabled) {
-            inputActions.Player.Disable();
-        }
-
-        inputActions.asset.LoadBindingOverridesFromJson(overridesJson);
-
-        if (wasEnabled) {
-            inputActions.Player.Enable();
-        }
-    }
-
     private void HandleBindingOverridesChanged() {
-        LoadBindingOverrides();
+        KeyBinding.LoadBindingOverrides(inputActions);
     }
 }
