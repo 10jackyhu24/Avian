@@ -1,16 +1,34 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
+using Unity.Netcode;
 
 public class PauseMenu : MonoBehaviour {
+    public static PauseMenu Instance { get; private set; }
+
+    private GameInput inputActions;
+
     private MenuManager menuManager;
+    private bool isOpen;
+
+    public bool IsOpen => isOpen;
 
     private void Awake() {
+        Instance = this;
         menuManager = FindFirstObjectByType<MenuManager>();
+        inputActions = new GameInput();
+        inputActions.Player.Cancel.performed += OnCancelPerformed;
+        KeyBinding.LoadBindingOverrides(inputActions);
+        inputActions.Player.Enable();
+    }
+
+    private void OnDestroy() {
+        if (Instance == this) {
+            Instance = null;
+        }
     }
 
     public void Continue() {
-        if (menuManager != null) {
-            menuManager.ResumeGame();
-        }
+        ResumeGame();
     }
 
     public void SwitchToOptions() {
@@ -20,8 +38,76 @@ public class PauseMenu : MonoBehaviour {
     }
 
     public void Leave() {
+        LeaveCurrentGame();
+    }
+
+    private void OnCancelPerformed(InputAction.CallbackContext context) {
+        if (!context.performed || !GameState.isPlaying) {
+            return;
+        }
+
+        HandleCancel();
+    }
+
+    public void HandleCancel() {
+        if (!GameState.isPlaying) {
+            return;
+        }
+
+        if (!isOpen) {
+            OpenPauseMenu();
+            return;
+        }
+
+        if (menuManager.TryBack()) {
+            return;
+        }
+
+        ResumeGame();
+    }
+
+    private void OpenPauseMenu() {
+        if (menuManager == null) {
+            Debug.LogError("[PauseMenu] MenuManager not found.", this);
+            return;
+        }
+
+        isOpen = true;
+        menuManager.HideMenu();
+        menuManager.ClearHistory();
+        menuManager.SwitchToPanel(PanelType.PauseMenu);
+        Time.timeScale = 0f;
+    }
+
+    private void ResumeGame() {
+        if (!isOpen) {
+            return;
+        }
+
+        isOpen = false;
+        Time.timeScale = 1f;
+
         if (menuManager != null) {
-            menuManager.LeaveCurrentGame();
+            menuManager.HideMenu();
+            menuManager.ClearHistory();
         }
     }
+
+    private void LeaveCurrentGame() {
+        isOpen = false;
+        Time.timeScale = 1f;
+
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
+            NetworkManager.Singleton.Shutdown();
+        }
+
+        GameState.ResetWorld();
+
+        if (menuManager != null) {
+            menuManager.HideMenu();
+            menuManager.ClearHistory();
+            menuManager.SwitchToPanel(PanelType.MainMenu);
+        }
+    }
+
 }

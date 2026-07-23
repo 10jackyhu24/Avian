@@ -119,7 +119,7 @@ public class OptionsMenu : MonoBehaviour {
                 KeyBinding.SaveBindingOverrides(inputActions);
                 RefreshKeyBindingCache();
                 RefreshDisplayedBindings();
-                BindingOverridesChanged?.Invoke();
+                BindingOverridesChanged.Invoke();
 
                 // Update button UI text immediately
                 if (btnText != null) {

@@ -12,7 +12,8 @@ public enum PanelType {
     Options,
     Auth,
     MultiplayerMatchmaking,
-    PauseMenu
+    PauseMenu,
+    BagMenu
 }
 
 public class MenuManager : MonoBehaviour {
@@ -27,49 +28,25 @@ public class MenuManager : MonoBehaviour {
     [SerializeField] private GameObject background;
     [SerializeField] private GameObject inGameBackground;
 
-    private Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
-    private Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
-    private GameInput inputActions;
-    private bool isPauseMenuVisible;
-    
+    private readonly Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
+    private readonly Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
+    // private GameInput inputActions;
+    // private BagMenu bagMenu;
+    private bool isBagMenuVisible;
+
     private void Awake() {
-        inputActions = new GameInput();
+        // inputActions = new GameInput();
 
         foreach (var data in uiPanels) {
-            if (data.panelObject == null) continue;
-            
+            if (data.panelObject == null) {
+                continue;
+            }
+
             if (!panelDict.ContainsKey(data.panelType)) {
                 panelDict.Add(data.panelType, data.panelObject);
             } else {
                 Debug.LogError($"Duplicate panel types: {data.panelType}", this);
             }
-        }
-    }
-
-    private void OnEnable() {
-        if (inputActions == null) {
-            inputActions = new GameInput();
-        }
-
-        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
-        OptionsMenu.BindingOverridesChanged += HandleBindingOverridesChanged;
-        inputActions.Player.Cancel.performed += OnCancelPerformed;
-        KeyBinding.LoadBindingOverrides(inputActions);
-        inputActions.Player.Enable();
-    }
-
-    private void OnDisable() {
-        if (inputActions == null) {
-            return;
-        }
-
-        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
-        inputActions.Player.Cancel.performed -= OnCancelPerformed;
-        inputActions.Player.Disable();
-
-        if (isPauseMenuVisible) {
-            isPauseMenuVisible = false;
-            Time.timeScale = 1f;
         }
     }
 
@@ -83,110 +60,141 @@ public class MenuManager : MonoBehaviour {
             Debug.LogError("Panel not found: " + panelType, this);
             return;
         }
+
         pageHistoryStack.Push(panelType);
         SetActivePanelOnly(panelType);
     }
 
-    private void ShowPauseMenu() {
-        if (panelDict.ContainsKey(PanelType.PauseMenu) == false) {
-            Debug.LogError("PauseMenu panel not found.", this);
-            return;
+    public void SetActivePanelOnly(PanelType panelType) {
+        if (GameState.isPlaying) {
+            inGameBackground.SetActive(true);
+        } else {
+            background.SetActive(true);
         }
 
-        isPauseMenuVisible = true;
-        pageHistoryStack.Clear();
-        pageHistoryStack.Push(PanelType.PauseMenu);
-        SetActivePanelOnly(PanelType.PauseMenu);
-        Time.timeScale = 0f;
-    }
-
-    private void SetActivePanelOnly(PanelType panelType) {
-        if (GameState.isPlaying)
-            inGameBackground.SetActive(true);
-        else
-            background.SetActive(true);
         foreach (var pair in panelDict) {
             pair.Value.SetActive(pair.Key == panelType);
         }
+
         Debug.Log("Switch to panel:" + panelType);
     }
 
     public void Back() {
+        TryBack();
+    }
+
+    public bool TryBack() {
         if (pageHistoryStack.Count <= 1) {
-            return;
+            return false;
         }
+
         pageHistoryStack.Pop();
         PanelType previousPanel = pageHistoryStack.Peek();
         if (panelDict.ContainsKey(previousPanel)) {
             SetActivePanelOnly(previousPanel);
-        }
-    }
-
-    private void OnCancelPerformed(InputAction.CallbackContext context) {
-        if (!context.performed || !GameState.isPlaying) {
-            return;
+            return true;
         }
 
-        if (!isPauseMenuVisible) {
-            ShowPauseMenu();
-            return;
-        }
-
-        if (pageHistoryStack.Count > 0 && pageHistoryStack.Peek() != PanelType.PauseMenu) {
-            Back();
-            return;
-        }
-
-        ResumeGame();
-    }
-
-    public void ResumeGame() {
-        isPauseMenuVisible = false;
-        Time.timeScale = 1f;
-        HideMenu();
-        clearHistory();
-    }
-
-    public void LeaveCurrentGame() {
-        isPauseMenuVisible = false;
-        Time.timeScale = 1f;
-
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-            NetworkManager.Singleton.Shutdown();
-        }
-
-        GameState.ResetWorld();
-        HideMenu();
-        clearHistory();
-        SwitchToPanel(PanelType.MainMenu);
+        return false;
     }
 
     public void HideMenu() {
         background.SetActive(false);
         inGameBackground.SetActive(false);
+
         foreach (var pair in panelDict) {
             if (pair.Value != null) {
                 pair.Value.SetActive(false);
             }
         }
+
         Debug.Log("Hiding all UI panels.");
     }
 
-    public void clearHistory() {
+    public void ClearHistory() {
         pageHistoryStack.Clear();
     }
 
-    private void OnDestroy() {
-        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
-        if (inputActions == null) {
-            return;
-        }
+    // private void OnBagPerformed(InputAction.CallbackContext context) {
+    //     if (!context.performed || !GameState.isPlaying) {
+    //         return;
+    //     }
 
-        inputActions.Player.Cancel.performed -= OnCancelPerformed;
-        inputActions.Dispose();
-    }
+    //     if (PauseMenu.Instance != null && PauseMenu.Instance.IsOpen) {
+    //         return;
+    //     }
 
-    private void HandleBindingOverridesChanged() {
-        KeyBinding.LoadBindingOverrides(inputActions);
-    }
+    //     if (isBagMenuVisible) {
+    //         CloseBagMenu();
+    //         return;
+    //     }
+
+    //     ShowBagMenu();
+    // }
+
+    // private void OnCancelPerformed(InputAction.CallbackContext context) {
+    //     if (!context.performed || !GameState.isPlaying) {
+    //         return;
+    //     }
+
+    //     PauseMenu pauseMenu = PauseMenu.Instance;
+    //     if (pauseMenu != null) {
+    //         pauseMenu.HandleCancel();
+    //     }
+    // }
+
+    // private void ShowBagMenu() {
+    //     if (!panelDict.ContainsKey(PanelType.BagMenu)) {
+    //         Debug.LogError("BagMenu panel not found.", this);
+    //         return;
+    //     }
+
+    //     isBagMenuVisible = true;
+    //     pageHistoryStack.Clear();
+    //     pageHistoryStack.Push(PanelType.BagMenu);
+    //     SetActivePanelOnly(PanelType.BagMenu);
+    //     Time.timeScale = 0f;
+
+    //     if (bagMenu == null && panelDict.TryGetValue(PanelType.BagMenu, out GameObject bagPanel) && bagPanel != null) {
+    //         bagMenu = bagPanel.GetComponent<BagMenu>();
+    //     }
+
+    //     BagInventory inventory = FindLocalBagInventory();
+    //     bagMenu?.Open(inventory);
+    // }
+
+    // private void CloseBagMenu() {
+    //     if (!isBagMenuVisible) {
+    //         return;
+    //     }
+
+    //     isBagMenuVisible = false;
+    //     Time.timeScale = 1f;
+    //     bagMenu?.Close();
+    //     HideMenu();
+    //     ClearHistory();
+    // }
+
+    // private BagInventory FindLocalBagInventory() {
+    //     if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null) {
+    //         NetworkObject playerObject = NetworkManager.Singleton.LocalClient.PlayerObject;
+    //         if (playerObject != null) {
+    //             BagInventory inventory = playerObject.GetComponent<BagInventory>();
+    //             if (inventory != null) {
+    //                 return inventory;
+    //             }
+
+    //             inventory = playerObject.GetComponentInChildren<BagInventory>();
+    //             if (inventory != null) {
+    //                 return inventory;
+    //             }
+    //         }
+    //     }
+
+    //     return FindFirstObjectByType<BagInventory>();
+    // }
+
+    // private void HandleBindingOverridesChanged() {
+    //     KeyBinding.LoadBindingOverrides(inputActions);
+    // }
 }

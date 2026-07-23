@@ -219,7 +219,7 @@ public class MatchmakingMenu : MonoBehaviour {
         warningWindow.Show("Client Connected",$"Connected to game server as client {clientId}.");
 
         menuManager.HideMenu();
-        menuManager.clearHistory();
+        menuManager.ClearHistory();
     }
 
     private void HandleClientDisconnected(ulong clientId) {

@@ -45,7 +45,7 @@ public class CreateWorldOptions : MonoBehaviour {
         }
 
         menuManager.HideMenu();
-        menuManager.clearHistory();
+        menuManager.ClearHistory();
 
         GameState.SetWorld("singleplayer", seed);
     }
