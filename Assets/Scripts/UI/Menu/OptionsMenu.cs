@@ -24,6 +24,12 @@ public class OptionsMenu : MonoBehaviour {
         { "Move Down", new KeyBindInfo { actionName = "Move", bindingIndex = 2 } },
         { "Move Left", new KeyBindInfo { actionName = "Move", bindingIndex = 3 } },
         { "Move Right", new KeyBindInfo { actionName = "Move", bindingIndex = 4 } },
+        { "Attack", new KeyBindInfo { actionName = "Attack", bindingIndex = 0 } },
+        { "Bag", new KeyBindInfo { actionName = "Bag", bindingIndex = 0 } },
+        { "Interact", new KeyBindInfo { actionName = "Interact", bindingIndex = 0 } },
+        { "Item 1", new KeyBindInfo { actionName = "Item", bindingIndex = 0 } },
+        { "Item 2", new KeyBindInfo { actionName = "Item", bindingIndex = 1 } },
+        { "Item 3", new KeyBindInfo { actionName = "Item", bindingIndex = 2 } },
     };
 
     // Display name -> current key shown/used by the binding.
@@ -106,7 +112,7 @@ public class OptionsMenu : MonoBehaviour {
         if (btnText != null) btnText.text = "Press Any Key...";
 
         currentRebindOperation = action.PerformInteractiveRebinding(bindingIndex)
-            .WithControlsExcluding("Mouse")
+            // .WithControlsExcluding("Mouse")
             .WithCancelingThrough("<Keyboard>/escape")
             .OnComplete(operation => {
             // Save custom binding to disk
