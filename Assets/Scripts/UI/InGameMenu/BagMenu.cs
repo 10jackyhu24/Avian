@@ -14,7 +14,16 @@ public class BagMenu : MonoBehaviour {
         inputActions.Player.Enable();
     }
 
-    private void OnBagPerformed(InputAction.CallbackContext context) {
+    private void OnEnable() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        OptionsMenu.BindingOverridesChanged += HandleBindingOverridesChanged;
+    }
+
+    private void HandleBindingOverridesChanged() {
+        KeyBinding.LoadBindingOverrides(inputActions);
+    }
+
+    public void OnBagPerformed(InputAction.CallbackContext context) {
         if (!context.performed || !GameState.isPlaying) {
             return;
         }
@@ -29,14 +38,16 @@ public class BagMenu : MonoBehaviour {
 
     private void ShowBagMenu() {
         isOpen = true;
+        menuManager.SwitchToPanel(PanelType.BagMenu);
     }
 
     private void CloseBagMenu() {
         isOpen = false;
         menuManager.HideMenu();
+        menuManager.ClearHistory();
     }
 
     private void RefreshMenu(int size) {
-
+        
     }
 }

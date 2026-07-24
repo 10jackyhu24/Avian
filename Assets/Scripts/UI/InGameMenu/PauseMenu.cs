@@ -42,7 +42,7 @@ public class PauseMenu : MonoBehaviour {
             return;
         }
 
-        if (!isOpen) {
+        if (menuManager.pageHistoryStack.Count == 0) {
             OpenPauseMenu();
             return;
         }

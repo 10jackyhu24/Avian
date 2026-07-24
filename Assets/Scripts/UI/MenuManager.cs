@@ -26,7 +26,7 @@ public class MenuManager : MonoBehaviour {
     [SerializeField] private GameObject background;
     [SerializeField] private GameObject inGameBackground;
 
-    private readonly Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
+    public readonly Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
     private readonly Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
 
     private void Awake() {
