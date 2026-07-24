@@ -5,7 +5,7 @@ using Unity.Netcode;
 public class PauseMenu : MonoBehaviour {
     private GameInput inputActions;
     private MenuManager menuManager;
-    private bool isOpen;
+    public static bool isOpen;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
@@ -68,17 +68,13 @@ public class PauseMenu : MonoBehaviour {
     }
 
     private void ResumeGame() {
-        if (!isOpen) {
-            return;
+        if (isOpen) {
+            isOpen = false;
+            Time.timeScale = 1f;
         }
 
-        isOpen = false;
-        Time.timeScale = 1f;
-
-        if (menuManager != null) {
-            menuManager.HideMenu();
-            menuManager.ClearHistory();
-        }
+        menuManager.HideMenu();
+        menuManager.ClearHistory();
     }
 
     private void LeaveCurrentGame() {
@@ -91,11 +87,9 @@ public class PauseMenu : MonoBehaviour {
 
         GameState.ResetWorld();
 
-        if (menuManager != null) {
-            menuManager.HideMenu();
-            menuManager.ClearHistory();
-            menuManager.SwitchToPanel(PanelType.MainMenu);
-        }
+        menuManager.HideMenu();
+        menuManager.ClearHistory();
+        menuManager.SwitchToPanel(PanelType.MainMenu);
     }
 
 }

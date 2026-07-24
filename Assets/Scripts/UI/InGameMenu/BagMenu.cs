@@ -4,7 +4,7 @@ using UnityEngine.InputSystem;
 public class BagMenu : MonoBehaviour {
     private GameInput inputActions;
     private MenuManager menuManager;
-    private bool isOpen;
+    [SerializeField] private GameObject bagMenuUI;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
@@ -24,11 +24,11 @@ public class BagMenu : MonoBehaviour {
     }
 
     public void OnBagPerformed(InputAction.CallbackContext context) {
-        if (!context.performed || !GameState.isPlaying) {
+        if (!context.performed || !GameState.isPlaying || PauseMenu.isOpen) {
             return;
         }
 
-        if (isOpen) {
+        if (bagMenuUI.activeInHierarchy) {
             CloseBagMenu();
             return;
         }
@@ -37,12 +37,10 @@ public class BagMenu : MonoBehaviour {
     }
 
     private void ShowBagMenu() {
-        isOpen = true;
         menuManager.SwitchToPanel(PanelType.BagMenu);
     }
 
     private void CloseBagMenu() {
-        isOpen = false;
         menuManager.HideMenu();
         menuManager.ClearHistory();
     }
