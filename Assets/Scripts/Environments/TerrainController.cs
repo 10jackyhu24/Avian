@@ -15,6 +15,15 @@ public class TerrainController : MonoBehaviour {
     [SerializeField] private float rotationThreshold = 3f;
     [SerializeField] private bool generateOnStartFromGameState = true;
 
+    // Replace Color fields with Texture2D fields exposed to the Inspector
+    [Header("Biome Textures")]
+    [SerializeField] private Texture2D deepOceanTexture;
+    [SerializeField] private Texture2D shallowWaterTexture;
+    [SerializeField] private Texture2D desertTexture;
+    [SerializeField] private Texture2D grasslandTexture;
+    [SerializeField] private Texture2D rainforestTexture;
+    [SerializeField] private Texture2D mountainTexture;
+
     private Camera mainCamera;
     private Transform mainCameraTransform;
     private GameObject[,] cubeGrid;
@@ -28,15 +37,6 @@ public class TerrainController : MonoBehaviour {
 
     // Track the currently loaded and displayed coordinates
     private HashSet<Vector2Int> inRangePositions = new HashSet<Vector2Int>();
-
-    // Color definitions (fixed constants, no need to generate new Color objects every time)
-    private readonly Color deepOcean = new Color(0f, 0.2f, 0.4f);
-    private readonly Color shallowWater = new Color(0.2f, 0.4f, 1f);
-    private readonly Color desert = new Color(0.9f, 0.8f, 0.5f);
-    private readonly Color grassland = new Color(0.3f, 1f, 0.3f);
-    private readonly Color rainforest = new Color(0f, 0.5f, 0f);
-    private readonly Color mountain = new Color(0.4f, 0.2f, 0f);
-    private readonly Color snowPeak = Color.white;
 
     private void Start() {
         EnsureCameraReference(false);
@@ -81,17 +81,29 @@ public class TerrainController : MonoBehaviour {
         Material baseMaterial = prefabRenderer.sharedMaterial;
 
         biomeMaterials = new Material[6];
-        biomeMaterials[0] = CreateBiomeMaterial(baseMaterial, deepOcean);
-        biomeMaterials[1] = CreateBiomeMaterial(baseMaterial, shallowWater);
-        biomeMaterials[2] = CreateBiomeMaterial(baseMaterial, desert);
-        biomeMaterials[3] = CreateBiomeMaterial(baseMaterial, grassland);
-        biomeMaterials[4] = CreateBiomeMaterial(baseMaterial, rainforest);
-        biomeMaterials[5] = CreateBiomeMaterial(baseMaterial, mountain);
+        biomeMaterials[0] = CreateBiomeMaterial(baseMaterial, deepOceanTexture);
+        biomeMaterials[1] = CreateBiomeMaterial(baseMaterial, shallowWaterTexture);
+        biomeMaterials[2] = CreateBiomeMaterial(baseMaterial, desertTexture);
+        biomeMaterials[3] = CreateBiomeMaterial(baseMaterial, grasslandTexture);
+        biomeMaterials[4] = CreateBiomeMaterial(baseMaterial, rainforestTexture);
+        biomeMaterials[5] = CreateBiomeMaterial(baseMaterial, mountainTexture);
     }
 
-    private Material CreateBiomeMaterial(Material baseMaterial, Color color) {
+    private Material CreateBiomeMaterial(Material baseMaterial, Texture2D texture) {
         Material material = new Material(baseMaterial);
-        material.color = color;
+
+        // Standard Built-in Pipeline property
+        if (texture != null) {
+            material.mainTexture = texture;
+            
+            // Universal Render Pipeline (URP) compatibility check
+            if (material.HasProperty("_BaseMap")) {
+                material.SetTexture("_BaseMap", texture);
+            }
+        } else {
+            Debug.LogWarning("[TerrainController] A biome texture is null!", this);
+        }
+
         return material;
     }
 
