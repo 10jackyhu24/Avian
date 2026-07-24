@@ -3,28 +3,16 @@ using UnityEngine.InputSystem;
 using Unity.Netcode;
 
 public class PauseMenu : MonoBehaviour {
-    public static PauseMenu Instance { get; private set; }
-
     private GameInput inputActions;
-
     private MenuManager menuManager;
     private bool isOpen;
 
-    public bool IsOpen => isOpen;
-
     private void Awake() {
-        Instance = this;
         menuManager = FindFirstObjectByType<MenuManager>();
         inputActions = new GameInput();
         inputActions.Player.Cancel.performed += OnCancelPerformed;
         KeyBinding.LoadBindingOverrides(inputActions);
         inputActions.Player.Enable();
-    }
-
-    private void OnDestroy() {
-        if (Instance == this) {
-            Instance = null;
-        }
     }
 
     public void Continue() {

@@ -1,7 +1,5 @@
 using UnityEngine;
 using System.Collections.Generic;
-using UnityEngine.InputSystem;
-using Unity.Netcode;
 
 public enum PanelType {
     MainMenu,
@@ -30,13 +28,8 @@ public class MenuManager : MonoBehaviour {
 
     private readonly Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
     private readonly Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
-    // private GameInput inputActions;
-    // private BagMenu bagMenu;
-    private bool isBagMenuVisible;
 
     private void Awake() {
-        // inputActions = new GameInput();
-
         foreach (var data in uiPanels) {
             if (data.panelObject == null) {
                 continue;
@@ -114,87 +107,4 @@ public class MenuManager : MonoBehaviour {
     public void ClearHistory() {
         pageHistoryStack.Clear();
     }
-
-    // private void OnBagPerformed(InputAction.CallbackContext context) {
-    //     if (!context.performed || !GameState.isPlaying) {
-    //         return;
-    //     }
-
-    //     if (PauseMenu.Instance != null && PauseMenu.Instance.IsOpen) {
-    //         return;
-    //     }
-
-    //     if (isBagMenuVisible) {
-    //         CloseBagMenu();
-    //         return;
-    //     }
-
-    //     ShowBagMenu();
-    // }
-
-    // private void OnCancelPerformed(InputAction.CallbackContext context) {
-    //     if (!context.performed || !GameState.isPlaying) {
-    //         return;
-    //     }
-
-    //     PauseMenu pauseMenu = PauseMenu.Instance;
-    //     if (pauseMenu != null) {
-    //         pauseMenu.HandleCancel();
-    //     }
-    // }
-
-    // private void ShowBagMenu() {
-    //     if (!panelDict.ContainsKey(PanelType.BagMenu)) {
-    //         Debug.LogError("BagMenu panel not found.", this);
-    //         return;
-    //     }
-
-    //     isBagMenuVisible = true;
-    //     pageHistoryStack.Clear();
-    //     pageHistoryStack.Push(PanelType.BagMenu);
-    //     SetActivePanelOnly(PanelType.BagMenu);
-    //     Time.timeScale = 0f;
-
-    //     if (bagMenu == null && panelDict.TryGetValue(PanelType.BagMenu, out GameObject bagPanel) && bagPanel != null) {
-    //         bagMenu = bagPanel.GetComponent<BagMenu>();
-    //     }
-
-    //     BagInventory inventory = FindLocalBagInventory();
-    //     bagMenu?.Open(inventory);
-    // }
-
-    // private void CloseBagMenu() {
-    //     if (!isBagMenuVisible) {
-    //         return;
-    //     }
-
-    //     isBagMenuVisible = false;
-    //     Time.timeScale = 1f;
-    //     bagMenu?.Close();
-    //     HideMenu();
-    //     ClearHistory();
-    // }
-
-    // private BagInventory FindLocalBagInventory() {
-    //     if (NetworkManager.Singleton != null && NetworkManager.Singleton.LocalClient != null) {
-    //         NetworkObject playerObject = NetworkManager.Singleton.LocalClient.PlayerObject;
-    //         if (playerObject != null) {
-    //             BagInventory inventory = playerObject.GetComponent<BagInventory>();
-    //             if (inventory != null) {
-    //                 return inventory;
-    //             }
-
-    //             inventory = playerObject.GetComponentInChildren<BagInventory>();
-    //             if (inventory != null) {
-    //                 return inventory;
-    //             }
-    //         }
-    //     }
-
-    //     return FindFirstObjectByType<BagInventory>();
-    // }
-
-    // private void HandleBindingOverridesChanged() {
-    //     KeyBinding.LoadBindingOverrides(inputActions);
-    // }
 }
