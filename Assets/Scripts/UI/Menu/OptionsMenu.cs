@@ -24,6 +24,7 @@ public class OptionsMenu : MonoBehaviour {
         { "Move Down", new KeyBindInfo { actionName = "Move", bindingIndex = 2 } },
         { "Move Left", new KeyBindInfo { actionName = "Move", bindingIndex = 3 } },
         { "Move Right", new KeyBindInfo { actionName = "Move", bindingIndex = 4 } },
+        { "Run", new KeyBindInfo { actionName = "Run", bindingIndex = 0 } },
         { "Attack", new KeyBindInfo { actionName = "Attack", bindingIndex = 0 } },
         { "Bag", new KeyBindInfo { actionName = "Bag", bindingIndex = 0 } },
         { "Interact", new KeyBindInfo { actionName = "Interact", bindingIndex = 0 } },
