@@ -9,6 +9,7 @@ public class MatchmakingMenu : MonoBehaviour {
     private MenuManager menuManager;
     private BackendAuthClient backendAuthClient;
     private MatchmakerClient matchmakerClient;
+    private TerrainController terrainController;
     private bool isConnectingToWorldServer;
 
     [Header("UI")]
@@ -22,6 +23,7 @@ public class MatchmakingMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         matchmakerClient = FindFirstObjectByType<MatchmakerClient>();
+        terrainController = FindFirstObjectByType<TerrainController>();
         warningWindow = FindFirstObjectByType<WarningWindow>();
     }
 
@@ -140,7 +142,6 @@ public class MatchmakingMenu : MonoBehaviour {
             yield break;
         }
 
-        // SetStatus($"Connecting to {endpoint}...");
         yield return null;
     }
 
@@ -165,6 +166,7 @@ public class MatchmakingMenu : MonoBehaviour {
             return false;
         }
 
+        NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
         unityTransport.SetConnectionData(host, port);
         RegisterNetworkCallbacks();
         isConnectingToWorldServer = true;
@@ -206,11 +208,18 @@ public class MatchmakingMenu : MonoBehaviour {
         }
 
         isConnectingToWorldServer = false;
+        if (terrainController == null) {
+            terrainController = FindFirstObjectByType<TerrainController>();
+        }
+
+        if (terrainController != null && GameState.hasWorldSeed) {
+            terrainController.GenerateWorld(GameState.currentSeed);
+        }
+
         warningWindow.Show("Client Connected",$"Connected to game server as client {clientId}.");
 
-        if (menuManager != null) {
-            menuManager.HideMenu();
-        }
+        menuManager.HideMenu();
+        menuManager.ClearHistory();
     }
 
     private void HandleClientDisconnected(ulong clientId) {

@@ -1,11 +1,13 @@
 using Unity.Netcode;
 using UnityEngine;
 using System.Collections;
+using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : NetworkBehaviour {
     [Header("Movement")]
-    [SerializeField] private float moveSpeed = 6f;
+    [SerializeField] private float moveSpeed = 2.5f;
+    [SerializeField] private float runSpeedMultiplier = 1.75f;
     [SerializeField] private float jumpHeight = 1.5f;
     [SerializeField] private float gravity = -20f;
 
@@ -35,16 +37,29 @@ public class PlayerController : NetworkBehaviour {
     private float verticalVelocity;
     private float moveInputX;
     private float moveInputZ;
+    private bool runRequested;
     private bool jumpRequested;
     private float nextServerAttackTime;
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
     private GUIStyle healthLabelStyle;
+    private GameInput inputActions;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
+        inputActions = new GameInput();
+        KeyBinding.LoadBindingOverrides(inputActions);
+    }
+
+    private void OnEnable() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        OptionsMenu.BindingOverridesChanged += HandleBindingOverridesChanged;
+    }
+
+    private void OnDisable() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
     }
 
     public override void OnNetworkSpawn() {
@@ -63,10 +78,13 @@ public class PlayerController : NetworkBehaviour {
         if (cameraController != null) {
             cameraController.SetTarget(transform);
         }
+
+        inputActions.Player.Enable();
     }
 
     public override void OnNetworkDespawn() {
         currentHealth.OnValueChanged -= OnHealthChanged;
+        inputActions.Player.Disable();
     }
 
     private void Update() {
@@ -116,12 +134,12 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void SendInputToServer() {
-        float horizontal = Input.GetAxisRaw("Horizontal");
-        float vertical = Input.GetAxisRaw("Vertical");
-        bool jumpPressed = Input.GetButtonDown("Jump");
-        bool attackPressed = Input.GetMouseButtonDown(0);
+        Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
+        bool runPressed = inputActions.Player.Run.IsPressed();
+        bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
+        bool attackPressed = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
 
-        SubmitMovementServerRpc(horizontal, vertical, jumpPressed);
+        SubmitMovementServerRpc(moveInput.x, moveInput.y, runPressed, jumpPressed);
 
         if (attackPressed) {
             TryAttackServerRpc();
@@ -129,16 +147,18 @@ public class PlayerController : NetworkBehaviour {
     }
 
     [ServerRpc]
-    private void SubmitMovementServerRpc(float horizontal, float vertical, bool jumpPressed) {
+    private void SubmitMovementServerRpc(float horizontal, float vertical, bool runPressed, bool jumpPressed) {
         if (currentHealth.Value <= 0) {
             moveInputX = 0f;
             moveInputZ = 0f;
+            runRequested = false;
             jumpRequested = false;
             return;
         }
 
         moveInputX = Mathf.Clamp(horizontal, -1f, 1f);
         moveInputZ = Mathf.Clamp(vertical, -1f, 1f);
+        runRequested = runPressed;
         jumpRequested |= jumpPressed;
     }
 
@@ -181,6 +201,7 @@ public class PlayerController : NetworkBehaviour {
 
         Vector3 moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
         bool isMoving = moveDirection.sqrMagnitude > 0f;
+        bool isRunning = isMoving && runRequested;
 
         if (isMoving && Mathf.Abs(moveInputX) > 0f) {
             spriteRenderer.flipX = moveInputX < 0f;
@@ -196,7 +217,8 @@ public class PlayerController : NetworkBehaviour {
 
         verticalVelocity += gravity * Time.deltaTime;
 
-        Vector3 velocity = moveDirection * moveSpeed;
+        float currentMoveSpeed = isRunning ? moveSpeed * runSpeedMultiplier : moveSpeed;
+        Vector3 velocity = moveDirection * currentMoveSpeed;
         velocity.y = verticalVelocity;
         characterController.Move(velocity * Time.deltaTime);
     }
@@ -229,6 +251,7 @@ public class PlayerController : NetworkBehaviour {
         verticalVelocity = 0f;
         moveInputX = 0f;
         moveInputZ = 0f;
+        runRequested = false;
         jumpRequested = false;
         characterController.enabled = true;
 
@@ -238,6 +261,16 @@ public class PlayerController : NetworkBehaviour {
 
     private void OnHealthChanged(int previousValue, int newValue) {
         Debug.Log($"[PlayerController] Client {OwnerClientId} health changed: {previousValue} -> {newValue}", this);
+    }
+
+    private void HandleBindingOverridesChanged() {
+        KeyBinding.LoadBindingOverrides(inputActions);
+    }
+
+    private void OnDestroy() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        inputActions?.Disable();
+        inputActions?.Dispose();
     }
 
     private void OnDrawGizmosSelected() {

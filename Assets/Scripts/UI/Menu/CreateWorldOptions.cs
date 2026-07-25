@@ -38,12 +38,15 @@ public class CreateWorldOptions : MonoBehaviour {
         terrainController.GenerateWorld(seed);
 
         // Run NGO Host
+        NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
+
         if (!NetworkManager.Singleton.IsListening) {
             NetworkManager.Singleton.StartHost();
         }
 
         menuManager.HideMenu();
+        menuManager.ClearHistory();
 
-        GameState.isPlaying = true;
+        GameState.SetWorld("singleplayer", seed);
     }
 }

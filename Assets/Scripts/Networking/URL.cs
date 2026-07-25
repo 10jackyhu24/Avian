@@ -1,5 +1,5 @@
 public static class URL {
-    public static string BaseUrl = "https://6337-219-69-234-133.ngrok-free.app";
+    public static string BaseUrl = "https://0968-219-69-234-213.ngrok-free.app";
 
     public static string AuthRegisterPath = "/auth/register";
     public static string AuthLoginPath = "/auth/login";
