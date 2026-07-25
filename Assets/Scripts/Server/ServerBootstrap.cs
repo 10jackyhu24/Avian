@@ -74,15 +74,28 @@ public class ServerBootstrap : MonoBehaviour {
 
         GameState.SetWorld(GameState.currentRoomId, seed);
 
-        TerrainController targetTerrain = terrainController != null
-            ? terrainController
-            : FindFirstObjectByType<TerrainController>();
+        TerrainController targetTerrain = ResolveTerrainController();
 
         if (targetTerrain != null) {
             targetTerrain.GenerateWorld(seed);
+        } else {
+            Debug.LogError("[ServerBootstrap] TerrainController not found. Dedicated server will have no collidable world.", this);
         }
 
         Debug.Log($"[ServerBootstrap] Loaded room seed={seed}", this);
+    }
+
+    private TerrainController ResolveTerrainController() {
+        if (terrainController != null) {
+            return terrainController;
+        }
+
+        TerrainController[] terrainControllers = FindObjectsByType<TerrainController>(FindObjectsSortMode.None);
+        if (terrainControllers.Length > 0) {
+            terrainController = terrainControllers[0];
+        }
+
+        return terrainController;
     }
 
     private void ConfigureTransport() {
