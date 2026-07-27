@@ -43,8 +43,13 @@ public class UI_BagItemSlot : MonoBehaviour {
 
         // Render Main Item Info
         if (itemIcon != null) {
-            itemIcon.enabled = slotData.itemData.itemObject.icon != null;
-            itemIcon.sprite = slotData.itemData.itemObject.icon;
+            Sprite iconSprite = slotData.itemData.itemObject.icon;
+            itemIcon.enabled = iconSprite != null;
+            itemIcon.sprite = iconSprite;
+
+            if (iconSprite != null) {
+                itemIcon.preserveAspect = true;
+            }
         }
 
         // Render black weight text
@@ -59,28 +64,19 @@ public class UI_BagItemSlot : MonoBehaviour {
         }
 
         // Render Orange Attachment Boxes (Weapons Only)
-        if (slotData.IsWeapon && slotData.attachments != null && slotData.attachments.Count > 0) {
-            if (attachmentContainer != null) {
-                attachmentContainer.SetActive(true);
-            }
+        if (slotData.IsWeapon) {
+            attachmentContainer.SetActive(true);
 
             for (int i = 0; i < attachmentSlots.Count; i++) {
                 if (attachmentSlots[i] == null) {
                     continue;
                 }
-
-                if (i < slotData.attachments.Count) {
-                    var attachData = slotData.attachments[i];
-                    attachmentSlots[i].gameObject.SetActive(true);
-                    attachmentSlots[i].SetupSlot(attachData.requiredType, attachData.attachedItem);
-                } else {
-                    attachmentSlots[i].gameObject.SetActive(false);
-                }
+                var attachData = slotData.attachments[i];
+                attachmentSlots[i].gameObject.SetActive(true);
+                attachmentSlots[i].SetupSlot(attachData.requiredType, attachData.attachedItem);
             }
         } else {
-            if (attachmentContainer != null) {
-                attachmentContainer.SetActive(false);
-            }
+            attachmentContainer.SetActive(false);
             HideAttachmentSlots();
         }
     }
