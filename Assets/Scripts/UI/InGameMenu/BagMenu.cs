@@ -45,7 +45,7 @@ public class BagMenu : MonoBehaviour {
         menuManager.ClearHistory();
     }
 
-    private void RefreshMenu(int size) {
+    private void RefreshBagMenu(int size) {
         
     }
 }
