@@ -16,6 +16,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     public AttachmentType SlotType => slotType;
     public ItemData CurrentAttachment { get; private set; }
 
+    private AttachmentSlotData boundAttachmentSlotData;
     private UI_DragDropManager dragDropManager;
 
     private void Awake() {
@@ -24,10 +25,13 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     private void FindDragDropManager() {
-        dragDropManager = GetComponentInParent<UI_DragDropManager>();
+        // Attachment slots are nested inside the bag slot prefab, so search the scene directly.
+        dragDropManager = FindObjectOfType<UI_DragDropManager>();
     }
 
     public void SetupSlot(AttachmentType type, ItemData currentItem) {
+        boundAttachmentSlotData = null;
+
         if (type != AttachmentType.None) {
             slotType = type;
         }
@@ -36,9 +40,39 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
         ApplyVisualState(currentItem);
     }
 
+    public void SetupSlot(AttachmentSlotData attachmentSlotData) {
+        boundAttachmentSlotData = attachmentSlotData;
+
+        if (attachmentSlotData == null) {
+            CurrentAttachment = ItemData.Empty;
+            ApplyVisualState(CurrentAttachment);
+            return;
+        }
+
+        slotType = attachmentSlotData.requiredType;
+        CurrentAttachment = attachmentSlotData.attachedItem;
+        ApplyVisualState(CurrentAttachment);
+    }
+
     public void ClearSlot() {
+        if (boundAttachmentSlotData != null) {
+            boundAttachmentSlotData.Clear();
+        }
+
         CurrentAttachment = ItemData.Empty;
         ApplyVisualState(CurrentAttachment);
+    }
+
+    public ItemData DetachAttachment() {
+        ItemData attachment = CurrentAttachment;
+
+        if (boundAttachmentSlotData != null) {
+            boundAttachmentSlotData.Clear();
+        }
+
+        CurrentAttachment = ItemData.Empty;
+        ApplyVisualState(CurrentAttachment);
+        return attachment;
     }
 
     private void ApplyVisualState(ItemData currentItem) {

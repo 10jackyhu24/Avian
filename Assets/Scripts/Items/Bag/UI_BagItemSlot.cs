@@ -38,8 +38,8 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     }
 
     private void FindDragDropManager() {
-        // Find the DragDropManager in parent hierarchy
-        dragDropManager = GetComponentInParent<UI_DragDropManager>();
+        // Slots are spawned under the bag content root, so the drag manager is not a parent.
+        dragDropManager = FindObjectOfType<UI_DragDropManager>();
         graphicRaycaster = GetComponentInParent<GraphicRaycaster>();
     }
 
@@ -83,7 +83,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
                 }
                 var attachData = slotData.attachments[i];
                 attachmentSlots[i].gameObject.SetActive(true);
-                attachmentSlots[i].SetupSlot(attachData.requiredType, attachData.attachedItem);
+                attachmentSlots[i].SetupSlot(attachData);
             }
         } else {
             attachmentContainer.SetActive(false);

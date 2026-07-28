@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Manages drag-drop operations for inventory items and attachments
@@ -18,7 +19,34 @@ public class UI_DragDropManager : MonoBehaviour {
 
     private void Awake() {
         canvas = GetComponentInParent<Canvas>();
-        bagManager = GetComponent<UI_BagManager>();
+        if (canvas == null) {
+            canvas = FindObjectOfType<Canvas>();
+        }
+
+        bagManager = GetComponentInParent<UI_BagManager>();
+        if (bagManager == null) {
+            bagManager = FindObjectOfType<UI_BagManager>();
+        }
+
+        EnsureDragIndicatorInstance();
+    }
+
+    private void EnsureDragIndicatorInstance() {
+        if (dragIndicator == null) {
+            return;
+        }
+
+        // In the current scene setup this field often points at the prefab asset.
+        // Prefab assets cannot be shown/hidden directly, so instantiate a runtime copy.
+        if (dragIndicator.gameObject.scene.IsValid()) {
+            return;
+        }
+
+        UI_DragIndicator prefab = dragIndicator;
+        Transform parent = canvas != null ? canvas.transform : transform;
+        dragIndicator = Instantiate(prefab, parent);
+        dragIndicator.transform.SetAsLastSibling();
+        dragIndicator.Hide();
     }
 
     /// <summary>
@@ -44,7 +72,9 @@ public class UI_DragDropManager : MonoBehaviour {
     /// Called when dragging ends - performs the actual reordering
     /// </summary>
     public void OnDragEnd() {
-        dragIndicator.Hide();
+        if (dragIndicator != null) {
+            dragIndicator.Hide();
+        }
 
         if (hoveredSlot != null && (draggedSlot != null || draggedAttachment != null)) {
             if (isDraggingFromAttachment) {
@@ -76,12 +106,16 @@ public class UI_DragDropManager : MonoBehaviour {
         float slotCenterY = (slotCorners[0].y + slotCorners[1].y) / 2f;
         bool isAbove = pointerPosition.y > slotCenterY;
 
-        dragIndicator.Show(slotRect, isAbove);
+        if (dragIndicator != null) {
+            dragIndicator.Show(slotRect, isAbove);
+        }
     }
 
     public void OnDragExit() {
         hoveredSlot = null;
-        dragIndicator.Hide();
+        if (dragIndicator != null) {
+            dragIndicator.Hide();
+        }
     }
 
     /// <summary>
@@ -114,20 +148,28 @@ public class UI_DragDropManager : MonoBehaviour {
     /// Creates a new bag slot from the dragged attachment
     /// </summary>
     private void HandleAttachmentDrop() {
-        if (draggedAttachment == null || draggedAttachment.CurrentAttachment.itemObject == null) {
+        if (draggedAttachment == null || draggedAttachment.CurrentAttachment.itemObject == null || bagManager == null) {
             return;
         }
 
         ItemData attachmentData = draggedAttachment.CurrentAttachment;
-        int insertIndex = bagManager.GetSlotIndex(hoveredSlot);
-
-        if (insertIndex < 0) {
-            bagManager.AddItem(attachmentData, 1);
-        } else {
-            bagManager.InsertItem(attachmentData, 1, insertIndex);
+        int attachmentWeight = attachmentData.itemObject != null ? attachmentData.itemObject.baseWeight : 0;
+        if (!bagManager.CanAddItem(attachmentWeight)) {
+            return;
         }
 
-        // Clear the attachment from original slot
-        draggedAttachment.ClearSlot();
+        int insertIndex = bagManager.GetSlotIndex(hoveredSlot);
+        UI_BagItemSlot newSlot = null;
+
+        if (insertIndex < 0) {
+            newSlot = bagManager.AddItem(attachmentData, 1);
+        } else {
+            newSlot = bagManager.InsertItem(attachmentData, 1, insertIndex);
+        }
+
+        if (newSlot != null) {
+            // Clear the attachment from the original weapon slot only after the new slot exists.
+            draggedAttachment.DetachAttachment();
+        }
     }
 }
