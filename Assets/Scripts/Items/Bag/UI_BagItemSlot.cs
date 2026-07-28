@@ -1,9 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using TMPro;
 
-public class UI_BagItemSlot : MonoBehaviour {
+public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler {
     [Header("UI Component References")]
     [SerializeField] private Image itemIcon;                 // Brown box (Icon)
     [SerializeField] private TextMeshProUGUI weightText;     // Black text (Single slot weight)
@@ -24,13 +25,22 @@ public class UI_BagItemSlot : MonoBehaviour {
     };
     [SerializeField] private List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>(); // Left, Middle, Right orange boxes
 
+    private UI_DragDropManager dragDropManager;
+    private GraphicRaycaster graphicRaycaster;
 
     private void Awake() {
         BindReferences();
+        FindDragDropManager();
     }
 
     private void OnValidate() {
         BindReferences();
+    }
+
+    private void FindDragDropManager() {
+        // Find the DragDropManager in parent hierarchy
+        dragDropManager = GetComponentInParent<UI_DragDropManager>();
+        graphicRaycaster = GetComponentInParent<GraphicRaycaster>();
     }
 
     public void UpdateSlotUI(BagSlotData slotData) {
@@ -116,4 +126,33 @@ public class UI_BagItemSlot : MonoBehaviour {
             }
         }
     }
+
+    #region Drag Drop Handlers
+
+    public void OnBeginDrag(PointerEventData eventData) {
+        if (dragDropManager == null) FindDragDropManager();
+        dragDropManager?.OnBagItemSlotBeginDrag(this);
+    }
+
+    public void OnDrag(PointerEventData eventData) {
+        // Could add visual feedback here (e.g., alpha change, scale)
+    }
+
+    public void OnEndDrag(PointerEventData eventData) {
+        dragDropManager?.OnDragEnd();
+    }
+
+    public void OnPointerEnter(PointerEventData eventData) {
+        if (eventData.dragging && dragDropManager != null) {
+            dragDropManager.OnBagItemSlotHover(this, eventData.position);
+        }
+    }
+
+    public void OnPointerExit(PointerEventData eventData) {
+        if (eventData.dragging && dragDropManager != null) {
+            dragDropManager.OnDragExit();
+        }
+    }
+
+    #endregion
 }

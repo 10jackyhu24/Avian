@@ -1,8 +1,9 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 
-public class UI_AttachmentSlot : MonoBehaviour {
+public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler {
     [Header("Slot Setup")]
     [SerializeField] private AttachmentType slotType = AttachmentType.None;
 
@@ -15,8 +16,15 @@ public class UI_AttachmentSlot : MonoBehaviour {
     public AttachmentType SlotType => slotType;
     public ItemData CurrentAttachment { get; private set; }
 
+    private UI_DragDropManager dragDropManager;
+
     private void Awake() {
         ApplyVisualState(CurrentAttachment);
+        FindDragDropManager();
+    }
+
+    private void FindDragDropManager() {
+        dragDropManager = GetComponentInParent<UI_DragDropManager>();
     }
 
     public void SetupSlot(AttachmentType type, ItemData currentItem) {
@@ -61,4 +69,40 @@ public class UI_AttachmentSlot : MonoBehaviour {
         if (incomingItem.attachmentType == AttachmentType.None) return false;
         return incomingItem.attachmentType == slotType;
     }
+
+    #region Drag Drop Handlers
+
+    public void OnBeginDrag(PointerEventData eventData) {
+        // Only allow dragging if there's an attachment
+        if (CurrentAttachment.itemObject == null) {
+            eventData.pointerDrag = null;
+            return;
+        }
+
+        if (dragDropManager == null) FindDragDropManager();
+        dragDropManager?.OnAttachmentSlotBeginDrag(this);
+    }
+
+    public void OnDrag(PointerEventData eventData) {
+        // Could add visual feedback here
+    }
+
+    public void OnEndDrag(PointerEventData eventData) {
+        dragDropManager?.OnDragEnd();
+    }
+
+    public void OnPointerEnter(PointerEventData eventData) {
+        if (eventData.dragging && dragDropManager != null) {
+            // Forward to the bag manager's hover handling through a bag item slot
+            // This will be handled when hovering over actual bag slots
+        }
+    }
+
+    public void OnPointerExit(PointerEventData eventData) {
+        if (eventData.dragging && dragDropManager != null) {
+            dragDropManager.OnDragExit();
+        }
+    }
+
+    #endregion
 }

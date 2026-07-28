@@ -12,6 +12,10 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private Transform contentRoot;
     [SerializeField] private UI_BagItemSlot itemSlotPrefab;
 
+    [Header("Drag Drop")]
+    [SerializeField] private UI_DragIndicator dragIndicatorPrefab;
+    private UI_DragIndicator dragIndicator;
+
     [Header("Runtime Slots")]
     [SerializeField] private List<UI_BagItemSlot> itemSlots = new List<UI_BagItemSlot>();
 
@@ -25,8 +29,14 @@ public class UI_BagManager : MonoBehaviour {
     };
 
     private void Awake() {
+        // Setup drag indicator
+        if (dragIndicatorPrefab != null) {
+            dragIndicator = Instantiate(dragIndicatorPrefab, contentRoot);
+        }
+
         Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
         AddItem(items["Gun"]);
+        AddItem(items["Gun2"]);
     }
 
     // Refresh the entire bag UI and total capacity
@@ -69,6 +79,74 @@ public class UI_BagManager : MonoBehaviour {
         bagDataList.Add(slotData);
         UpdateCapacityLabel();
         return SpawnSlot(slotData);
+    }
+
+    /// <summary>
+    /// Inserts an item at a specific index in the bag
+    /// </summary>
+    public UI_BagItemSlot InsertItem(ItemData itemData, int count = 1, int insertIndex = 0, params AttachmentType[] requiredAttachmentTypes) {
+        if (itemData.itemObject == null || itemData.itemType == ItemType.Empty) {
+            Debug.LogWarning("[UI_BagManager] InsertItem failed because the item data is empty.");
+            return null;
+        }
+
+        count = Mathf.Clamp(count, 1, Mathf.Max(1, itemData.itemObject.maxCount));
+
+        BagSlotData slotData = new BagSlotData {
+            itemData = itemData,
+            count = count
+        };
+
+        if (slotData.IsWeapon) {
+            if (requiredAttachmentTypes != null && requiredAttachmentTypes.Length > 0) {
+                slotData.EnsureAttachmentSlots(requiredAttachmentTypes);
+            } else {
+                slotData.EnsureAttachmentSlots(DefaultWeaponAttachmentTypes);
+            }
+        }
+
+        int itemWeight = slotData.GetTotalWeight();
+        if (!CanAddItem(itemWeight)) {
+            Debug.LogWarning($"[UI_BagManager] InsertItem blocked. '{itemData.itemObject.itemName}' would exceed capacity.");
+            return null;
+        }
+
+        insertIndex = Mathf.Clamp(insertIndex, 0, bagDataList.Count);
+        bagDataList.Insert(insertIndex, slotData);
+        UpdateCapacityLabel();
+        RebuildSlots();
+        
+        return itemSlots.Count > insertIndex ? itemSlots[insertIndex] : null;
+    }
+
+    /// <summary>
+    /// Gets the index of a bag item slot in the current list
+    /// </summary>
+    public int GetSlotIndex(UI_BagItemSlot slot) {
+        return itemSlots.IndexOf(slot);
+    }
+
+    /// <summary>
+    /// Moves a slot from one index to another and rebuilds UI
+    /// </summary>
+    public void MoveSlot(int fromIndex, int toIndex) {
+        if (fromIndex < 0 || fromIndex >= bagDataList.Count || 
+            toIndex < 0 || toIndex > bagDataList.Count) {
+            return;
+        }
+
+        if (fromIndex == toIndex) return;
+
+        BagSlotData slot = bagDataList[fromIndex];
+        bagDataList.RemoveAt(fromIndex);
+        
+        // Adjust toIndex if we removed from before it
+        if (fromIndex < toIndex) {
+            toIndex--;
+        }
+
+        bagDataList.Insert(Mathf.Clamp(toIndex, 0, bagDataList.Count), slot);
+        RebuildSlots();
     }
 
     // Sum weight of all slots
@@ -160,7 +238,7 @@ public class UI_BagManager : MonoBehaviour {
 
         for (int i = contentRoot.childCount - 1; i >= 0; i--) {
             Transform child = contentRoot.GetChild(i);
-            if (child != null) {
+            if (child != null && child != dragIndicator?.transform) {
                 Destroy(child.gameObject);
             }
         }
