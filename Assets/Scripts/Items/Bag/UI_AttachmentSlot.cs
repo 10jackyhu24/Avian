@@ -12,6 +12,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     [SerializeField] private GameObject emptyRoot;
     [SerializeField] private GameObject filledRoot;
     [SerializeField] private TextMeshProUGUI slotTypeText;
+    [SerializeField] private CanvasGroup canvasGroup;
 
     public AttachmentType SlotType => slotType;
     public ItemData CurrentAttachment { get; private set; }
@@ -22,6 +23,10 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     private void Awake() {
         ApplyVisualState(CurrentAttachment);
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
+    }
+
+    private void OnValidate() {
+
     }
 
     public void SetupSlot(AttachmentType type, ItemData currentItem) {
@@ -102,35 +107,23 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
-        // Only allow dragging if there's an attachment
-        if (CurrentAttachment.itemObject == null) {
-            eventData.pointerDrag = null;
-            return;
-        }
 
-        dragDropManager.OnAttachmentSlotBeginDrag(this);
     }
 
     public void OnDrag(PointerEventData eventData) {
-        // Could add visual feedback here
+
     }
 
     public void OnEndDrag(PointerEventData eventData) {
-        dragDropManager.OnDragEnd();
+
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-        if (eventData.dragging) {
-            // Forward to the bag manager's hover handling through a bag item slot
-            // This will be handled when hovering over actual bag slots
-        }
+
     }
 
     public void OnPointerExit(PointerEventData eventData) {
-        if (eventData.dragging) {
-            dragDropManager.OnDragExit();
-        }
+    
     }
-
     #endregion
 }

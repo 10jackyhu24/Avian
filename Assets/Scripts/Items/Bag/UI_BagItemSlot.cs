@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using TMPro;
 
-public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler {
+public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler {
     [Header("UI Component References")]
     [SerializeField] private Image itemIcon;                 // Brown box (Icon)
     [SerializeField] private TextMeshProUGUI weightText;     // Black text (Single slot weight)
@@ -30,10 +30,6 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     private void Awake() {
         BindReferences();
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
-    }
-
-    private void OnValidate() {
-        BindReferences();
     }
 
     public void UpdateSlotUI(BagSlotData slotData) {
@@ -127,7 +123,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     }
 
     public void OnDrag(PointerEventData eventData) {
-        // Could add visual feedback here (e.g., alpha change, scale)
+        dragDropManager.OnBagItemSlotHover(eventData.position);
     }
 
     public void OnEndDrag(PointerEventData eventData) {
@@ -136,13 +132,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
     public void OnPointerEnter(PointerEventData eventData) {
         if (eventData.dragging) {
-            dragDropManager.OnBagItemSlotHover(this, eventData.position);
-        }
-    }
-
-    public void OnPointerExit(PointerEventData eventData) {
-        if (eventData.dragging) {
-            dragDropManager.OnDragExit();
+            dragDropManager.OnBagItemSlotEnter(this);
         }
     }
 

@@ -28,6 +28,7 @@ public class UI_BagManager : MonoBehaviour {
         Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
         AddItem(items["Gun"]);
         AddItem(items["Gun2"]);
+        AddItem(items["Gun3"]);
     }
 
     // Refresh the entire bag UI and total capacity
@@ -70,44 +71,6 @@ public class UI_BagManager : MonoBehaviour {
         bagDataList.Add(slotData);
         UpdateCapacityLabel();
         return SpawnSlot(slotData);
-    }
-
-    /// <summary>
-    /// Inserts an item at a specific index in the bag
-    /// </summary>
-    public UI_BagItemSlot InsertItem(ItemData itemData, int count = 1, int insertIndex = 0, params AttachmentType[] requiredAttachmentTypes) {
-        if (itemData.itemObject == null || itemData.itemType == ItemType.Empty) {
-            Debug.LogWarning("[UI_BagManager] InsertItem failed because the item data is empty.");
-            return null;
-        }
-
-        count = Mathf.Clamp(count, 1, Mathf.Max(1, itemData.itemObject.maxCount));
-
-        BagSlotData slotData = new BagSlotData {
-            itemData = itemData,
-            count = count
-        };
-
-        if (slotData.IsWeapon) {
-            if (requiredAttachmentTypes != null && requiredAttachmentTypes.Length > 0) {
-                slotData.EnsureAttachmentSlots(requiredAttachmentTypes);
-            } else {
-                slotData.EnsureAttachmentSlots(DefaultWeaponAttachmentTypes);
-            }
-        }
-
-        int itemWeight = slotData.GetTotalWeight();
-        if (!CanAddItem(itemWeight)) {
-            Debug.LogWarning($"[UI_BagManager] InsertItem blocked. '{itemData.itemObject.itemName}' would exceed capacity.");
-            return null;
-        }
-
-        insertIndex = Mathf.Clamp(insertIndex, 0, bagDataList.Count);
-        bagDataList.Insert(insertIndex, slotData);
-        UpdateCapacityLabel();
-        RebuildSlots();
-        
-        return itemSlots.Count > insertIndex ? itemSlots[insertIndex] : null;
     }
 
     /// <summary>

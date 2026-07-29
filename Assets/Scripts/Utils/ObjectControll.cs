@@ -1,0 +1,86 @@
+using UnityEngine;
+
+public static class ObjectControll {
+    public static void MoveToIndex<T>(T component, int targetIndex) where T : Component {
+        if (component == null) {
+            Debug.LogError("[MoveObject] Target component is null!");
+            return;
+        }
+
+        MoveToIndex(component.gameObject, targetIndex);
+    }
+
+    public static void MoveToIndex(GameObject obj, int targetIndex) {
+        if (obj == null) {
+            Debug.LogError("[MoveObject] Target GameObject is null!");
+            return;
+        }
+
+        Transform parentTransform = obj.transform.parent;
+        if (parentTransform == null) {
+            Debug.LogWarning("[MoveObject] Target GameObject does not have a parent!");
+            return;
+        }
+
+        // Clamp targetIndex between 0 and parent's childCount - 1
+        int childCount = parentTransform.childCount;
+        int clampedIndex = Mathf.Clamp(targetIndex, 0, childCount - 1);
+
+        // Move the object to the calculated sibling index
+        obj.transform.SetSiblingIndex(clampedIndex);
+    }
+
+    public static int GetIndex<T>(T component, bool includeInactive = false) where T : Object {
+        if (component == null) {
+            Debug.LogError("[MoveObject] Target component is null!");
+            return -1;
+        }
+
+        GameObject targetObj = GetGameObject(component);
+        return GetIndex(targetObj, includeInactive);
+    }
+
+    public static int GetIndex(GameObject obj, bool includeInactive = false) {
+        if (obj == null) {
+            Debug.LogError("[MoveObject] Target GameObject is null!");
+            return -1;
+        }
+
+        Transform parentTransform = obj.transform.parent;
+        if (parentTransform == null) {
+            Debug.LogWarning("[MoveObject] Target object does not have a parent!");
+            return 0;
+        }
+
+        // If including inactive objects, use Unity's native GetSiblingIndex directly
+        if (includeInactive) {
+            return obj.transform.GetSiblingIndex();
+        }
+
+        // Calculate index by counting active children only
+        int activeIndex = 0;
+        for (int i = 0; i < parentTransform.childCount; i++) {
+            Transform child = parentTransform.GetChild(i);
+
+            // Skip inactive children
+            if (!child.gameObject.activeSelf) {
+                continue;
+            }
+
+            if (child.gameObject == obj) {
+                return activeIndex;
+            }
+
+            activeIndex++;
+        }
+
+        return -1;
+    }
+
+    private static GameObject GetGameObject(Object unityObj) {
+        if (unityObj == null) return null;
+        if (unityObj is GameObject go) return go;
+        if (unityObj is Component comp) return comp.gameObject;
+        return null;
+    }
+}

@@ -2,134 +2,84 @@ using UnityEngine;
 using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 
-/// <summary>
-/// Manages drag-drop operations for inventory items and attachments
-/// Handles slot reordering and creating new slots from attachments
-/// </summary>
 public class UI_DragDropManager : MonoBehaviour {
+    private struct DragData {
+        public UI_BagItemSlot draggedSlot;
+        public UI_BagItemSlot hoveredSlot;
+        public bool isAbove;
+        public bool isDraggingFromAttachment;
+    }
+
     [SerializeField] private Transform contentRoot;
     [SerializeField] private UI_DragIndicator dragIndicatorPrefab;
     private UI_DragIndicator dragIndicator;
     
-    private UI_BagItemSlot draggedSlot;
-    private UI_AttachmentSlot draggedAttachment;
-    private UI_BagItemSlot hoveredSlot;
-    private bool isDraggingFromAttachment;
-    
+    // private UI_AttachmentSlot draggedAttachment;
     private UI_BagManager bagManager;
+    
+    private DragData dragData;
 
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
-
         dragIndicator = PrefabSpawn.SpawnInit(dragIndicatorPrefab, contentRoot);
         dragIndicator.Hide();
     }
 
     public void OnBagItemSlotBeginDrag(UI_BagItemSlot slot) {
-        draggedSlot = slot;
-        draggedAttachment = null;
-        isDraggingFromAttachment = false;
+        dragData.draggedSlot = slot;
+        dragData.hoveredSlot = slot;
+        // dragData.draggedAttachment = null;
+        dragData.isDraggingFromAttachment = false;
     }
 
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
-        draggedAttachment = slot;
-        draggedSlot = null;
-        isDraggingFromAttachment = true;
+        // draggedAttachment = slot;
+        // draggedSlot = null;
+        // isDraggingFromAttachment = true;
     }
 
     public void OnDragEnd() {
-        dragIndicator.Hide();
-
-        if (hoveredSlot != null && (draggedSlot != null || draggedAttachment != null)) {
-            if (isDraggingFromAttachment) {
-                HandleAttachmentDrop();
-            } else {
-                HandleSlotDrop();
-            }
-        }
-
-        draggedSlot = null;
-        draggedAttachment = null;
-        hoveredSlot = null;
-    }
-
-    /// <summary>
-    /// Called when hovering over a BagItemSlot during drag
-    /// Shows indicator and determines if it's above or below
-    /// </summary>
-    public void OnBagItemSlotHover(UI_BagItemSlot slot, Vector2 pointerPosition) {
-        hoveredSlot = slot;
-
-        RectTransform slotRect = slot.GetComponent<RectTransform>();
-        if (slotRect == null) return;
-
-        // Check if pointer is in upper or lower half of the slot
-        Vector3[] slotCorners = new Vector3[4];
-        slotRect.GetWorldCorners(slotCorners);
-        
-        float slotCenterY = (slotCorners[0].y + slotCorners[1].y) / 2f;
-        bool isAbove = pointerPosition.y > slotCenterY;
-
-        dragIndicator.Show(slotRect, isAbove);
-    }
-
-    public void OnDragExit() {
-        hoveredSlot = null;
-        dragIndicator.Hide();
-    }
-
-    /// <summary>
-    /// Reorders bag slots: moves draggedSlot before or after hoveredSlot
-    /// </summary>
-    private void HandleSlotDrop() {
-        if (draggedSlot == hoveredSlot) return;
-
-        int draggedIndex = bagManager.GetSlotIndex(draggedSlot);
-        int hoveredIndex = bagManager.GetSlotIndex(hoveredSlot);
-
-        if (draggedIndex < 0 || hoveredIndex < 0) return;
-
-        // Determine insertion position based on visual indicator
-        RectTransform hoveredRect = hoveredSlot.GetComponent<RectTransform>();
-        Vector3[] corners = new Vector3[4];
-        hoveredRect.GetWorldCorners(corners);
-        
-        // Get the current pointer position through EventSystem
-        Vector2 pointerPos = Input.mousePosition;
-        float slotCenterY = (corners[0].y + corners[1].y) / 2f;
-        bool insertAbove = pointerPos.y > slotCenterY;
-
-        int insertIndex = insertAbove ? hoveredIndex : hoveredIndex + 1;
-
-        bagManager.MoveSlot(draggedIndex, insertIndex);
-    }
-
-    /// <summary>
-    /// Creates a new bag slot from the dragged attachment
-    /// </summary>
-    private void HandleAttachmentDrop() {
-        if (draggedAttachment == null || draggedAttachment.CurrentAttachment.itemObject == null || bagManager == null) {
-            return;
-        }
-
-        ItemData attachmentData = draggedAttachment.CurrentAttachment;
-        int attachmentWeight = attachmentData.itemObject != null ? attachmentData.itemObject.baseWeight : 0;
-        if (!bagManager.CanAddItem(attachmentWeight)) {
-            return;
-        }
-
-        int insertIndex = bagManager.GetSlotIndex(hoveredSlot);
-        UI_BagItemSlot newSlot = null;
-
-        if (insertIndex < 0) {
-            newSlot = bagManager.AddItem(attachmentData, 1);
+        if (dragData.isDraggingFromAttachment) {
+            HandleAttachmentDrop();
         } else {
-            newSlot = bagManager.InsertItem(attachmentData, 1, insertIndex);
+            HandleSlotDropInBag();
         }
 
-        if (newSlot != null) {
-            // Clear the attachment from the original weapon slot only after the new slot exists.
-            draggedAttachment.DetachAttachment();
+        dragData.draggedSlot = null;
+        // dragData.draggedAttachment = null;
+        dragData.hoveredSlot = null;
+    }
+
+    public void OnBagItemSlotEnter(UI_BagItemSlot hoveredSlot) {
+        dragData.hoveredSlot = hoveredSlot;
+    }
+
+    public void OnBagItemSlotHover(Vector2 pointerPosition) {
+        RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
+
+        // Convert mouse screen position to local position relative to slotRect
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                slotRect, 
+                pointerPosition, 
+                null, // If UI Canvas Render Mode is Overlay, use null. If Camera Space, pass target Camera.
+                out Vector2 localPoint)) {
+
+            // In RectTransform local space, the vertical center is Y = 0
+            dragData.isAbove = localPoint.y > 0;
         }
+        dragIndicator.Hide();
+        int index = ObjectControll.GetIndex(dragData.hoveredSlot);
+        dragIndicator.Show(dragData.isAbove ? index : index + 1);
+    }
+
+    private void HandleSlotDropInBag() {
+        dragIndicator.Hide();
+        int begin = ObjectControll.GetIndex(dragData.draggedSlot);
+        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
+        bagManager.MoveSlot(begin, dragData.isAbove ? end : end + 1);
+    }
+
+    private void HandleAttachmentDrop() {
+
     }
 }
