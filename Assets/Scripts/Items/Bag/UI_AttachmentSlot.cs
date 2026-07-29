@@ -21,12 +21,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
 
     private void Awake() {
         ApplyVisualState(CurrentAttachment);
-        FindDragDropManager();
-    }
-
-    private void FindDragDropManager() {
-        // Attachment slots are nested inside the bag slot prefab, so search the scene directly.
-        dragDropManager = FindObjectOfType<UI_DragDropManager>();
+        dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
     }
 
     public void SetupSlot(AttachmentType type, ItemData currentItem) {
@@ -113,8 +108,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
             return;
         }
 
-        if (dragDropManager == null) FindDragDropManager();
-        dragDropManager?.OnAttachmentSlotBeginDrag(this);
+        dragDropManager.OnAttachmentSlotBeginDrag(this);
     }
 
     public void OnDrag(PointerEventData eventData) {
@@ -122,18 +116,18 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     public void OnEndDrag(PointerEventData eventData) {
-        dragDropManager?.OnDragEnd();
+        dragDropManager.OnDragEnd();
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-        if (eventData.dragging && dragDropManager != null) {
+        if (eventData.dragging) {
             // Forward to the bag manager's hover handling through a bag item slot
             // This will be handled when hovering over actual bag slots
         }
     }
 
     public void OnPointerExit(PointerEventData eventData) {
-        if (eventData.dragging && dragDropManager != null) {
+        if (eventData.dragging) {
             dragDropManager.OnDragExit();
         }
     }

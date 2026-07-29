@@ -7,74 +7,38 @@ using UnityEngine.SceneManagement;
 /// Handles slot reordering and creating new slots from attachments
 /// </summary>
 public class UI_DragDropManager : MonoBehaviour {
-    [SerializeField] private UI_DragIndicator dragIndicator;
+    [SerializeField] private Transform contentRoot;
+    [SerializeField] private UI_DragIndicator dragIndicatorPrefab;
+    private UI_DragIndicator dragIndicator;
     
     private UI_BagItemSlot draggedSlot;
     private UI_AttachmentSlot draggedAttachment;
     private UI_BagItemSlot hoveredSlot;
     private bool isDraggingFromAttachment;
     
-    private Canvas canvas;
     private UI_BagManager bagManager;
 
     private void Awake() {
-        canvas = GetComponentInParent<Canvas>();
-        if (canvas == null) {
-            canvas = FindObjectOfType<Canvas>();
-        }
+        bagManager = FindFirstObjectByType<UI_BagManager>();
 
-        bagManager = GetComponentInParent<UI_BagManager>();
-        if (bagManager == null) {
-            bagManager = FindObjectOfType<UI_BagManager>();
-        }
-
-        EnsureDragIndicatorInstance();
-    }
-
-    private void EnsureDragIndicatorInstance() {
-        if (dragIndicator == null) {
-            return;
-        }
-
-        // In the current scene setup this field often points at the prefab asset.
-        // Prefab assets cannot be shown/hidden directly, so instantiate a runtime copy.
-        if (dragIndicator.gameObject.scene.IsValid()) {
-            return;
-        }
-
-        UI_DragIndicator prefab = dragIndicator;
-        Transform parent = canvas != null ? canvas.transform : transform;
-        dragIndicator = Instantiate(prefab, parent);
-        dragIndicator.transform.SetAsLastSibling();
+        dragIndicator = PrefabSpawn.SpawnInit(dragIndicatorPrefab, contentRoot);
         dragIndicator.Hide();
     }
 
-    /// <summary>
-    /// Called when dragging starts on a BagItemSlot
-    /// </summary>
     public void OnBagItemSlotBeginDrag(UI_BagItemSlot slot) {
         draggedSlot = slot;
         draggedAttachment = null;
         isDraggingFromAttachment = false;
     }
 
-    /// <summary>
-    /// Called when dragging starts on an AttachmentSlot
-    /// Creates a temporary copy as a new bag slot
-    /// </summary>
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
         draggedAttachment = slot;
         draggedSlot = null;
         isDraggingFromAttachment = true;
     }
 
-    /// <summary>
-    /// Called when dragging ends - performs the actual reordering
-    /// </summary>
     public void OnDragEnd() {
-        if (dragIndicator != null) {
-            dragIndicator.Hide();
-        }
+        dragIndicator.Hide();
 
         if (hoveredSlot != null && (draggedSlot != null || draggedAttachment != null)) {
             if (isDraggingFromAttachment) {
@@ -106,16 +70,12 @@ public class UI_DragDropManager : MonoBehaviour {
         float slotCenterY = (slotCorners[0].y + slotCorners[1].y) / 2f;
         bool isAbove = pointerPosition.y > slotCenterY;
 
-        if (dragIndicator != null) {
-            dragIndicator.Show(slotRect, isAbove);
-        }
+        dragIndicator.Show(slotRect, isAbove);
     }
 
     public void OnDragExit() {
         hoveredSlot = null;
-        if (dragIndicator != null) {
-            dragIndicator.Hide();
-        }
+        dragIndicator.Hide();
     }
 
     /// <summary>

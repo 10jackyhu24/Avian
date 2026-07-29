@@ -1,9 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-/// <summary>
-/// Shows a line indicating where items will be inserted during drag operations
-/// </summary>
 public class UI_DragIndicator : MonoBehaviour {
     [SerializeField] private Image indicatorLine;
     private RectTransform rectTransform;
@@ -12,23 +9,26 @@ public class UI_DragIndicator : MonoBehaviour {
         rectTransform = GetComponent<RectTransform>();
         Hide();
     }
-
-    /// <summary>
-    /// Shows the indicator at the specified position (above or below target slot)
-    /// </summary>
+    
     public void Show(RectTransform targetSlot, bool isAbove) {
+        if (targetSlot == null) {
+            Hide();
+            return;
+        }
+
         gameObject.SetActive(true);
 
-        // Position the line at the top or bottom of the target slot
-        float yOffset = isAbove ? (targetSlot.rect.height / 2f) : -(targetSlot.rect.height / 2f);
-        
-        Vector3 targetPos = targetSlot.position;
-        targetPos.y += yOffset;
-        
-        rectTransform.position = targetPos;
-        
-        // Make the line span the width of the target slot
-        rectTransform.sizeDelta = new Vector2(targetSlot.rect.width, 2f);
+        Transform targetParent = targetSlot.parent;
+        if (targetParent != null && transform.parent != targetParent) {
+            transform.SetParent(targetParent, false);
+        }
+
+        int targetIndex = targetSlot.GetSiblingIndex();
+        MoveObject.MoveToIndex(transform, isAbove ? targetIndex : targetIndex + 1);
+
+        if (indicatorLine != null) {
+            indicatorLine.raycastTarget = false;
+        }
     }
 
     public void Hide() {

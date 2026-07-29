@@ -12,10 +12,6 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private Transform contentRoot;
     [SerializeField] private UI_BagItemSlot itemSlotPrefab;
 
-    [Header("Drag Drop")]
-    [SerializeField] private UI_DragIndicator dragIndicatorPrefab;
-    private UI_DragIndicator dragIndicator;
-
     [Header("Runtime Slots")]
     [SerializeField] private List<UI_BagItemSlot> itemSlots = new List<UI_BagItemSlot>();
 
@@ -29,11 +25,6 @@ public class UI_BagManager : MonoBehaviour {
     };
 
     private void Awake() {
-        // Setup drag indicator
-        if (dragIndicatorPrefab != null) {
-            dragIndicator = Instantiate(dragIndicatorPrefab, contentRoot);
-        }
-
         Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
         AddItem(items["Gun"]);
         AddItem(items["Gun2"]);
@@ -179,10 +170,6 @@ public class UI_BagManager : MonoBehaviour {
     private void RebuildSlots() {
         ClearSpawnedSlots();
 
-        if (bagDataList == null) {
-            bagDataList = new List<BagSlotData>();
-        }
-
         for (int i = 0; i < bagDataList.Count; i++) {
             SpawnSlot(bagDataList[i]);
         }
@@ -223,24 +210,11 @@ public class UI_BagManager : MonoBehaviour {
     }
 
     private void ClearSpawnedSlots() {
-        if (itemSlots != null) {
-            for (int i = 0; i < itemSlots.Count; i++) {
-                if (itemSlots[i] != null) {
-                    Destroy(itemSlots[i].gameObject);
-                }
-            }
-            itemSlots.Clear();
-        }
-
-        if (contentRoot == null) {
-            return;
-        }
-
-        for (int i = contentRoot.childCount - 1; i >= 0; i--) {
-            Transform child = contentRoot.GetChild(i);
-            if (child != null && child != dragIndicator?.transform) {
-                Destroy(child.gameObject);
+        for (int i = 0; i < itemSlots.Count; i++) {
+            if (itemSlots[i] != null) {
+                Destroy(itemSlots[i].gameObject);
             }
         }
+        itemSlots.Clear();
     }
 }

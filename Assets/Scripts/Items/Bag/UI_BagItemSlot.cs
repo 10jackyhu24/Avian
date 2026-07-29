@@ -26,21 +26,14 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     [SerializeField] private List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>(); // Left, Middle, Right orange boxes
 
     private UI_DragDropManager dragDropManager;
-    private GraphicRaycaster graphicRaycaster;
 
     private void Awake() {
         BindReferences();
-        FindDragDropManager();
+        dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
     }
 
     private void OnValidate() {
         BindReferences();
-    }
-
-    private void FindDragDropManager() {
-        // Slots are spawned under the bag content root, so the drag manager is not a parent.
-        dragDropManager = FindObjectOfType<UI_DragDropManager>();
-        graphicRaycaster = GetComponentInParent<GraphicRaycaster>();
     }
 
     public void UpdateSlotUI(BagSlotData slotData) {
@@ -130,8 +123,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
-        if (dragDropManager == null) FindDragDropManager();
-        dragDropManager?.OnBagItemSlotBeginDrag(this);
+        dragDropManager.OnBagItemSlotBeginDrag(this);
     }
 
     public void OnDrag(PointerEventData eventData) {
@@ -139,17 +131,17 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     }
 
     public void OnEndDrag(PointerEventData eventData) {
-        dragDropManager?.OnDragEnd();
+        dragDropManager.OnDragEnd();
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-        if (eventData.dragging && dragDropManager != null) {
+        if (eventData.dragging) {
             dragDropManager.OnBagItemSlotHover(this, eventData.position);
         }
     }
 
     public void OnPointerExit(PointerEventData eventData) {
-        if (eventData.dragging && dragDropManager != null) {
+        if (eventData.dragging) {
             dragDropManager.OnDragExit();
         }
     }
