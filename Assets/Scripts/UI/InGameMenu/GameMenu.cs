@@ -1,5 +1,7 @@
 using UnityEngine.UI;
 using UnityEngine;
+using System;
+using Unity.Mathematics;
 
 public class GameMenu : MonoBehaviour {
     private UI_BagManager bagManager;
@@ -10,15 +12,19 @@ public class GameMenu : MonoBehaviour {
     }
 
     public void Refresh() {
-        for (int i = 0; i < hotbar.Length; ++i) {
-            Sprite icon = bagManager.bagDataList[i].itemData.itemObject.icon;
-            if (icon != null) {
-                hotbar[i].GetComponent<Image>().sprite = icon;
-                hotbar[i].SetActive(true);
+        int hotbar_size = hotbar.Length;
+        int bag_list_size = bagManager.bagDataList.Count;
+        int min_size = Math.Min(hotbar_size, bag_list_size);
+        for (int i = 0; i < hotbar_size; ++i) {
+            if (i < min_size) {
+                Sprite icon = bagManager.bagDataList[i].itemData.itemObject.icon;
+                if (icon != null) {
+                    hotbar[i].GetComponent<Image>().sprite = icon;
+                    hotbar[i].SetActive(true);
+                    continue;
+                }
             }
-            else {
-                hotbar[i].SetActive(false);
-            }
+            hotbar[i].SetActive(false);
         }
     }
 }
