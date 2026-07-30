@@ -11,7 +11,8 @@ public enum PanelType {
     Auth,
     MultiplayerMatchmaking,
     PauseMenu,
-    BagMenu
+    BagMenu,
+    GameMenu,
 }
 
 public class MenuManager : MonoBehaviour {
@@ -59,10 +60,12 @@ public class MenuManager : MonoBehaviour {
     }
 
     public void SetActivePanelOnly(PanelType panelType) {
-        if (GameState.isPlaying) {
-            inGameBackground.SetActive(true);
-        } else {
-            background.SetActive(true);
+        if (panelType != PanelType.GameMenu) {
+            if (GameState.isPlaying) {
+                inGameBackground.SetActive(true);
+            } else {
+                background.SetActive(true);
+            }
         }
 
         foreach (var pair in panelDict) {
@@ -91,7 +94,7 @@ public class MenuManager : MonoBehaviour {
         return false;
     }
 
-    public void HideMenu() {
+    public void HideMenu(bool includeGameMenu = false) {
         background.SetActive(false);
         inGameBackground.SetActive(false);
 
@@ -99,6 +102,10 @@ public class MenuManager : MonoBehaviour {
             if (pair.Value != null) {
                 pair.Value.SetActive(false);
             }
+        }
+
+        if (!includeGameMenu && GameState.isPlaying) {
+            SetActivePanelOnly(PanelType.GameMenu);
         }
 
         Debug.Log("Hiding all UI panels.");

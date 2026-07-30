@@ -83,4 +83,37 @@ public static class ObjectControll {
         if (unityObj is Component comp) return comp.gameObject;
         return null;
     }
+
+    public static void MatchParentSize<T>(T target) where T : Object {
+        if (target == null) {
+            Debug.LogError("[UIUtility] Target object is null!");
+            return;
+        }
+
+        RectTransform rectTransform = GetRectTransform(target);
+        if (rectTransform == null) {
+            Debug.LogWarning($"[UIUtility] Target '{target.name}' does not have a RectTransform!");
+            return;
+        }
+
+        if (rectTransform.parent == null) {
+            Debug.LogWarning($"[UIUtility] Target '{target.name}' does not have a parent!");
+            return;
+        }
+
+        rectTransform.anchorMin = Vector2.zero;
+        rectTransform.anchorMax = Vector2.one;
+
+        rectTransform.offsetMin = Vector2.zero; // Left, Bottom
+        rectTransform.offsetMax = Vector2.zero; // Right, Top
+
+        rectTransform.pivot = new Vector2(0.5f, 0.5f);
+    }
+
+    private static RectTransform GetRectTransform(Object unityObj) {
+        if (unityObj == null) return null;
+        if (unityObj is GameObject go) return go.GetComponent<RectTransform>();
+        if (unityObj is Component comp) return comp.GetComponent<RectTransform>();
+        return null;
+    }
 }

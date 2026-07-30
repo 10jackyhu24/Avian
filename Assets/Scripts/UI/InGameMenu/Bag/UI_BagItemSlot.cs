@@ -27,9 +27,13 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
 
     private UI_DragDropManager dragDropManager;
 
+    private SelectCover selectCover;
+
     private void Awake() {
         BindReferences();
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
+        selectCover = GetComponent<SelectCover>();
+        selectCover.Init(this.gameObject);
     }
 
     public void UpdateSlotUI(BagSlotData slotData) {
@@ -119,6 +123,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
+        selectCover.Show();
         dragDropManager.OnBagItemSlotBeginDrag(this);
     }
 
@@ -127,6 +132,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
     }
 
     public void OnEndDrag(PointerEventData eventData) {
+        selectCover.Hide();
         dragDropManager.OnDragEnd();
     }
 

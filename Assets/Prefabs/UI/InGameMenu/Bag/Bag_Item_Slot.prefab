@@ -362,6 +362,7 @@ GameObject:
   - component: {fileID: 2795095128039798949}
   - component: {fileID: 8346308682837056723}
   - component: {fileID: 200246959082741781}
+  - component: {fileID: -5117452681186585322}
   m_Layer: 5
   m_Name: Bag_Item_Slot
   m_TagString: Untagged
@@ -467,6 +468,20 @@ CanvasGroup:
   m_Interactable: 1
   m_BlocksRaycasts: 1
   m_IgnoreParentGroups: 0
+--- !u!114 &-5117452681186585322
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4927423727764199709}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 18cc1ce9684604b499313eb34bc7652a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::SelectCover
+  coverPrefab: {fileID: 1717051034467247115, guid: b802090cea61d2e428411c25e0cc4fde,
+    type: 3}
 --- !u!1 &6666752839287844245
 GameObject:
   m_ObjectHideFlags: 0
@@ -560,6 +575,7 @@ MonoBehaviour:
   emptyRoot: {fileID: 0}
   filledRoot: {fileID: 0}
   slotTypeText: {fileID: 0}
+  canvasGroup: {fileID: 0}
 --- !u!1 &7692694704057821698
 GameObject:
   m_ObjectHideFlags: 0
@@ -691,6 +707,7 @@ MonoBehaviour:
   emptyRoot: {fileID: 0}
   filledRoot: {fileID: 0}
   slotTypeText: {fileID: 0}
+  canvasGroup: {fileID: 0}
 --- !u!1 &8166512268986328001
 GameObject:
   m_ObjectHideFlags: 0
@@ -784,3 +801,4 @@ MonoBehaviour:
   emptyRoot: {fileID: 0}
   filledRoot: {fileID: 0}
   slotTypeText: {fileID: 0}
+  canvasGroup: {fileID: 0}

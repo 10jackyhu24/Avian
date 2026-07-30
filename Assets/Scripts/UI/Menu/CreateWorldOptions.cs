@@ -44,9 +44,8 @@ public class CreateWorldOptions : MonoBehaviour {
             NetworkManager.Singleton.StartHost();
         }
 
+        GameState.SetWorld("singleplayer", seed);
         menuManager.HideMenu();
         menuManager.ClearHistory();
-
-        GameState.SetWorld("singleplayer", seed);
     }
 }
