@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
-using Utils;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
@@ -16,7 +15,7 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private List<UI_BagItemSlot> itemSlots = new List<UI_BagItemSlot>();
 
     // Data source for the inventory
-    private List<BagSlotData> bagDataList = new List<BagSlotData>();
+    public List<BagSlotData> bagDataList = new List<BagSlotData>();
 
     private static readonly AttachmentType[] DefaultWeaponAttachmentTypes = {
         AttachmentType.AttackSpeed,
@@ -25,7 +24,7 @@ public class UI_BagManager : MonoBehaviour {
     };
 
     private void Awake() {
-        Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
+        Dictionary<string, ItemData> items = ItemManager.items;
         AddItem(items["Gun"]);
         AddItem(items["Gun2"]);
         AddItem(items["Gun3"]);

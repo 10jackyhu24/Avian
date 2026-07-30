@@ -29,6 +29,7 @@ public class MenuManager : MonoBehaviour {
 
     public readonly Stack<PanelType> pageHistoryStack = new Stack<PanelType>();
     private readonly Dictionary<PanelType, GameObject> panelDict = new Dictionary<PanelType, GameObject>();
+    private GameMenu gameMenu;
 
     private void Awake() {
         foreach (var data in uiPanels) {
@@ -42,6 +43,7 @@ public class MenuManager : MonoBehaviour {
                 Debug.LogError($"Duplicate panel types: {data.panelType}", this);
             }
         }
+        gameMenu = GetComponent<GameMenu>();
     }
 
     public void Start() {
@@ -105,6 +107,7 @@ public class MenuManager : MonoBehaviour {
         }
 
         if (!includeGameMenu && GameState.isPlaying) {
+            gameMenu.Refresh();
             SetActivePanelOnly(PanelType.GameMenu);
         }
 
