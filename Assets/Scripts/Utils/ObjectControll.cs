@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 public static class ObjectControll {
     public static void MoveToIndex<T>(T component, int targetIndex) where T : Component {
@@ -114,6 +115,41 @@ public static class ObjectControll {
         if (unityObj == null) return null;
         if (unityObj is GameObject go) return go.GetComponent<RectTransform>();
         if (unityObj is Component comp) return comp.GetComponent<RectTransform>();
+        return null;
+    }
+
+    public static void ClearChildren<T>(T parent, string targetName = null, bool immediate = false) where T : Object {
+        Transform parentTransform = GetTransform(parent);
+
+        if (parentTransform == null) {
+            Debug.LogError("[TransformUtility] Parent object is null or missing Transform!");
+            return;
+        }
+
+        // Collect matching child GameObjects to avoid index mismatch during destruction
+        List<GameObject> childrenToDestroy = new List<GameObject>();
+        bool filterByName = !string.IsNullOrEmpty(targetName);
+
+        foreach (Transform child in parentTransform) {
+            if (!filterByName || child.name.Equals(targetName)) {
+                childrenToDestroy.Add(child.gameObject);
+            }
+        }
+
+        // Destroy collected child GameObjects
+        foreach (GameObject child in childrenToDestroy) {
+            if (immediate) {
+                Object.DestroyImmediate(child);
+            } else {
+                Object.Destroy(child);
+            }
+        }
+    }
+
+    private static Transform GetTransform(Object unityObj) {
+        if (unityObj == null) return null;
+        if (unityObj is GameObject go) return go.transform;
+        if (unityObj is Component comp) return comp.transform;
         return null;
     }
 }

@@ -5,14 +5,11 @@ using TMPro;
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
     [SerializeField] private int maxCapacity = 100;
-    [SerializeField] private TextMeshProUGUI totalCapacityText; // Top black text ("80/100")
+    [SerializeField] private TextMeshProUGUI totalCapacityText;
 
     [Header("UI Spawn Setup")]
     [SerializeField] private Transform contentRoot;
     [SerializeField] private UI_BagItemSlot itemSlotPrefab;
-
-    [Header("Runtime Slots")]
-    [SerializeField] private List<UI_BagItemSlot> itemSlots = new List<UI_BagItemSlot>();
 
     // Data source for the inventory
     public List<BagSlotData> bagDataList = new List<BagSlotData>();
@@ -36,14 +33,14 @@ public class UI_BagManager : MonoBehaviour {
         RebuildSlots();
     }
 
-    public UI_BagItemSlot AddItem(ItemObject itemObject, int count = 1) {
-        return AddItem(ItemData.FromItemObject(itemObject), count);
+    public void AddItem(ItemObject itemObject, int count = 1) {
+        AddItem(ItemData.FromItemObject(itemObject), count);
     }
 
-    public UI_BagItemSlot AddItem(ItemData itemData, int count = 1, params AttachmentType[] requiredAttachmentTypes) {
+    public void AddItem(ItemData itemData, int count = 1, params AttachmentType[] requiredAttachmentTypes) {
         if (itemData.itemObject == null || itemData.itemType == ItemType.Empty) {
             Debug.LogWarning("[UI_BagManager] AddItem failed because the item data is empty.");
-            return null;
+            return;
         }
 
         count = Mathf.Clamp(count, 1, Mathf.Max(1, itemData.itemObject.maxCount));
@@ -64,24 +61,14 @@ public class UI_BagManager : MonoBehaviour {
         int itemWeight = slotData.GetTotalWeight();
         if (!CanAddItem(itemWeight)) {
             Debug.LogWarning($"[UI_BagManager] AddItem blocked. '{itemData.itemObject.itemName}' would exceed capacity.");
-            return null;
+            return;
         }
 
         bagDataList.Add(slotData);
         UpdateCapacityLabel();
-        return SpawnSlot(slotData);
+        SpawnSlot(slotData);
     }
 
-    /// <summary>
-    /// Gets the index of a bag item slot in the current list
-    /// </summary>
-    public int GetSlotIndex(UI_BagItemSlot slot) {
-        return itemSlots.IndexOf(slot);
-    }
-
-    /// <summary>
-    /// Moves a slot from one index to another and rebuilds UI
-    /// </summary>
     public void MoveSlot(int fromIndex, int toIndex) {
         if (fromIndex < 0 || fromIndex >= bagDataList.Count || 
             toIndex < 0 || toIndex > bagDataList.Count) {
@@ -125,7 +112,6 @@ public class UI_BagManager : MonoBehaviour {
 
     public void ClearBag() {
         bagDataList.Clear();
-        ClearSpawnedSlots();
         UpdateCapacityLabel();
     }
 
@@ -145,38 +131,31 @@ public class UI_BagManager : MonoBehaviour {
         }
     }
 
-    private UI_BagItemSlot SpawnSlot(BagSlotData slotData) {
+    private void SpawnSlot(BagSlotData slotData) {
         if (slotData == null) {
-            return null;
+            return;
         }
 
         if (itemSlotPrefab == null) {
             Debug.LogWarning("[UI_BagManager] itemSlotPrefab is not assigned.");
-            return null;
+            return;
         }
 
         GameObject spawnedObject = PrefabSpawn.SpawnInit(itemSlotPrefab.gameObject, contentRoot);
         if (spawnedObject == null) {
-            return null;
+            return;
         }
 
         UI_BagItemSlot slotView = spawnedObject.GetComponent<UI_BagItemSlot>();
         if (slotView == null) {
             Debug.LogWarning("[UI_BagManager] Spawned prefab does not have UI_BagItemSlot.");
-            return null;
+            return;
         }
 
-        itemSlots.Add(slotView);
         slotView.UpdateSlotUI(slotData);
-        return slotView;
     }
 
     private void ClearSpawnedSlots() {
-        for (int i = 0; i < itemSlots.Count; i++) {
-            if (itemSlots[i] != null) {
-                Destroy(itemSlots[i].gameObject);
-            }
-        }
-        itemSlots.Clear();
+        ObjectControll.ClearChildren(contentRoot, "Bag_Item_Slot(Clone)");
     }
 }

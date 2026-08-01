@@ -9,10 +9,6 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
 
     [Header("Views")]
     [SerializeField] private Image iconImage;
-    [SerializeField] private GameObject emptyRoot;
-    [SerializeField] private GameObject filledRoot;
-    [SerializeField] private TextMeshProUGUI slotTypeText;
-    [SerializeField] private CanvasGroup canvasGroup;
 
     public AttachmentType SlotType => slotType;
     public ItemData CurrentAttachment { get; private set; }
@@ -20,80 +16,16 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     private AttachmentSlotData boundAttachmentSlotData;
     private UI_DragDropManager dragDropManager;
 
+    private SelectCover selectCover;
+
     private void Awake() {
-        ApplyVisualState(CurrentAttachment);
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
+        selectCover = GetComponent<SelectCover>();
+        selectCover.Init(gameObject);
     }
 
     private void OnValidate() {
 
-    }
-
-    public void SetupSlot(AttachmentType type, ItemData currentItem) {
-        boundAttachmentSlotData = null;
-
-        if (type != AttachmentType.None) {
-            slotType = type;
-        }
-
-        CurrentAttachment = currentItem;
-        ApplyVisualState(currentItem);
-    }
-
-    public void SetupSlot(AttachmentSlotData attachmentSlotData) {
-        boundAttachmentSlotData = attachmentSlotData;
-
-        if (attachmentSlotData == null) {
-            CurrentAttachment = ItemData.Empty;
-            ApplyVisualState(CurrentAttachment);
-            return;
-        }
-
-        slotType = attachmentSlotData.requiredType;
-        CurrentAttachment = attachmentSlotData.attachedItem;
-        ApplyVisualState(CurrentAttachment);
-    }
-
-    public void ClearSlot() {
-        if (boundAttachmentSlotData != null) {
-            boundAttachmentSlotData.Clear();
-        }
-
-        CurrentAttachment = ItemData.Empty;
-        ApplyVisualState(CurrentAttachment);
-    }
-
-    public ItemData DetachAttachment() {
-        ItemData attachment = CurrentAttachment;
-
-        if (boundAttachmentSlotData != null) {
-            boundAttachmentSlotData.Clear();
-        }
-
-        CurrentAttachment = ItemData.Empty;
-        ApplyVisualState(CurrentAttachment);
-        return attachment;
-    }
-
-    private void ApplyVisualState(ItemData currentItem) {
-        bool hasItem = currentItem.itemObject != null && currentItem.itemType != ItemType.Empty;
-
-        if (slotTypeText != null) {
-            slotTypeText.text = slotType == AttachmentType.None ? string.Empty : slotType.ToString();
-        }
-
-        if (filledRoot != null) {
-            filledRoot.SetActive(hasItem);
-        }
-
-        if (emptyRoot != null) {
-            emptyRoot.SetActive(!hasItem);
-        }
-
-        if (iconImage != null) {
-            iconImage.enabled = hasItem && currentItem.itemObject.icon != null;
-            iconImage.sprite = hasItem ? currentItem.itemObject.icon : null;
-        }
     }
 
     // Validation method for drag and drop

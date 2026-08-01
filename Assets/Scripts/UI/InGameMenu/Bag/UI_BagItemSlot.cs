@@ -23,7 +23,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         "DamageBonus",
         "CriticalRate"
     };
-    [SerializeField] private List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>(); // Left, Middle, Right orange boxes
+    [SerializeField] private List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>();
 
     private UI_DragDropManager dragDropManager;
 
@@ -74,9 +74,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
                 if (attachmentSlots[i] == null) {
                     continue;
                 }
-                var attachData = slotData.attachments[i];
                 attachmentSlots[i].gameObject.SetActive(true);
-                attachmentSlots[i].SetupSlot(attachData);
             }
         } else {
             attachmentContainer.SetActive(false);
