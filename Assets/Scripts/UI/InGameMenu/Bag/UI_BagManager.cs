@@ -89,6 +89,19 @@ public class UI_BagManager : MonoBehaviour {
         RebuildSlots();
     }
 
+    public void RemoveSlot(int index) {
+        if (bagDataList == null || index < 0 || index >= bagDataList.Count) {
+            return;
+        }
+
+        bagDataList.RemoveAt(index);
+        RebuildSlots();
+    }
+
+    public void SetSlotAttachment() {
+        
+    }
+
     // Sum weight of all slots
     public int CalculateTotalWeight() {
         if (bagDataList == null) {
@@ -157,5 +170,13 @@ public class UI_BagManager : MonoBehaviour {
 
     private void ClearSpawnedSlots() {
         ObjectControll.ClearChildren(contentRoot, "Bag_Item_Slot(Clone)");
+    }
+
+    public int FindSlotIndex(UI_BagItemSlot slot) {
+        if (slot == null) {
+            return -1;
+        }
+
+        return ObjectControll.GetIndex(slot);
     }
 }

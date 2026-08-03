@@ -5,12 +5,11 @@ using UnityEngine.EventSystems;
 
 public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler {
     [Header("Slot Setup")]
-    [SerializeField] private AttachmentType slotType = AttachmentType.None;
+    [SerializeField] private ItemType itemType;
 
     [Header("Views")]
     [SerializeField] private Image iconImage;
 
-    public AttachmentType SlotType => slotType;
     public ItemData CurrentAttachment { get; private set; }
 
     private AttachmentSlotData boundAttachmentSlotData;
@@ -28,14 +27,6 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
 
     }
 
-    // Validation method for drag and drop
-    public bool CanEquipAttachment(ItemData incomingItem) {
-        if (incomingItem.itemObject == null) return false;
-        if (slotType == AttachmentType.None) return false;
-        if (incomingItem.attachmentType == AttachmentType.None) return false;
-        return incomingItem.attachmentType == slotType;
-    }
-
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
@@ -51,11 +42,19 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-
+        if (dragDropManager.IsAttachmentMatch(itemType) && eventData.dragging) {
+            dragDropManager.SetDraggedAttachment(this);
+            dragDropManager.Hide();
+            selectCover.Show();
+        }
     }
 
     public void OnPointerExit(PointerEventData eventData) {
-    
+        if (eventData.dragging) {
+            selectCover.Hide();
+            dragDropManager.SetDraggedAttachment(null);
+            dragDropManager.Show();
+        }
     }
     #endregion
 }

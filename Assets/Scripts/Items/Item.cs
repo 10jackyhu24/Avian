@@ -4,11 +4,9 @@ using UnityEngine;
 public enum ItemType {
     Empty,
     Weapon,
-    Attachment,
-    Consumable,
-    Material,
-    Quest,
-    Misc
+    AttackSpeed,
+    DamageBonus,
+    CriticalRate
 }
 
 // Types of attachment slots for weapons
@@ -24,6 +22,7 @@ public class ItemObject : ScriptableObject {
     public string itemName;
     public Sprite icon;
     public ItemType itemType;
+    public ItemEffect itemEffect;
     public bool isWeapon;
     public int maxCount = 1;
     public int baseWeight = 1;
@@ -54,7 +53,7 @@ public struct ItemData {
 
     public bool IsValid => itemObject != null && itemType != ItemType.Empty;
     public bool IsWeapon => itemObject != null && itemObject.IsWeapon;
-    public bool IsAttachment => itemObject != null && itemType == ItemType.Attachment;
+    // public bool IsAttachment => itemObject != null && itemType == ItemType.Attachment;
 }
 
 [System.Serializable]

@@ -7,14 +7,13 @@ public class UI_DragDropManager : MonoBehaviour {
         public UI_BagItemSlot draggedSlot;
         public UI_BagItemSlot hoveredSlot;
         public bool isAbove;
-        public bool isDraggingFromAttachment;
+        public UI_AttachmentSlot draggedAttachment;
     }
 
     [SerializeField] private Transform contentRoot;
     [SerializeField] private UI_DragIndicator dragIndicatorPrefab;
     private UI_DragIndicator dragIndicator;
     
-    // private UI_AttachmentSlot draggedAttachment;
     private UI_BagManager bagManager;
     
     private DragData dragData;
@@ -25,11 +24,14 @@ public class UI_DragDropManager : MonoBehaviour {
         dragIndicator.Hide();
     }
 
+    public void SetDraggedAttachment(UI_AttachmentSlot slot) {
+        dragData.draggedAttachment = slot;
+    }
+
     public void OnBagItemSlotBeginDrag(UI_BagItemSlot slot) {
         dragData.draggedSlot = slot;
         dragData.hoveredSlot = slot;
-        // dragData.draggedAttachment = null;
-        dragData.isDraggingFromAttachment = false;
+        dragData.draggedAttachment = null;
     }
 
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
@@ -39,14 +41,14 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public void OnDragEnd() {
-        if (dragData.isDraggingFromAttachment) {
-            HandleAttachmentDrop();
+        if (dragData.draggedAttachment != null) {
+            HandleAttachmentDropInSlot();
         } else {
             HandleSlotDropInBag();
         }
 
         dragData.draggedSlot = null;
-        // dragData.draggedAttachment = null;
+        dragData.draggedAttachment = null;
         dragData.hoveredSlot = null;
     }
 
@@ -55,6 +57,7 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public void OnBagItemSlotHover(Vector2 pointerPosition) {
+        if (dragData.draggedAttachment != null) return;
         RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
 
         // Convert mouse screen position to local position relative to slotRect
@@ -79,7 +82,26 @@ public class UI_DragDropManager : MonoBehaviour {
         bagManager.MoveSlot(begin, dragData.isAbove ? end : end + 1);
     }
 
-    private void HandleAttachmentDrop() {
+    private void HandleAttachmentDropInSlot() {
+        int remove_index = ObjectControll.GetIndex(dragData.draggedSlot);
+    }
 
+    public void Hide() {
+        dragIndicator.Hide();
+    }
+
+    public void Show() {
+        dragIndicator.ShowDirectly();
+    }
+
+    private int FindSlotIndex(UI_BagItemSlot slot) {
+        dragIndicator.Hide();
+        int index = bagManager.FindSlotIndex(slot);
+        dragIndicator.ShowDirectly();
+        return index;
+    }
+
+    public bool IsAttachmentMatch(ItemType itemType) {
+        return bagManager.bagDataList[FindSlotIndex(dragData.draggedSlot)].itemData.itemType == itemType;
     }
 }

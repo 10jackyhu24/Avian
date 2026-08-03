@@ -16,4 +16,8 @@ public class UI_DragIndicator : MonoBehaviour {
     public void Hide() {
         gameObject.SetActive(false);
     }
+
+    public void ShowDirectly() {
+            gameObject.SetActive(true);
+    }
 }
