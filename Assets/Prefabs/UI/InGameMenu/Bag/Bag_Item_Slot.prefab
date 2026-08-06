@@ -604,9 +604,9 @@ MonoBehaviour:
   - DamageBonus
   - CriticalRate
   attachmentSlots:
-  - {fileID: 4271756175076435165}
-  - {fileID: 8973457067226592030}
-  - {fileID: 3302507911466162444}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
 --- !u!225 &200246959082741781
 CanvasGroup:
   m_ObjectHideFlags: 0
@@ -644,7 +644,6 @@ GameObject:
   - component: {fileID: 1512278340159132966}
   - component: {fileID: 7339365470787763868}
   - component: {fileID: 2381774614854176179}
-  - component: {fileID: 3302507911466162444}
   - component: {fileID: 3774217842805688444}
   - component: {fileID: 5084238356294264354}
   m_Layer: 5
@@ -712,20 +711,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &3302507911466162444
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6666752839287844245}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 64a8b7437dc638a4a8dc1a70589f65ae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
-  itemType: 0
-  iconImage: {fileID: 8258120064935175737}
 --- !u!114 &3774217842805688444
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -740,6 +725,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
   itemType: 4
   iconImage: {fileID: 0}
+  selectCover: {fileID: 0}
 --- !u!114 &5084238356294264354
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -878,7 +864,6 @@ GameObject:
   - component: {fileID: 41383954535210236}
   - component: {fileID: 7247053686370787241}
   - component: {fileID: 4608280460690810786}
-  - component: {fileID: 4271756175076435165}
   - component: {fileID: 8686431464842248962}
   - component: {fileID: 479604567062270179}
   m_Layer: 5
@@ -946,20 +931,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &4271756175076435165
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8165721282045929142}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 64a8b7437dc638a4a8dc1a70589f65ae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
-  itemType: 0
-  iconImage: {fileID: 5934129434770442923}
 --- !u!114 &8686431464842248962
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -974,6 +945,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
   itemType: 2
   iconImage: {fileID: 0}
+  selectCover: {fileID: 0}
 --- !u!114 &479604567062270179
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -999,7 +971,6 @@ GameObject:
   - component: {fileID: 5810110234156463094}
   - component: {fileID: 2083380483568625728}
   - component: {fileID: 7580129554146079245}
-  - component: {fileID: 8973457067226592030}
   - component: {fileID: 2481809763597048546}
   - component: {fileID: 2237552316230018186}
   m_Layer: 5
@@ -1067,20 +1038,6 @@ MonoBehaviour:
   m_FillOrigin: 0
   m_UseSpriteMesh: 0
   m_PixelsPerUnitMultiplier: 1
---- !u!114 &8973457067226592030
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8166512268986328001}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 64a8b7437dc638a4a8dc1a70589f65ae, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
-  itemType: 0
-  iconImage: {fileID: 4064239175121867472}
 --- !u!114 &2481809763597048546
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1095,6 +1052,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UI_AttachmentSlot
   itemType: 3
   iconImage: {fileID: 0}
+  selectCover: {fileID: 0}
 --- !u!114 &2237552316230018186
 MonoBehaviour:
   m_ObjectHideFlags: 0

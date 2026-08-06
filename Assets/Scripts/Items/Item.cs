@@ -41,7 +41,16 @@ public struct ItemData {
         return new ItemData {
             itemType = itemObject != null ? itemObject.itemType : ItemType.Empty,
             itemObject = itemObject,
-            attachmentType = AttachmentType.None
+            attachmentType = itemObject != null ? GetAttachmentType(itemObject.itemType) : AttachmentType.None
+        };
+    }
+
+    private static AttachmentType GetAttachmentType(ItemType itemType) {
+        return itemType switch {
+            ItemType.AttackSpeed => AttachmentType.AttackSpeed,
+            ItemType.DamageBonus => AttachmentType.DamageBonus,
+            ItemType.CriticalRate => AttachmentType.CriticalRate,
+            _ => AttachmentType.None
         };
     }
 

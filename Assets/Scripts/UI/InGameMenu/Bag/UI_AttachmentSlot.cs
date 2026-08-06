@@ -7,15 +7,12 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     [Header("Slot Setup")]
     [SerializeField] private ItemType itemType;
 
-    [Header("Views")]
-    [SerializeField] private Image iconImage;
-
     public ItemData CurrentAttachment { get; private set; }
 
     private AttachmentSlotData boundAttachmentSlotData;
     private UI_DragDropManager dragDropManager;
 
-    private SelectCover selectCover;
+    public SelectCover selectCover;
 
     private void Awake() {
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
@@ -23,8 +20,36 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
         selectCover.Init(gameObject);
     }
 
-    private void OnValidate() {
+    public void BindAttachmentSlotData(AttachmentSlotData attachmentSlotData) {
+        boundAttachmentSlotData = attachmentSlotData;
+        if (boundAttachmentSlotData != null) {
+            setAttachment(boundAttachmentSlotData.attachedItem);
+        } else {
+            setAttachment(ItemData.Empty);
+        }
+    }
 
+    public void setAttachment(ItemData itemData) {
+        CurrentAttachment = itemData;
+
+        GameObject iconObject = UIBindingUtility.FindChildObject(gameObject, "Icon");
+        if (iconObject == null) {
+            return;
+        }
+
+        Image image = iconObject.GetComponent<Image>();
+        if (image == null) {
+            return;
+        }
+
+        if (itemData.itemObject == null) {
+            image.sprite = null;
+            image.enabled = false;
+            return;
+        }
+
+        image.sprite = itemData.itemObject.icon;
+        image.enabled = image.sprite != null;
     }
 
     #region Drag Drop Handlers
@@ -38,11 +63,11 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     public void OnEndDrag(PointerEventData eventData) {
-
+        
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-        if (dragDropManager.IsAttachmentMatch(itemType) && eventData.dragging) {
+        if (eventData.dragging && dragDropManager.IsAttachmentMatch(itemType)) {
             dragDropManager.SetDraggedAttachment(this);
             dragDropManager.Hide();
             selectCover.Show();

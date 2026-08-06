@@ -1,6 +1,5 @@
+using Unity.VisualScripting;
 using UnityEngine;
-using System.Collections.Generic;
-using UnityEngine.SceneManagement;
 
 public class UI_DragDropManager : MonoBehaviour {
     private struct DragData {
@@ -83,7 +82,15 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     private void HandleAttachmentDropInSlot() {
-        int remove_index = ObjectControll.GetIndex(dragData.draggedSlot);
+        dragIndicator.Hide();
+        int begin = ObjectControll.GetIndex(dragData.draggedSlot);
+        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
+        
+        dragData.draggedAttachment.selectCover.Hide();
+        ItemData itemData = bagManager.bagDataList[begin].itemData;
+        bagManager.SetAttachmentItem(end, itemData.attachmentType, itemData);
+
+        bagManager.RemoveSlot(begin);
     }
 
     public void Hide() {

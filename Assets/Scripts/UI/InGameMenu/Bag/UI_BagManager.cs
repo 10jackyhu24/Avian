@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
+using System.Net.Mail;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
@@ -25,6 +26,7 @@ public class UI_BagManager : MonoBehaviour {
         AddItem(items["Gun"]);
         AddItem(items["Gun2"]);
         AddItem(items["Gun3"]);
+        SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
     }
 
     // Refresh the entire bag UI and total capacity
@@ -67,6 +69,34 @@ public class UI_BagManager : MonoBehaviour {
         bagDataList.Add(slotData);
         UpdateCapacityLabel();
         SpawnSlot(slotData);
+    }
+
+    public bool SetAttachmentItem(int index, AttachmentType attachmentType, ItemData itemData) {
+        if (bagDataList == null || index < 0 || index >= bagDataList.Count) {
+            return false;
+        }
+
+        BagSlotData slotData = bagDataList[index];
+        if (slotData == null || slotData.attachments == null) {
+            return false;
+        }
+
+        for (int i = 0; i < slotData.attachments.Count; i++) {
+            AttachmentSlotData attachmentSlot = slotData.attachments[i];
+            if (attachmentSlot == null || attachmentSlot.requiredType != attachmentType) {
+                continue;
+            }
+
+            if (!attachmentSlot.CanAccept(itemData)) {
+                continue;
+            }
+
+            attachmentSlot.attachedItem = itemData;
+            RebuildSlots();
+            return true;
+        }
+
+        return false;
     }
 
     public void MoveSlot(int fromIndex, int toIndex) {
@@ -128,7 +158,7 @@ public class UI_BagManager : MonoBehaviour {
         UpdateCapacityLabel();
     }
 
-    private void RebuildSlots() {
+    public void RebuildSlots() {
         ClearSpawnedSlots();
 
         for (int i = 0; i < bagDataList.Count; i++) {
@@ -140,7 +170,7 @@ public class UI_BagManager : MonoBehaviour {
 
     private void UpdateCapacityLabel() {
         if (totalCapacityText != null) {
-            totalCapacityText.text = $"{CalculateTotalWeight()}/{maxCapacity}";
+            totalCapacityText.text = $"{CalculateTotalWeight()} / {maxCapacity}";
         }
     }
 

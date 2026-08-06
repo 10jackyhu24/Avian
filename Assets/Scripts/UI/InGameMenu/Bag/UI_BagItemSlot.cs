@@ -6,10 +6,10 @@ using TMPro;
 
 public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler {
     [Header("UI Component References")]
-    [SerializeField] private Image itemIcon;                 // Brown box (Icon)
-    [SerializeField] private TextMeshProUGUI weightText;     // Black text (Single slot weight)
-    [SerializeField] private TextMeshProUGUI countText;      // Green text ("1/1" or "3/64")
-    [SerializeField] private GameObject attachmentContainer; // Parent object for orange boxes
+    [SerializeField] private Image itemIcon;
+    [SerializeField] private TextMeshProUGUI weightText;
+    [SerializeField] private TextMeshProUGUI countText;
+    [SerializeField] private GameObject attachmentContainer;
 
     [Header("Auto Bind Names")]
     [SerializeField] private string iconChildName = "Icon";
@@ -23,7 +23,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         "DamageBonus",
         "CriticalRate"
     };
-    [SerializeField] private List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>();
+    public List<UI_AttachmentSlot> attachmentSlots = new List<UI_AttachmentSlot>();
 
     private UI_DragDropManager dragDropManager;
 
@@ -33,7 +33,11 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         BindReferences();
         dragDropManager = FindFirstObjectByType<UI_DragDropManager>();
         selectCover = GetComponent<SelectCover>();
-        selectCover.Init(this.gameObject);
+        selectCover.Init(gameObject);
+    }
+
+    public Sprite GetIcon() {
+        return itemIcon.sprite;
     }
 
     public void UpdateSlotUI(BagSlotData slotData) {
@@ -63,7 +67,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         // Render green count text
         if (countText != null) {
             int maxCount = Mathf.Max(1, slotData.itemData.itemObject.maxCount);
-            countText.text = $"{slotData.GetDisplayCount()}/{maxCount}";
+            countText.text = $"{slotData.GetDisplayCount()} / {maxCount}";
         }
 
         // Render Orange Attachment Boxes (Weapons Only)
@@ -75,6 +79,12 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
                     continue;
                 }
                 attachmentSlots[i].gameObject.SetActive(true);
+                // attachmentSlots[i].setAttachment(slotData.attachments[i].attachedItem);
+                if (i < slotData.attachments.Count) {
+                    attachmentSlots[i].BindAttachmentSlotData(slotData.attachments[i]);
+                } else {
+                    attachmentSlots[i].BindAttachmentSlotData(null);
+                }
             }
         } else {
             attachmentContainer.SetActive(false);
@@ -96,6 +106,7 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         for (int i = 0; i < attachmentSlots.Count; i++) {
             if (attachmentSlots[i] != null) {
                 attachmentSlots[i].gameObject.SetActive(false);
+                attachmentSlots[i].BindAttachmentSlotData(null);
             }
         }
     }
