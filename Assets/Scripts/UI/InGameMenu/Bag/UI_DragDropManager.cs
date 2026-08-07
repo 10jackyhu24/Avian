@@ -88,9 +88,9 @@ public class UI_DragDropManager : MonoBehaviour {
         
         dragData.draggedAttachment.selectCover.Hide();
         ItemData itemData = bagManager.bagDataList[begin].itemData;
-        bagManager.SetAttachmentItem(end, itemData.attachmentType, itemData);
-
-        bagManager.RemoveSlot(begin);
+        if (bagManager.SetAttachmentItem(end, itemData.attachmentType, itemData)) {
+            bagManager.RemoveSlot(begin);
+        }
     }
 
     public void Hide() {

@@ -88,7 +88,7 @@ public class UI_BagManager : MonoBehaviour {
             }
 
             if (!attachmentSlot.CanAccept(itemData)) {
-                continue;
+                return false;
             }
 
             attachmentSlot.attachedItem = itemData;

@@ -68,13 +68,14 @@ public struct ItemData {
 [System.Serializable]
 public class AttachmentSlotData {
     public AttachmentType requiredType;
-    public ItemData attachedItem; // Null if slot is empty
+    public ItemData attachedItem;
 
     public bool IsEmpty => attachedItem.itemObject == null || attachedItem.itemType == ItemType.Empty;
 
     public bool CanAccept(ItemData incomingItem) {
         if (incomingItem.itemObject == null) return false;
         if (requiredType == AttachmentType.None) return false;
+        if (attachedItem.itemType != ItemType.Empty) return false;
         return incomingItem.attachmentType == requiredType;
     }
 
