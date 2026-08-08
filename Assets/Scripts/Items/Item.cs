@@ -45,7 +45,7 @@ public struct ItemData {
         };
     }
 
-    private static AttachmentType GetAttachmentType(ItemType itemType) {
+    public static AttachmentType GetAttachmentType(ItemType itemType) {
         return itemType switch {
             ItemType.AttackSpeed => AttachmentType.AttackSpeed,
             ItemType.DamageBonus => AttachmentType.DamageBonus,

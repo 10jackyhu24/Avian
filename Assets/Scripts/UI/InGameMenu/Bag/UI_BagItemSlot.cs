@@ -79,7 +79,6 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
                     continue;
                 }
                 attachmentSlots[i].gameObject.SetActive(true);
-                // attachmentSlots[i].setAttachment(slotData.attachments[i].attachedItem);
                 if (i < slotData.attachments.Count) {
                     attachmentSlots[i].BindAttachmentSlotData(slotData.attachments[i]);
                 } else {

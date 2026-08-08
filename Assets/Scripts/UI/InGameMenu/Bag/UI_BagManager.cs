@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using TMPro;
 using System.Net.Mail;
+using System.Runtime.CompilerServices;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
@@ -94,6 +95,26 @@ public class UI_BagManager : MonoBehaviour {
             attachmentSlot.attachedItem = itemData;
             RebuildSlots();
             return true;
+        }
+        return false;
+    }
+
+    public bool ClearAttachmentItem(int bagIndex, AttachmentType attachmentType) {
+        if (bagDataList == null || bagIndex < 0 || bagIndex >= bagDataList.Count) {
+            return false;
+        }
+
+        BagSlotData slotData = bagDataList[bagIndex];
+        if (slotData == null || slotData.attachments == null) {
+            return false;
+        }
+
+        foreach (var attachmentSlot in slotData.attachments) {
+            if (attachmentSlot != null && attachmentSlot.requiredType == attachmentType) {
+                attachmentSlot.Clear();
+                RebuildSlots();
+                return true;
+            }
         }
 
         return false;

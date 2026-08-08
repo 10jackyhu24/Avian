@@ -29,6 +29,10 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
         }
     }
 
+    public ItemType GetItemType() {
+        return itemType;
+    }
+
     public void setAttachment(ItemData itemData) {
         CurrentAttachment = itemData;
 
@@ -55,29 +59,31 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
-
+        selectCover.Show();
+        dragDropManager.OnAttachmentSlotBeginDrag(this);
     }
 
     public void OnDrag(PointerEventData eventData) {
-
+        dragDropManager.OnBagItemSlotHover(eventData.position);
     }
 
     public void OnEndDrag(PointerEventData eventData) {
-        
+        selectCover.Hide();
+        dragDropManager.OnDragEnd();
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
-        if (eventData.dragging && dragDropManager.IsAttachmentMatch(itemType)) {
-            dragDropManager.SetDraggedAttachment(this);
+        dragDropManager.SetHoverAttachment(this);
+        if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging && dragDropManager.IsAttachmentMatch(itemType)) {
             dragDropManager.Hide();
             selectCover.Show();
         }
     }
 
     public void OnPointerExit(PointerEventData eventData) {
-        if (eventData.dragging) {
+        dragDropManager.SetHoverAttachment(null);
+        if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging) {
             selectCover.Hide();
-            dragDropManager.SetDraggedAttachment(null);
             dragDropManager.Show();
         }
     }

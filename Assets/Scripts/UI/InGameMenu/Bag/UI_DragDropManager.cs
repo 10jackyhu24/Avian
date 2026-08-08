@@ -7,6 +7,7 @@ public class UI_DragDropManager : MonoBehaviour {
         public UI_BagItemSlot hoveredSlot;
         public bool isAbove;
         public UI_AttachmentSlot draggedAttachment;
+        public UI_AttachmentSlot hoverAttachment;
     }
 
     [SerializeField] private Transform contentRoot;
@@ -23,31 +24,47 @@ public class UI_DragDropManager : MonoBehaviour {
         dragIndicator.Hide();
     }
 
-    public void SetDraggedAttachment(UI_AttachmentSlot slot) {
-        dragData.draggedAttachment = slot;
+    public UI_AttachmentSlot GetCurrentDragAttachment() {
+        return dragData.draggedAttachment;
+    }
+
+    public void SetHoverAttachment(UI_AttachmentSlot slot) {
+        dragData.hoverAttachment = slot;
     }
 
     public void OnBagItemSlotBeginDrag(UI_BagItemSlot slot) {
+        dragData.draggedAttachment = null;
+        dragData.hoverAttachment = null;
         dragData.draggedSlot = slot;
         dragData.hoveredSlot = slot;
-        dragData.draggedAttachment = null;
     }
 
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
-        // draggedAttachment = slot;
-        // draggedSlot = null;
-        // isDraggingFromAttachment = true;
+        dragData.draggedAttachment = slot;
+        dragData.hoverAttachment = slot;
+        dragData.draggedSlot = null;
+        dragData.hoveredSlot = dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>();;
     }
 
     public void OnDragEnd() {
-        if (dragData.draggedAttachment != null) {
-            HandleAttachmentDropInSlot();
-        } else {
-            HandleSlotDropInBag();
+        dragIndicator.Hide();
+        if (dragData.draggedSlot != null) {
+            if (dragData.hoverAttachment != null) {
+                HandleAttachmentDropInSlot();
+            } else {
+                HandleSlotDropInBag();
+            }
+        }
+        else {
+            if (dragData.hoverAttachment != null) {
+                HandleAttachmentDropInAttachment();
+            } else {
+                HandleAttachmentDropInBag();
+            }
         }
 
         dragData.draggedSlot = null;
-        dragData.draggedAttachment = null;
+        dragData.hoverAttachment = null;
         dragData.hoveredSlot = null;
     }
 
@@ -56,7 +73,7 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public void OnBagItemSlotHover(Vector2 pointerPosition) {
-        if (dragData.draggedAttachment != null) return;
+        if (dragData.hoverAttachment != null) return;
         RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
 
         // Convert mouse screen position to local position relative to slotRect
@@ -75,22 +92,34 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     private void HandleSlotDropInBag() {
-        dragIndicator.Hide();
         int begin = ObjectControll.GetIndex(dragData.draggedSlot);
         int end = ObjectControll.GetIndex(dragData.hoveredSlot);
         bagManager.MoveSlot(begin, dragData.isAbove ? end : end + 1);
     }
 
     private void HandleAttachmentDropInSlot() {
-        dragIndicator.Hide();
         int begin = ObjectControll.GetIndex(dragData.draggedSlot);
         int end = ObjectControll.GetIndex(dragData.hoveredSlot);
         
-        dragData.draggedAttachment.selectCover.Hide();
+        dragData.hoverAttachment.selectCover.Hide();
         ItemData itemData = bagManager.bagDataList[begin].itemData;
         if (bagManager.SetAttachmentItem(end, itemData.attachmentType, itemData)) {
             bagManager.RemoveSlot(begin);
         }
+    }
+
+    private void HandleAttachmentDropInAttachment() {
+        int begin = ObjectControll.GetIndex(dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>());
+        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
+
+        dragData.hoverAttachment.selectCover.Hide();
+        bagManager.SetAttachmentItem(end, ItemData.GetAttachmentType(dragData.hoverAttachment.GetItemType()), dragData.draggedAttachment.CurrentAttachment);
+        bagManager.ClearAttachmentItem(begin, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
+    }
+
+    private void HandleAttachmentDropInBag() {
+        int begin = ObjectControll.GetIndex(dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>());
+        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
     }
 
     public void Hide() {
@@ -109,6 +138,10 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public bool IsAttachmentMatch(ItemType itemType) {
-        return bagManager.bagDataList[FindSlotIndex(dragData.draggedSlot)].itemData.itemType == itemType;
+        if (dragData.draggedSlot != null)
+            return bagManager.bagDataList[FindSlotIndex(dragData.draggedSlot)].itemData.itemType == itemType;
+        if (dragData.hoverAttachment != null)
+            return dragData.draggedAttachment.GetItemType() == itemType;
+        return false;
     }
 }
