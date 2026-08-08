@@ -3,6 +3,7 @@ using UnityEngine;
 using TMPro;
 using System.Net.Mail;
 using System.Runtime.CompilerServices;
+using UnityEngine.Rendering;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
@@ -40,7 +41,7 @@ public class UI_BagManager : MonoBehaviour {
         AddItem(ItemData.FromItemObject(itemObject), count);
     }
 
-    public void AddItem(ItemData itemData, int count = 1, params AttachmentType[] requiredAttachmentTypes) {
+    public void AddItem(ItemData itemData, int count = 1, int insert_index = -1, params AttachmentType[] requiredAttachmentTypes) {
         if (itemData.itemObject == null || itemData.itemType == ItemType.Empty) {
             Debug.LogWarning("[UI_BagManager] AddItem failed because the item data is empty.");
             return;
@@ -67,9 +68,16 @@ public class UI_BagManager : MonoBehaviour {
             return;
         }
 
-        bagDataList.Add(slotData);
-        UpdateCapacityLabel();
-        SpawnSlot(slotData);
+        if (insert_index == -1) {
+            bagDataList.Add(slotData);
+            UpdateCapacityLabel();
+            SpawnSlot(slotData);
+        }
+        else {
+            bagDataList.Insert(insert_index, slotData);
+            UpdateCapacityLabel();
+            RebuildSlots();
+        }
     }
 
     public bool SetAttachmentItem(int index, AttachmentType attachmentType, ItemData itemData) {

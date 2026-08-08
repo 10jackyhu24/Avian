@@ -126,6 +126,8 @@ public class UI_DragDropManager : MonoBehaviour {
     private void HandleAttachmentDropInBag() {
         int begin = ObjectControll.GetIndex(dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>());
         int end = ObjectControll.GetIndex(dragData.hoveredSlot);
+        bagManager.ClearAttachmentItem(begin, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
+        bagManager.AddItem(dragData.draggedAttachment.CurrentAttachment, 1, dragData.isAbove ? end : end + 1);
     }
 
     public void Hide() {
