@@ -59,20 +59,24 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     #region Drag Drop Handlers
 
     public void OnBeginDrag(PointerEventData eventData) {
+        if (CurrentAttachment.itemType == ItemType.Empty) return;
         selectCover.Show();
         dragDropManager.OnAttachmentSlotBeginDrag(this);
     }
 
     public void OnDrag(PointerEventData eventData) {
+        if (CurrentAttachment.itemType == ItemType.Empty) return;
         dragDropManager.OnBagItemSlotHover(eventData.position);
     }
 
     public void OnEndDrag(PointerEventData eventData) {
+        if (CurrentAttachment.itemType == ItemType.Empty) return;
         selectCover.Hide();
         dragDropManager.OnDragEnd();
     }
 
     public void OnPointerEnter(PointerEventData eventData) {
+        if (dragDropManager.GetCurrentDragAttachment() == null && dragDropManager.GetCurrentDragSlot() == null) return;
         dragDropManager.SetHoverAttachment(this);
         if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging && dragDropManager.IsAttachmentMatch(itemType)) {
             dragDropManager.Hide();
@@ -81,6 +85,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     public void OnPointerExit(PointerEventData eventData) {
+        if (dragDropManager.GetCurrentDragAttachment() == null && dragDropManager.GetCurrentDragSlot() == null) return;
         dragDropManager.SetHoverAttachment(null);
         if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging) {
             selectCover.Hide();

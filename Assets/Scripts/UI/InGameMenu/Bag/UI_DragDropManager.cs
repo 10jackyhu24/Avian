@@ -24,6 +24,10 @@ public class UI_DragDropManager : MonoBehaviour {
         dragIndicator.Hide();
     }
 
+    public UI_BagItemSlot GetCurrentDragSlot() {
+        return dragData.draggedSlot;
+    }
+
     public UI_AttachmentSlot GetCurrentDragAttachment() {
         return dragData.draggedAttachment;
     }
@@ -113,8 +117,10 @@ public class UI_DragDropManager : MonoBehaviour {
         int end = ObjectControll.GetIndex(dragData.hoveredSlot);
 
         dragData.hoverAttachment.selectCover.Hide();
-        bagManager.SetAttachmentItem(end, ItemData.GetAttachmentType(dragData.hoverAttachment.GetItemType()), dragData.draggedAttachment.CurrentAttachment);
-        bagManager.ClearAttachmentItem(begin, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
+        if (dragData.hoverAttachment.CurrentAttachment.itemType == ItemType.Empty) {
+            bagManager.SetAttachmentItem(end, ItemData.GetAttachmentType(dragData.hoverAttachment.GetItemType()), dragData.draggedAttachment.CurrentAttachment);
+            bagManager.ClearAttachmentItem(begin, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
+        }
     }
 
     private void HandleAttachmentDropInBag() {
