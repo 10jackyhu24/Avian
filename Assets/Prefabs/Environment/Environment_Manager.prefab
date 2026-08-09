@@ -66,22 +66,22 @@ MonoBehaviour:
     prefab: {fileID: 7738056446591884632, guid: 32afcb44902ee13418fdb1433821d639,
       type: 3}
     enabled: 1
-    cellSize: 80
+    cellSize: 20
     spawnChance: 0.953
     heightOffset: 1.04
-    originClearRadius: 40
-    minimumSpacing: 40
-    allowedBiomes: 28
+    originClearRadius: 10
+    minimumSpacing: 20
+    allowedBiomes: -1
   - structureName: Village Structures
     prefab: {fileID: 5512791733700908414, guid: 9b6526018d439bf4e9eff6e803f4fff7,
       type: 3}
     enabled: 1
-    cellSize: 120
-    spawnChance: 0.962
-    heightOffset: 0.05
-    originClearRadius: 60
-    minimumSpacing: 80
-    allowedBiomes: 28
+    cellSize: 50
+    spawnChance: 0.994
+    heightOffset: 1.8
+    originClearRadius: 20
+    minimumSpacing: 20
+    allowedBiomes: -1
   deepOceanTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
   shallowWaterTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
   desertTexture: {fileID: 2800000, guid: 9dd88807792ab164da5354486b08ab22, type: 3}

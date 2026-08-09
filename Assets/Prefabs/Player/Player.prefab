@@ -128,7 +128,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 2.5
+  moveSpeed: 24.21
+  runSpeedMultiplier: 1.75
   jumpHeight: 3.11
   gravity: -20
   maxHealth: 100
