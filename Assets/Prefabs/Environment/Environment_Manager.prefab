@@ -1,0 +1,90 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &695469539682409197
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7884323742714956714}
+  - component: {fileID: 8449868963686732794}
+  m_Layer: 0
+  m_Name: Environment_Manager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7884323742714956714
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 695469539682409197}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &8449868963686732794
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 695469539682409197}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0db0aec0da9744e43866b7a4d5cf9832, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cubePrefab: {fileID: 351351210267285089, guid: 154cdeedd4150004c92f9988f65ab779,
+    type: 3}
+  size: 1000
+  flatHeight: 0
+  biomeScale: 0.03
+  updateStride: 4
+  generationBiasZ: 40
+  viewDistance: 50
+  rotationThreshold: 3
+  generateOnStartFromGameState: 1
+  housePrefab: {fileID: 7738056446591884632, guid: 32afcb44902ee13418fdb1433821d639,
+    type: 3}
+  spawnHouses: 1
+  structureCellSize: 24
+  houseSpawnChance: 0.972
+  houseHeightOffset: 1.04
+  houseOriginClearRadius: 20
+  structureSpawnOptions:
+  - structureName: Outskirt House
+    prefab: {fileID: 7738056446591884632, guid: 32afcb44902ee13418fdb1433821d639,
+      type: 3}
+    enabled: 1
+    cellSize: 20
+    spawnChance: 0.953
+    heightOffset: 1.04
+    originClearRadius: 10
+    minimumSpacing: 20
+    allowedBiomes: -1
+  - structureName: Village Structures
+    prefab: {fileID: 5512791733700908414, guid: 9b6526018d439bf4e9eff6e803f4fff7,
+      type: 3}
+    enabled: 1
+    cellSize: 50
+    spawnChance: 0.994
+    heightOffset: 1.8
+    originClearRadius: 20
+    minimumSpacing: 20
+    allowedBiomes: -1
+  deepOceanTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
+  shallowWaterTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
+  desertTexture: {fileID: 2800000, guid: 9dd88807792ab164da5354486b08ab22, type: 3}
+  grasslandTexture: {fileID: 2800000, guid: ffde7a320ae9700438f37016ecfbd42e, type: 3}
+  rainforestTexture: {fileID: 2800000, guid: ffde7a320ae9700438f37016ecfbd42e, type: 3}
+  mountainTexture: {fileID: 2800000, guid: af5f0bc60c6d9a340a1f5524a773efde, type: 3}

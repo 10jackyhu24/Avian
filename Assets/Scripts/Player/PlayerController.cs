@@ -34,6 +34,16 @@ public class PlayerController : NetworkBehaviour {
         writePerm: NetworkVariableWritePermission.Server
     );
 
+    private readonly NetworkVariable<bool> isMovingVisual = new NetworkVariable<bool>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+
+    private readonly NetworkVariable<bool> isFacingLeftVisual = new NetworkVariable<bool>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+
     private float verticalVelocity;
     private float moveInputX;
     private float moveInputZ;
@@ -69,6 +79,9 @@ public class PlayerController : NetworkBehaviour {
         }
 
         currentHealth.OnValueChanged += OnHealthChanged;
+        isMovingVisual.OnValueChanged += OnIsMovingVisualChanged;
+        isFacingLeftVisual.OnValueChanged += OnIsFacingLeftVisualChanged;
+        ApplyVisualState(isMovingVisual.Value, isFacingLeftVisual.Value);
 
         if (!IsOwner) {
             return;
@@ -84,6 +97,8 @@ public class PlayerController : NetworkBehaviour {
 
     public override void OnNetworkDespawn() {
         currentHealth.OnValueChanged -= OnHealthChanged;
+        isMovingVisual.OnValueChanged -= OnIsMovingVisualChanged;
+        isFacingLeftVisual.OnValueChanged -= OnIsFacingLeftVisualChanged;
         inputActions.Player.Disable();
     }
 
@@ -203,12 +218,9 @@ public class PlayerController : NetworkBehaviour {
         bool isMoving = moveDirection.sqrMagnitude > 0f;
         bool isRunning = isMoving && runRequested;
 
+        isMovingVisual.Value = isMoving;
         if (isMoving && Mathf.Abs(moveInputX) > 0f) {
-            spriteRenderer.flipX = moveInputX < 0f;
-        }
-
-        if (animator != null) {
-            animator.SetBool("isMoving", isMoving);
+            isFacingLeftVisual.Value = moveInputX < 0f;
         }
 
         if (jumpRequested && characterController.isGrounded) {
@@ -261,6 +273,24 @@ public class PlayerController : NetworkBehaviour {
 
     private void OnHealthChanged(int previousValue, int newValue) {
         Debug.Log($"[PlayerController] Client {OwnerClientId} health changed: {previousValue} -> {newValue}", this);
+    }
+
+    private void OnIsMovingVisualChanged(bool previousValue, bool newValue) {
+        ApplyVisualState(newValue, isFacingLeftVisual.Value);
+    }
+
+    private void OnIsFacingLeftVisualChanged(bool previousValue, bool newValue) {
+        ApplyVisualState(isMovingVisual.Value, newValue);
+    }
+
+    private void ApplyVisualState(bool isMoving, bool isFacingLeft) {
+        if (spriteRenderer != null) {
+            spriteRenderer.flipX = isFacingLeft;
+        }
+
+        if (animator != null) {
+            animator.SetBool("isMoving", isMoving);
+        }
     }
 
     private void HandleBindingOverridesChanged() {

@@ -1,5 +1,5 @@
 public static class URL {
-    public static string BaseUrl = "https://0968-219-69-234-213.ngrok-free.app";
+    public static string BaseUrl = "https://easiest-venally-paola.ngrok-free.dev";
 
     public static string AuthRegisterPath = "/auth/register";
     public static string AuthLoginPath = "/auth/login";
@@ -7,6 +7,9 @@ public static class URL {
 
     public static string MatchJoinPath = "/match/join";
     public static string MatchStatusPath = "/match/status";
+    public static string MatchCharacterSelectionPath = "/match/character-selection";
+    public static string MatchCharacterSelectionCancelPath = "/match/character-selection/cancel";
+    public static string MatchCharacterSelectionStatusPath = "/match/character-selection/status";
 
     public static string WorldRoomConfigPath = "/room";
 
