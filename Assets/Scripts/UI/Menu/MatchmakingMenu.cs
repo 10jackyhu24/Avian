@@ -128,14 +128,34 @@ public class MatchmakingMenu : MonoBehaviour {
         }
 
         Debug.Log($"[Matchmaking] Matched successfully: room={response.room_id}, seed={response.seed}, endpoint={response.world_endpoint}", this);
-        StartCoroutine(EnterWorldRoutine(response));
+        GameState.SetPendingMatchWorld(response.room_id, response.seed, response.world_endpoint);
+
+        if (menuManager == null) {
+            SetStatus(MatchmakingStatusText, "MenuManager not found.");
+            return;
+        }
+
+        menuManager.SwitchToPanel(PanelType.CharacterSelection);
     }
 
-    private IEnumerator EnterWorldRoutine(MatchmakerClient.MatchResponse response) {
-        GameState.SetWorld(response.room_id, response.seed);
+    public void ConnectToPendingMatchWorld() {
+        if (!GameState.hasPendingMatchWorld) {
+            warningWindow.Show("Match Missing", "No pending match found.");
+            return;
+        }
 
-        string endpoint = !string.IsNullOrWhiteSpace(response.world_endpoint)
-            ? response.world_endpoint
+        StartCoroutine(EnterWorldRoutine(
+            GameState.pendingMatchRoomId,
+            GameState.pendingMatchSeed,
+            GameState.pendingMatchEndpoint
+        ));
+    }
+
+    private IEnumerator EnterWorldRoutine(string roomId, int seed, string worldEndpoint) {
+        GameState.SetWorld(roomId, seed);
+
+        string endpoint = !string.IsNullOrWhiteSpace(worldEndpoint)
+            ? worldEndpoint
             : URL.WorldServer;
 
         if (!TryConnectToDedicatedServer(endpoint)) {

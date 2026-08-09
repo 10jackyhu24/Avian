@@ -14,6 +14,15 @@ class JoinRequest(BaseModel):
     username: str = Field(min_length=1, max_length=32)
 
 
+class CharacterSelectionRequest(BaseModel):
+    user_id: int = Field(gt=0)
+    character_id: str = Field(min_length=1, max_length=64)
+
+
+class CharacterSelectionCancelRequest(BaseModel):
+    user_id: int = Field(gt=0)
+
+
 @dataclass
 class QueueEntry:
     user_id: int
@@ -80,6 +89,7 @@ def join_match(payload: JoinRequest):
                 "seed": room_seed,
                 "players": [asdict(player_a), asdict(player_b)],
                 "world_endpoint": get_world_endpoint(),
+                "selected_characters": {},
             }
             matches_by_user_id[player_a.user_id] = match_payload
             matches_by_user_id[player_b.user_id] = match_payload
@@ -103,3 +113,54 @@ def match_status(user_id: int):
                 }
 
     raise HTTPException(status_code=404, detail="Match request not found")
+
+
+@app.post("/match/character-selection")
+def select_character(payload: CharacterSelectionRequest):
+    with queue_lock:
+        match_payload = get_match_for_user(payload.user_id)
+        selected_characters = match_payload.setdefault("selected_characters", {})
+        selected_characters[str(payload.user_id)] = payload.character_id
+        return build_character_selection_status(match_payload)
+
+
+@app.post("/match/character-selection/cancel")
+def cancel_character_selection(payload: CharacterSelectionCancelRequest):
+    with queue_lock:
+        match_payload = get_match_for_user(payload.user_id)
+        selected_characters = match_payload.setdefault("selected_characters", {})
+        selected_characters.pop(str(payload.user_id), None)
+        return build_character_selection_status(match_payload)
+
+
+@app.get("/match/character-selection/status/{user_id}")
+def character_selection_status(user_id: int):
+    with queue_lock:
+        match_payload = get_match_for_user(user_id)
+        return build_character_selection_status(match_payload)
+
+
+def get_match_for_user(user_id: int):
+    if user_id not in matches_by_user_id:
+        raise HTTPException(status_code=404, detail="Match request not found")
+
+    return matches_by_user_id[user_id]
+
+
+def build_character_selection_status(match_payload):
+    selected_characters = match_payload.setdefault("selected_characters", {})
+    players = match_payload.get("players", [])
+    all_ready = len(players) > 0 and all(
+        str(player["user_id"]) in selected_characters
+        for player in players
+    )
+
+    return {
+        "status": "ready" if all_ready else "waiting",
+        "all_ready": all_ready,
+        "room_id": match_payload["room_id"],
+        "seed": match_payload["seed"],
+        "world_endpoint": match_payload["world_endpoint"],
+        "selected_count": len(selected_characters),
+        "player_count": len(players),
+    }

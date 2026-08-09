@@ -13,6 +13,7 @@ public enum PanelType {
     PauseMenu,
     BagMenu,
     GameMenu,
+    CharacterSelection,
 }
 
 public class MenuManager : MonoBehaviour {
@@ -106,7 +107,10 @@ public class MenuManager : MonoBehaviour {
             }
         }
 
-        if (!includeGameMenu && GameState.isPlaying) {
+        if (!includeGameMenu &&
+            GameState.isPlaying &&
+            gameMenu != null &&
+            panelDict.ContainsKey(PanelType.GameMenu)) {
             gameMenu.Refresh();
             SetActivePanelOnly(PanelType.GameMenu);
         }

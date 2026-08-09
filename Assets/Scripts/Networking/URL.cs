@@ -7,6 +7,9 @@ public static class URL {
 
     public static string MatchJoinPath = "/match/join";
     public static string MatchStatusPath = "/match/status";
+    public static string MatchCharacterSelectionPath = "/match/character-selection";
+    public static string MatchCharacterSelectionCancelPath = "/match/character-selection/cancel";
+    public static string MatchCharacterSelectionStatusPath = "/match/character-selection/status";
 
     public static string WorldRoomConfigPath = "/room";
 

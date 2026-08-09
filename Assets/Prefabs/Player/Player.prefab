@@ -18,6 +18,7 @@ GameObject:
   - component: {fileID: -1130482964751066315}
   - component: {fileID: 4686765119304807775}
   - component: {fileID: 6334219223960730493}
+  - component: {fileID: 4901829517552619559}
   m_Layer: 3
   m_Name: Player
   m_TagString: Player
@@ -314,6 +315,29 @@ MonoBehaviour:
       MinSecondsBetweenUpdates: 0
       MaxSecondsBetweenUpdates: 0
     m_InternalValue: 0
+--- !u!114 &4901829517552619559
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 304439c3fee987d45ac65199786ab1d9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCharacterVisual
+  ShowTopMostFoldoutHeaderGroup: 1
+  defaultCharacterId: bird_01
+  visualOptions:
+  - characterId: bird_01
+    sprite: {fileID: 699465797, guid: c617073545eaeb6499d9c934024dfbba, type: 3}
+    animatorController: {fileID: 9100000, guid: 80437a1e144fa5341a2e50e608260548,
+      type: 2}
+  - characterId: bird_02
+    sprite: {fileID: -250909516, guid: e84a9b1728bc52644af3cc9fee406768, type: 3}
+    animatorController: {fileID: 9100000, guid: 0a3b2e5cec25c974c8ff0b076317aeb6,
+      type: 2}
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0
