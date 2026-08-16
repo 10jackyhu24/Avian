@@ -1,4 +1,5 @@
 using UnityEngine;
+using Unity.Netcode;
 
 [RequireComponent(typeof(CharacterController))]
 public class EnemyController : MonoBehaviour {
@@ -69,6 +70,12 @@ public class EnemyController : MonoBehaviour {
     }
 
     private void Update() {
+        if (NetworkManager.Singleton != null &&
+            NetworkManager.Singleton.IsListening &&
+            !NetworkManager.Singleton.IsServer) {
+            return;
+        }
+
         RefreshVisibilityState();
 
         if (isSuspendedByCamera) return;

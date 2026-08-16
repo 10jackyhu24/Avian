@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -10,6 +11,13 @@ public class ServerBootstrap : MonoBehaviour {
     [SerializeField] private string listenAddress = "0.0.0.0";
     [SerializeField] private int fallbackSeed = 100000;
     [SerializeField] private TerrainController terrainController;
+
+    [Header("Enemy Spawn")]
+    [SerializeField] private GameObject enemyPrefab;
+    [SerializeField] private int enemyCount = 3;
+    [SerializeField] private float enemySpawnDistance = 18f;
+
+    private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
 
     private void Start() {
         if (!startServerOnStart) {
@@ -46,6 +54,8 @@ public class ServerBootstrap : MonoBehaviour {
             PlayerSpawner.DefaultSpawnPosition,
             this
         );
+
+        SpawnEnemies();
     }
 
     private void OnDestroy() {
@@ -112,5 +122,33 @@ public class ServerBootstrap : MonoBehaviour {
 
         unityTransport.SetConnectionData(listenAddress, port, listenAddress);
         Debug.Log($"[ServerBootstrap] Listening on {listenAddress}:{port}", this);
+    }
+
+    private void SpawnEnemies() {
+        if (!NetworkManager.Singleton.IsServer || enemyPrefab == null || enemyCount <= 0 || spawnedEnemies.Count > 0) {
+            return;
+        }
+
+        for (int i = 0; i < enemyCount; i++) {
+            Vector3 enemySpawnPosition = GetEnemySpawnPosition(i);
+            GameObject enemyInstance = Instantiate(enemyPrefab, enemySpawnPosition, Quaternion.identity);
+            spawnedEnemies.Add(enemyInstance);
+
+            NetworkObject networkObject = enemyInstance.GetComponent<NetworkObject>();
+            if (networkObject != null) {
+                networkObject.Spawn(true);
+            }
+            else {
+                Debug.LogWarning("[ServerBootstrap] Enemy prefab is missing NetworkObject. Clients will not see this enemy.", this);
+            }
+        }
+
+        Debug.Log($"[ServerBootstrap] Spawned {spawnedEnemies.Count} enemy/enemies.", this);
+    }
+
+    private Vector3 GetEnemySpawnPosition(int index) {
+        float angle = enemyCount <= 0 ? 0f : (Mathf.PI * 2f * index) / enemyCount;
+        Vector3 offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * enemySpawnDistance;
+        return PlayerSpawner.DefaultSpawnPosition + offset;
     }
 }

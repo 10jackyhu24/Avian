@@ -17,6 +17,7 @@ public class PlayerSpawner : NetworkBehaviour {
     [SerializeField] private float enemySpawnDistance = 18f;
 
     private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
+    private bool serverSpawnInitialized;
     private readonly Color fallbackEnemyColor = new Color(0.85f, 0.2f, 0.2f);
     private static readonly Dictionary<NetworkManager, System.Action<ulong>> playerSpawnCallbacks =
         new Dictionary<NetworkManager, System.Action<ulong>>();
@@ -27,17 +28,30 @@ public class PlayerSpawner : NetworkBehaviour {
             return;
         }
 
-        if (!NetworkManager.Singleton.IsServer) {
-            Debug.Log("[PlayerSpawner] Not server, skipping spawn callback registration.", this);
+        NetworkManager.Singleton.OnServerStarted -= HandleServerStarted;
+        NetworkManager.Singleton.OnServerStarted += HandleServerStarted;
+
+        TryInitializeServerSpawns();
+    }
+
+    private void HandleServerStarted() {
+        TryInitializeServerSpawns();
+    }
+
+    private void TryInitializeServerSpawns() {
+        if (serverSpawnInitialized || NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer) {
             return;
         }
 
+        serverSpawnInitialized = true;
         RegisterPlayerSpawning(NetworkManager.Singleton, playerPrefab, spawnPosition, this);
+        SpawnEnemies();
         Debug.Log("[PlayerSpawner] Server spawn callback registered.", this);
     }
 
     private void OnDestroy() {
         if (NetworkManager.Singleton != null) {
+            NetworkManager.Singleton.OnServerStarted -= HandleServerStarted;
             UnregisterPlayerSpawning(NetworkManager.Singleton);
         }
     }
@@ -110,5 +124,33 @@ public class PlayerSpawner : NetworkBehaviour {
                 cameraController.SetTarget(spawnedPlayerInstance.transform);
             }
         }
+    }
+
+    private void SpawnEnemies() {
+        if (enemyPrefab == null || enemyCount <= 0) {
+            return;
+        }
+
+        for (int i = 0; i < enemyCount; i++) {
+            Vector3 enemySpawnPosition = GetEnemySpawnPosition(i);
+            GameObject enemyInstance = Instantiate(enemyPrefab, enemySpawnPosition, Quaternion.identity);
+            spawnedEnemies.Add(enemyInstance);
+
+            NetworkObject networkObject = enemyInstance.GetComponent<NetworkObject>();
+            if (networkObject != null) {
+                networkObject.Spawn(true);
+            }
+            else {
+                Debug.LogWarning("[PlayerSpawner] Enemy prefab is missing NetworkObject. Multiplayer clients will not see this enemy.", this);
+            }
+        }
+
+        Debug.Log($"[PlayerSpawner] Spawned {spawnedEnemies.Count} enemy/enemies.", this);
+    }
+
+    private Vector3 GetEnemySpawnPosition(int index) {
+        float angle = enemyCount <= 0 ? 0f : (Mathf.PI * 2f * index) / enemyCount;
+        Vector3 offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * enemySpawnDistance;
+        return spawnPosition + offset;
     }
 }
