@@ -102,6 +102,7 @@ GameObject:
   - component: {fileID: 5913609867441644666}
   - component: {fileID: 1638787825606188262}
   - component: {fileID: 7481262084395600334}
+  - component: {fileID: 8277829632379759708}
   m_Layer: 5
   m_Name: Bag
   m_TagString: Untagged
@@ -198,6 +199,18 @@ MonoBehaviour:
   m_OnValueChanged:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &8277829632379759708
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3360659344659599893}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b43323c461da0f144a6767c029ed5448, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Bag
 --- !u!1 &3730806176780241042
 GameObject:
   m_ObjectHideFlags: 0
