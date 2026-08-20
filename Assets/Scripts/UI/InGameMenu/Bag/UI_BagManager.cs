@@ -10,8 +10,14 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private int maxCapacity = 100;
     [SerializeField] private TextMeshProUGUI totalCapacityText;
 
+    [Header("Nearby Pickup Scan")]
+    [SerializeField] private float pickupScanRadius = 6f;
+    [SerializeField] private LayerMask pickupScanLayerMask = ~0;
+    [SerializeField] private List<Pickupable> nearbyPickupables = new List<Pickupable>();
+
     [Header("UI Spawn Setup")]
-    [SerializeField] private Transform contentRoot;
+    [SerializeField] private Transform bagContentRoot;
+    [SerializeField] private Transform pickupableContentRoot;
     [SerializeField] private UI_BagItemSlot itemSlotPrefab;
 
     // Data source for the inventory
@@ -29,6 +35,50 @@ public class UI_BagManager : MonoBehaviour {
         AddItem(items["Gun2"]);
         AddItem(items["Gun3"]);
         SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
+    }
+
+    public void RefreshNearbyPickupables() {
+        nearbyPickupables.Clear();
+
+        PlayerController player = FindFirstObjectByType<PlayerController>();
+        if (player == null) {
+            return;
+        }
+
+        Collider[] hits = Physics.OverlapSphere(
+            player.transform.position,
+            pickupScanRadius,
+            pickupScanLayerMask,
+            QueryTriggerInteraction.Collide
+        );
+
+        for (int i = 0; i < hits.Length; i++) {
+            if (hits[i] == null) {
+                continue;
+            }
+
+            Pickupable pickupable = hits[i].GetComponentInParent<Pickupable>();
+            if (pickupable == null || !pickupable.HasItem) {
+                continue;
+            }
+
+            if (!nearbyPickupables.Contains(pickupable)) {
+                nearbyPickupables.Add(pickupable);
+                Debug.Log(pickupable);
+            }
+        }
+    }
+
+    public IReadOnlyList<Pickupable> GetNearbyPickupables() {
+        return nearbyPickupables;
+    }
+
+    public void RefreshNearbyPickupablesUI() {
+        ClearSpawnedSlots();
+
+        foreach (var pickupable in nearbyPickupables) {
+            SpawnSlot(pickupable);
+        }
     }
 
     // Refresh the entire bag UI and total capacity
@@ -203,7 +253,8 @@ public class UI_BagManager : MonoBehaviour {
         }
     }
 
-    private void SpawnSlot(BagSlotData slotData) {
+    private void SpawnSlot(BagSlotData slotData, Transform contentroot=null) {
+        contentroot ??= bagContentRoot;
         if (slotData == null) {
             return;
         }
@@ -213,7 +264,7 @@ public class UI_BagManager : MonoBehaviour {
             return;
         }
 
-        GameObject spawnedObject = PrefabSpawn.SpawnInit(itemSlotPrefab.gameObject, contentRoot);
+        GameObject spawnedObject = PrefabSpawn.SpawnInit(itemSlotPrefab.gameObject, contentroot);
         if (spawnedObject == null) {
             return;
         }
@@ -227,8 +278,27 @@ public class UI_BagManager : MonoBehaviour {
         slotView.UpdateSlotUI(slotData);
     }
 
-    private void ClearSpawnedSlots() {
-        ObjectControll.ClearChildren(contentRoot, "Bag_Item_Slot(Clone)");
+    public void SpawnSlot(Pickupable pickupable) {
+        if (pickupable == null || !pickupable.HasItem) {
+            return;
+        }
+
+        ItemData itemData = ItemData.FromItemObject(pickupable.ItemObject);
+        BagSlotData slotData = new BagSlotData {
+            itemData = itemData,
+            count = 1
+        };
+
+        if (slotData.IsWeapon) {
+            slotData.EnsureAttachmentSlots(DefaultWeaponAttachmentTypes);
+        }
+
+        SpawnSlot(slotData, pickupableContentRoot);
+    }
+
+    public void ClearSpawnedSlots(Transform contentroot = null) {
+        contentroot ??= bagContentRoot;
+        ObjectControll.ClearChildren(contentroot, "Bag_Item_Slot(Clone)");
     }
 
     public int FindSlotIndex(UI_BagItemSlot slot) {
