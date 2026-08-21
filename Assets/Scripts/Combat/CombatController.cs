@@ -1,132 +1,169 @@
-using UnityEngine;
+﻿using System.Collections;
 using Unity.Netcode;
-using System.Collections;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
+/// <summary>Server-authoritative attacks for unarmed melee, weapon melee, and weapon ranged modes.</summary>
+public class CombatController : NetworkBehaviour{
+    public enum AttackMode { UnarmedMelee, WeaponMelee, WeaponRanged }
 
-public class CombatController : NetworkBehaviour
-{
-    [Header("Attack Setting")]
-    [SerializeField] private AttackData CurrentAttack; //讓腳本知道是哪種攻擊
-    [SerializeField] private Transform OriginPoint; //攻擊發起點(通常會放一個空的gameObj)
-    [SerializeField] private LayerMask TargetLayer; //目標layer 攻擊只作用在特定layer(打算用一個Enemy Layer，或是創一個"canAttack Layer")
+    [Header("Attack Mode")]
+    [SerializeField] private AttackMode attackMode = AttackMode.UnarmedMelee;
+    [SerializeField] private bool requireCombatState;
+
+    [Header("Shared Attack Settings")]
+    [FormerlySerializedAs("CurrentAttack")]
+    [SerializeField] private AttackData currentAttack;
+    [FormerlySerializedAs("OriginPoint")]
+    [SerializeField] private Transform originPoint;
+    [FormerlySerializedAs("TargetLayer")]
+    [SerializeField] private LayerMask targetLayer;
+
+    [Header("Unarmed Melee")]
+    // 【無武器攻擊圓圈半徑設定】半徑 = 角色寬度 × 此倍率。
+    [Tooltip("Unarmed radius = character width x this value.")]
+    [SerializeField] private float unarmedRadiusWidthMultiplier = 2f;
+    // 找不到 CharacterController / CapsuleCollider 時使用的固定半徑。
+    [SerializeField] private float unarmedRadiusFallback = 1.2f;
+
+    [Header("Unarmed Melee Visual Test")]
+    [SerializeField] private bool visualTestOnly = true;
+    [SerializeField] private GameObject punchEffectPrefab;
+    [SerializeField] private float punchEffectLifetime = 0.3f;
+
+    [Header("Weapon Melee (Reserved)")]
+    [SerializeField] private Transform weaponPivot;
+    [Range(40f, 70f)] [SerializeField] private float weaponSwingAngle = 55f;
+    [SerializeField] private float weaponMeleeRadius = 2.5f;
+
+    [Header("Weapon Ranged (Reserved)")]
+    [SerializeField] private Transform projectileSpawnPoint;
 
     public NetworkVariable<bool> IsCombating = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     public NetworkVariable<bool> IsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
+    private GameInput inputActions;
+    private float nextAttackTime;
+
+    private void Awake() {
+        inputActions = new GameInput();
+        KeyBinding.LoadBindingOverrides(inputActions);
+        if (originPoint == null) originPoint = transform;
+    }
+
+    public override void OnNetworkSpawn() {
+        if (IsOwner) inputActions.Player.Enable();
+    }
+
+    public override void OnNetworkDespawn() {
+        inputActions.Player.Disable();
+    }
+
+    private void Update() {
+        // Uses the Attack Input Action, so OptionsMenu rebinding is respected.
+        if (!IsOwner || !IsClient) return;
+        CharacterController controller = GetComponent<CharacterController>();
+        if (controller != null && !controller.isGrounded) return;
+        if (inputActions.Player.Attack.WasPressedThisFrame()) RequestAttack();
+    }
+
     public void EntryCombat() {
-        if(!IsServer) return;
-
-        IsCombating.Value = true;
+        if (IsServer) IsCombating.Value = true;
     }
-
     public void ExitCombat() {
-        if(!IsServer) return;
-
-        IsCombating.Value = false;   
+        if (IsServer) IsCombating.Value = false;
     }
-        
-    public void RequestAttact() {
-        if(!IsOwner) return;
-
-        RequestAttactServerRpc();
+    public void RequestAttack() {
+        if (IsOwner) RequestAttackServerRpc();
     }
 
-    [ServerRpc] 
-    private void RequestAttactServerRpc() {
-        //如果不在攻擊模式，或已經在攻擊流程裡
-        if(!IsCombating.Value || IsAttacking.Value) return;
+    // Compatibility for existing UnityEvent/script references using the old spelling.
+    public void RequestAttact() => RequestAttack();
 
-        if(CurrentAttack == null) {
-            Debug.LogWarning("CurrentAttack is empty");
+    [ServerRpc]
+    private void RequestAttackServerRpc() {
+        if ((requireCombatState && !IsCombating.Value) || IsAttacking.Value || Time.time < nextAttackTime) return;
+        if (currentAttack == null) {
+            Debug.LogWarning("CombatController: Current Attack is not assigned.", this);
             return;
         }
 
-        StartCoroutine(AttackRoutine());
+        switch (attackMode) {
+            case AttackMode.UnarmedMelee: StartCoroutine(UnarmedMeleeAttackRoutine()); break;
+            case AttackMode.WeaponMelee: StartWeaponMeleeAttack(); break;
+            case AttackMode.WeaponRanged: StartWeaponRangedAttack(); break;
+        }
     }
 
-    private IEnumerator AttackRoutine() {
+    private IEnumerator UnarmedMeleeAttackRoutine() {
         IsAttacking.Value = true;
-        ShowWarningClientRpc(OriginPoint.position, CurrentAttack.radius);
-        yield return new WaitForSeconds(CurrentAttack.warningDuration);
-        DoAttactDamage();
+        nextAttackTime = Time.time + currentAttack.cooldown;
+        float radius = GetUnarmedRadius();
+
+        SpawnPunchEffectClientRpc(GetRandomPointInAttackCircle(radius));
+        ShowWarningClientRpc(originPoint.position, radius);
+        yield return new WaitForSeconds(currentAttack.warningDuration);
+
+        if (!visualTestOnly) {
+            ApplyDamage(Physics.OverlapSphere(originPoint.position, radius, targetLayer, QueryTriggerInteraction.Ignore));
+        }
+        HideWarningClientRpc();
         IsAttacking.Value = false;
     }
 
-    private void DoAttactDamage() {
-        Collider[] hits = CheckColliderByShape(CurrentAttack);
-            
+    private Vector3 GetRandomPointInAttackCircle(float radius) {
+        Vector2 randomOffset = Random.insideUnitCircle * radius;
+        return originPoint.position + new Vector3(randomOffset.x, 0.5f, randomOffset.y);
+    }
+
+    private float GetUnarmedRadius() {
+        // 【無武器攻擊圓圈半徑計算】角色寬度 = Collider radius × 2。
+        CharacterController controller = GetComponent<CharacterController>();
+        if (controller != null && controller.radius > 0f) return controller.radius * 2f * unarmedRadiusWidthMultiplier;
+        CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+        if (capsule != null && capsule.radius > 0f) return capsule.radius * 1.25f * unarmedRadiusWidthMultiplier;
+        return unarmedRadiusFallback;
+    }
+
+    private void ApplyDamage(Collider[] hits) {
+        Health ownHealth = GetComponent<Health>();
         foreach (Collider hit in hits) {
-            Health health = hit.GetComponent<Health>();
-            if (health != null) {
-                health.TakeDamage(CurrentAttack.damage);
+            Health health = hit.GetComponentInParent<Health>();
+            if (health != null && health != ownHealth) {
+                health.TakeDamage(currentAttack.damage);
             }
         }
     }
 
-    private Collider[] CheckColliderByShape(AttackData attackData) {
-        switch (attackData.attackShape) {
-            case AttackShape.Circle:
-                return Physics.OverlapSphere(OriginPoint.position, attackData.radius, TargetLayer);
-            
-            case AttackShape.Rectangle: 
-                return Physics.OverlapBox(
-                OriginPoint.position,
-                new Vector3(attackData.rectangleLength, 1f, attackData.rectangleWidth) * 0.5f,
-                OriginPoint.rotation,
-                TargetLayer);
+    // Reserved: overlap a circle around weaponPivot, then retain only targets in a 40-70 degree sector.
+    private void StartWeaponMeleeAttack() {
+        Debug.Log("Weapon melee attack is reserved for the weapon swing implementation.", this);
+    }
 
-            case AttackShape.Line:
-                return Physics.OverlapBox(
-                OriginPoint.position + OriginPoint.forward * (attackData.lineLength* 0.5f),
-                new Vector3(attackData.lineWidth * 0.5f, 0.5f, attackData.lineLength * 0.5f),
-                OriginPoint.rotation,
-                TargetLayer);
-             
-            case AttackShape.Cone:
-                {
-                    Collider[] sphereHits = Physics.OverlapSphere(
-                        OriginPoint.position,
-                        attackData.coneRadius,
-                        TargetLayer);
-
-                    Collider[] result = new Collider[sphereHits.Length];
-                    int count = 0;
-
-                    foreach (Collider hit in sphereHits)
-                    {
-                        Vector3 directionToTarget = (hit.transform.position - OriginPoint.position).normalized;
-                        float angleToTarget = Vector3.Angle(OriginPoint.forward, directionToTarget);
-
-                        if (angleToTarget <= attackData.coneAngle * 0.5f)
-                        {
-                            result[count] = hit;
-                            count++;
-                        }
-                    }
-
-                    Collider[] finalResult = new Collider[count];
-                    for (int i = 0; i < count; i++)
-                    {
-                        finalResult[i] = result[i];
-                    }
-
-                    return finalResult;
-                }
-                
-            default:
-                Debug.LogWarning("Not Found Attack Shape");
-                return null;
-        }
+    // Reserved: obtain mouse world position and spawn an arrow from projectileSpawnPoint on the server.
+    private void StartWeaponRangedAttack() {
+        Debug.Log("Weapon ranged attack is reserved for the bow/projectile implementation.", this);
     }
 
     [ClientRpc]
-    private void ShowWarningClientRpc(Vector3 position, float range1) {
-        Debug.Log($"Warning is showed at {position}");
+    private void SpawnPunchEffectClientRpc(Vector3 position) {
+        if (punchEffectPrefab == null) {
+            Debug.LogWarning("CombatController: Punch Effect Prefab is not assigned.", this);
+            return;
+        }
+
+        GameObject effect = Instantiate(punchEffectPrefab, position, Quaternion.identity);
+        Destroy(effect, punchEffectLifetime);
+    }
+
+    [ClientRpc]
+    private void ShowWarningClientRpc(Vector3 position, float radius) {
+        Debug.Log($"Attack warning shown at {position} with radius {radius}.");
     }
 
     [ClientRpc]
     private void HideWarningClientRpc() {
-        Debug.Log("Warning is hided");
+        Debug.Log("Attack warning hidden.");
     }
-    
 }
