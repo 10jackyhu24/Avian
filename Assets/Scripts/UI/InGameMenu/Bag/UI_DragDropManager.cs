@@ -118,7 +118,8 @@ public class UI_DragDropManager : MonoBehaviour {
             int slotIndex = ObjectControll.GetIndex(dragData.draggedSlot);
             if (slotIndex >= 0 && slotIndex < bagManager.bagDataList.Count) {
                 ItemData itemData = bagManager.bagDataList[slotIndex].itemData;
-                ItemManager.AddItemInScene(itemData.itemObject.itemName, spawnPosition, Quaternion.Euler(0f, 0f, 90f));
+                int count = bagManager.bagDataList[slotIndex].count;
+                ItemManager.AddItemInScene(itemData.itemObject.itemName, spawnPosition, Quaternion.Euler(0f, 0f, 90f), count);
                 bagManager.RemoveSlot(slotIndex);
             }
             return;

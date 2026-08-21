@@ -31,7 +31,7 @@ public class UI_BagManager : MonoBehaviour {
 
     private void Awake() {
         Dictionary<string, ItemData> items = ItemManager.items;
-        AddItem(items["Gun"]);
+        AddItem(items["Arrow"], 3);
         AddItem(items["Gun2"]);
         AddItem(items["Gun3"]);
         SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
@@ -286,7 +286,7 @@ public class UI_BagManager : MonoBehaviour {
         ItemData itemData = ItemData.FromItemObject(pickupable.ItemObject);
         BagSlotData slotData = new BagSlotData {
             itemData = itemData,
-            count = 1
+            count = pickupable.Count
         };
 
         if (slotData.IsWeapon) {

@@ -83,7 +83,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: -880902571, guid: 293da724544763f40b984ca14d7ea144, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 5e645271bdbf565479c1c84e096df4a1, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -105,7 +105,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dcfeddb224d5feb42aec6e8f15148bd7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Pickupable
-  itemObject: {fileID: 11400000, guid: ef6c1749714298442856994c5fa9960e, type: 2}
+  itemObject: {fileID: 11400000, guid: 38106c4e55cce9348bb2e51e3c176ab3, type: 2}
 --- !u!65 &9140533911764215740
 BoxCollider:
   m_ObjectHideFlags: 0
