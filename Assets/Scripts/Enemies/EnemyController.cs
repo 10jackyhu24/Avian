@@ -20,6 +20,7 @@ public class EnemyController : MonoBehaviour {
     [SerializeField] private float chaseSpeed = 4.5f;
     [SerializeField] private float chaseDuration = 5f;
     [SerializeField] private float chaseCooldown = 3f;
+    [SerializeField] private float targetRefreshInterval = 0.25f;
 
     [Header("Movement")]
     [SerializeField] private float rotationSpeed = 8f;
@@ -136,22 +137,30 @@ public class EnemyController : MonoBehaviour {
     }
 
     private void ResolvePlayerTarget() {
-        if (playerTarget != null) return;
         if (Time.time < nextTargetSearchTime) return;
+        nextTargetSearchTime = Time.time + targetRefreshInterval;
 
-        GameObject taggedPlayer = GameObject.FindGameObjectWithTag("Player");
-        if (taggedPlayer != null) {
-            playerTarget = taggedPlayer.transform;
-            return;
+        PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        Transform closestTarget = null;
+        float closestDistanceSquared = float.MaxValue;
+
+        foreach (PlayerController player in players) {
+            if (player == null || !player.IsSpawned || !player.IsAlive) {
+                continue;
+            }
+
+            Vector3 offset = player.transform.position - transform.position;
+            offset.y = 0f;
+            float distanceSquared = offset.sqrMagnitude;
+            if (distanceSquared >= closestDistanceSquared) {
+                continue;
+            }
+
+            closestDistanceSquared = distanceSquared;
+            closestTarget = player.transform;
         }
 
-        PlayerController playerController = FindFirstObjectByType<PlayerController>();
-        if (playerController != null) {
-            playerTarget = playerController.transform;
-            return;
-        }
-
-        nextTargetSearchTime = Time.time + 0.5f;
+        playerTarget = closestTarget;
     }
 
     private bool CanStartChase() {

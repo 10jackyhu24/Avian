@@ -55,6 +55,8 @@ public class PlayerController : NetworkBehaviour {
     private GUIStyle healthLabelStyle;
     private GameInput inputActions;
 
+    public bool IsAlive => currentHealth.Value > 0;
+
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();

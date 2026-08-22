@@ -1,3 +1,4 @@
+using System;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -16,6 +17,7 @@ public class EnemyHealthDrop : MonoBehaviour {
     private bool isDead;
 
     public bool IsAlive => !isDead && currentHealth > 0;
+    public event Action<EnemyHealthDrop> Died;
 
     private void Awake() {
         currentHealth = maxHealth;
@@ -40,6 +42,7 @@ public class EnemyHealthDrop : MonoBehaviour {
         }
 
         isDead = true;
+        Died?.Invoke(this);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
 
