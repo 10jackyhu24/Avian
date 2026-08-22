@@ -32,9 +32,9 @@ public class UI_BagManager : MonoBehaviour {
     private void Awake() {
         Dictionary<string, ItemData> items = ItemManager.items;
         AddItem(items["Arrow"], 3);
-        AddItem(items["Gun2"]);
-        AddItem(items["Gun3"]);
-        SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
+        AddItem(items["Axe"]);
+        AddItem(items["Sickle"]);
+        // SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
     }
 
     public void RefreshNearbyPickupables() {
