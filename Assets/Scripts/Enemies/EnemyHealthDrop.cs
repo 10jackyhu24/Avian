@@ -65,13 +65,13 @@ public class EnemyHealthDrop : MonoBehaviour {
             return;
         }
 
-        int coinCount = Random.Range(
+        int coinCount = UnityEngine.Random.Range(
             Mathf.Min(minCoinsDropped, maxCoinsDropped),
             Mathf.Max(minCoinsDropped, maxCoinsDropped) + 1
         );
 
         for (int i = 0; i < coinCount; i++) {
-            Vector2 offset = Random.insideUnitCircle * dropScatterRadius;
+            Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
             Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
             GameObject coin = Instantiate(coinPickupPrefab, spawnPosition, Quaternion.identity);
 
