@@ -55,6 +55,8 @@ public class PlayerController : NetworkBehaviour {
     private GUIStyle healthLabelStyle;
     private GameInput inputActions;
 
+    public bool IsAlive => currentHealth.Value > 0;
+
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
@@ -195,12 +197,23 @@ public class PlayerController : NetworkBehaviour {
 
         foreach (Collider hit in hits) {
             PlayerController target = hit.GetComponentInParent<PlayerController>();
-            if (target == null || target == this || !target.IsSpawned) {
+            if (target != null) {
+                if (target == this || !target.IsSpawned) {
+                    continue;
+                }
+
+                target.TakeDamage(attackDamage, OwnerClientId);
+                Debug.Log($"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {attackDamage}.", this);
+                return;
+            }
+
+            EnemyHealthDrop enemy = hit.GetComponentInParent<EnemyHealthDrop>();
+            if (enemy == null || !enemy.IsAlive) {
                 continue;
             }
 
-            target.TakeDamage(attackDamage, OwnerClientId);
-            Debug.Log($"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {attackDamage}.", this);
+            enemy.TakeDamage(attackDamage, OwnerClientId);
+            Debug.Log($"[PlayerController] Client {OwnerClientId} hit enemy {enemy.name} for {attackDamage}.", this);
             return;
         }
     }

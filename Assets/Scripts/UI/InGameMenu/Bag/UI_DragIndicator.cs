@@ -18,6 +18,6 @@ public class UI_DragIndicator : MonoBehaviour {
     }
 
     public void ShowDirectly() {
-            gameObject.SetActive(true);
+        gameObject.SetActive(true);
     }
 }

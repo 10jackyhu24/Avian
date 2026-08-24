@@ -19,7 +19,8 @@ GameObject:
   - component: {fileID: 4686765119304807775}
   - component: {fileID: 6334219223960730493}
   - component: {fileID: 4901829517552619559}
-  m_Layer: 3
+  - component: {fileID: 8646609708124771328}
+  m_Layer: 6
   m_Name: Player
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -282,11 +283,23 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CombatController
   ShowTopMostFoldoutHeaderGroup: 1
-  CurrentAttack: {fileID: 11400000, guid: 74eddd7f6613e9140a9018f2a94a0f82, type: 2}
-  OriginPoint: {fileID: 8526152859912152380}
-  TargetLayer:
+  attackMode: 0
+  requireCombatState: 0
+  currentAttack: {fileID: 11400000, guid: 74eddd7f6613e9140a9018f2a94a0f82, type: 2}
+  originPoint: {fileID: 8526152859912152380}
+  targetLayer:
     serializedVersion: 2
     m_Bits: 8
+  unarmedRadiusWidthMultiplier: 2
+  unarmedRadiusFallback: 1.2
+  visualTestOnly: 1
+  punchEffectPrefab: {fileID: 6274209533740340183, guid: 3a646f48375c8dc4a8ec482516b21fc2,
+    type: 3}
+  punchEffectLifetime: 0.4
+  weaponPivot: {fileID: 0}
+  weaponSwingAngle: 55
+  weaponMeleeRadius: 2.5
+  projectileSpawnPoint: {fileID: 0}
   IsCombating:
     UpdateTraits:
       MinSecondsBetweenUpdates: 0
@@ -339,6 +352,20 @@ MonoBehaviour:
     sprite: {fileID: -250909516, guid: e84a9b1728bc52644af3cc9fee406768, type: 3}
     animatorController: {fileID: 9100000, guid: 0a3b2e5cec25c974c8ff0b076317aeb6,
       type: 2}
+--- !u!114 &8646609708124771328
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d395a05ec1624c158d4fec2329ac7ff3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCurrency
+  ShowTopMostFoldoutHeaderGroup: 1
+  startingCoins: 0
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0
@@ -348,7 +375,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8526152859912152380}
-  m_Layer: 3
+  m_Layer: 6
   m_Name: AttackOriginPoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -364,7 +391,7 @@ Transform:
   m_GameObject: {fileID: 5279530500253440966}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.1, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []

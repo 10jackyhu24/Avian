@@ -22,6 +22,7 @@ public class ItemObject : ScriptableObject {
     public string itemName;
     public Sprite icon;
     public ItemType itemType;
+    public GameObject gameObject;
     public ItemEffect itemEffect;
     public bool isWeapon;
     public int maxCount = 1;

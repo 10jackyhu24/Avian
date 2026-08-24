@@ -40,6 +40,20 @@ def get_world_endpoint():
     return os.getenv("WORLD_ENDPOINT", "127.0.0.1:30080")
 
 
+def get_static_room_seed():
+    raw_seed = os.getenv("STATIC_ROOM_SEED", "").strip()
+    if not raw_seed:
+        return None
+
+    try:
+        return int(raw_seed)
+    except ValueError:
+        raise HTTPException(
+            status_code=500,
+            detail="STATIC_ROOM_SEED must be an integer",
+        )
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "queue_size": len(queue)}
@@ -80,8 +94,12 @@ def join_match(payload: JoinRequest):
             player_b = queue.popleft()
             room_id = f"room-{next_room_id}"
             next_room_id += 1
-            room_seed = next_seed
-            next_seed += 1
+            static_room_seed = get_static_room_seed()
+            if static_room_seed is None:
+                room_seed = next_seed
+                next_seed += 1
+            else:
+                room_seed = static_room_seed
 
             match_payload = {
                 "status": "matched",

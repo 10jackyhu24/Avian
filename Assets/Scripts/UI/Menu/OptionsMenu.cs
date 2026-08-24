@@ -28,6 +28,7 @@ public class OptionsMenu : MonoBehaviour {
         { "Attack", new KeyBindInfo { actionName = "Attack", bindingIndex = 0 } },
         { "Bag", new KeyBindInfo { actionName = "Bag", bindingIndex = 0 } },
         { "Interact", new KeyBindInfo { actionName = "Interact", bindingIndex = 0 } },
+        { "Map", new KeyBindInfo { actionName = "Map", bindingIndex = 0 } },
         { "Item 1", new KeyBindInfo { actionName = "Item", bindingIndex = 0 } },
         { "Item 2", new KeyBindInfo { actionName = "Item", bindingIndex = 1 } },
         { "Item 3", new KeyBindInfo { actionName = "Item", bindingIndex = 2 } },
@@ -120,7 +121,7 @@ public class OptionsMenu : MonoBehaviour {
                 KeyBinding.SaveBindingOverrides(inputActions);
                 RefreshKeyBindingCache();
                 RefreshDisplayedBindings();
-                BindingOverridesChanged.Invoke();
+                BindingOverridesChanged?.Invoke();
 
                 // Update button UI text immediately
                 if (btnText != null) {
