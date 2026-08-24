@@ -69,6 +69,7 @@ services:
       - .env
     environment:
       WORLD_ENDPOINT: ${WORLD_ENDPOINT:-127.0.0.1:30080}
+      STATIC_ROOM_SEED: ${STATIC_ROOM_SEED:-}
     ports:
       - "8080:8080"
 

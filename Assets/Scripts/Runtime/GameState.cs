@@ -1,3 +1,5 @@
+using UnityEngine;
+
 public enum CharacterSelectionMode {
     None,
     SinglePlayer,
@@ -28,6 +30,8 @@ public static class GameState {
         hasPendingSinglePlayerWorld = false;
         hasPendingMatchWorld = false;
         characterSelectionMode = CharacterSelectionMode.None;
+        Debug.Log($"[GameState] SetWorld room={roomId}, seed={seed}.");
+        WorldMapUI.EnsureExists();
     }
 
     public static void ResetWorld() {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
@@ -11,6 +12,11 @@ public class ServerBootstrap : MonoBehaviour {
     [SerializeField] private string listenAddress = "0.0.0.0";
     [SerializeField] private int fallbackSeed = 100000;
     [SerializeField] private TerrainController terrainController;
+    [SerializeField] private SeededEnemySpawner enemySpawner;
+
+    [Header("Server Lifetime")]
+    [SerializeField] private bool quitWhenEmpty = true;
+    [SerializeField] private float emptyServerQuitDelaySeconds = 5f;
 
     [Header("Enemy Spawn")]
     [SerializeField] private GameObject enemyPrefab;
@@ -18,6 +24,9 @@ public class ServerBootstrap : MonoBehaviour {
     [SerializeField] private float enemySpawnDistance = 18f;
 
     private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
+    private int activeSeed;
+    private bool hasAcceptedClient;
+    private Coroutine emptyServerQuitCoroutine;
 
     private void Start() {
         if (!startServerOnStart) {
@@ -69,30 +78,38 @@ public class ServerBootstrap : MonoBehaviour {
     }
 
     private void OnClientConnected(ulong clientId) {
+        hasAcceptedClient = true;
+
+        if (emptyServerQuitCoroutine != null) {
+            StopCoroutine(emptyServerQuitCoroutine);
+            emptyServerQuitCoroutine = null;
+        }
+
         Debug.Log($"[ServerBootstrap] Client connected: {clientId}", this);
     }
 
     private void OnClientDisconnected(ulong clientId) {
         Debug.Log($"[ServerBootstrap] Client disconnected: {clientId}", this);
+        ScheduleQuitIfServerIsEmpty();
     }
 
     private void LoadSeed() {
         string mapSeed = Environment.GetEnvironmentVariable("MAP_SEED");
-        int seed = int.TryParse(mapSeed, out int parsedSeed)
+        activeSeed = int.TryParse(mapSeed, out int parsedSeed)
             ? parsedSeed
             : fallbackSeed;
 
-        GameState.SetWorld(GameState.currentRoomId, seed);
+        GameState.SetWorld(GameState.currentRoomId, activeSeed);
 
         TerrainController targetTerrain = ResolveTerrainController();
 
         if (targetTerrain != null) {
-            targetTerrain.GenerateWorld(seed);
+            targetTerrain.GenerateWorld(activeSeed);
         } else {
             Debug.LogError("[ServerBootstrap] TerrainController not found. Dedicated server will have no collidable world.", this);
         }
 
-        Debug.Log($"[ServerBootstrap] Loaded room seed={seed}", this);
+        Debug.Log($"[ServerBootstrap] Loaded room seed={activeSeed}", this);
     }
 
     private TerrainController ResolveTerrainController() {
@@ -125,6 +142,12 @@ public class ServerBootstrap : MonoBehaviour {
     }
 
     private void SpawnEnemies() {
+        SeededEnemySpawner targetEnemySpawner = ResolveEnemySpawner();
+        if (targetEnemySpawner != null) {
+            targetEnemySpawner.SpawnEnemies(NetworkManager.Singleton, activeSeed);
+            return;
+        }
+
         if (!NetworkManager.Singleton.IsServer || enemyPrefab == null || enemyCount <= 0 || spawnedEnemies.Count > 0) {
             return;
         }
@@ -150,5 +173,52 @@ public class ServerBootstrap : MonoBehaviour {
         float angle = enemyCount <= 0 ? 0f : (Mathf.PI * 2f * index) / enemyCount;
         Vector3 offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * enemySpawnDistance;
         return PlayerSpawner.DefaultSpawnPosition + offset;
+    }
+
+    private SeededEnemySpawner ResolveEnemySpawner() {
+        if (enemySpawner != null) {
+            return enemySpawner;
+        }
+
+        enemySpawner = GetComponent<SeededEnemySpawner>();
+        if (enemySpawner != null) {
+            return enemySpawner;
+        }
+
+        enemySpawner = FindFirstObjectByType<SeededEnemySpawner>();
+        return enemySpawner;
+    }
+
+    private void ScheduleQuitIfServerIsEmpty() {
+        if (!quitWhenEmpty ||
+            !hasAcceptedClient ||
+            NetworkManager.Singleton == null ||
+            !NetworkManager.Singleton.IsServer ||
+            NetworkManager.Singleton.ConnectedClientsIds.Count > 0 ||
+            emptyServerQuitCoroutine != null) {
+            return;
+        }
+
+        emptyServerQuitCoroutine = StartCoroutine(QuitWhenEmptyAfterDelay());
+    }
+
+    private IEnumerator QuitWhenEmptyAfterDelay() {
+        float delaySeconds = Mathf.Max(0f, emptyServerQuitDelaySeconds);
+        Debug.Log($"[ServerBootstrap] Server is empty. Quitting in {delaySeconds:0.##} second(s).", this);
+
+        if (delaySeconds > 0f) {
+            yield return new WaitForSeconds(delaySeconds);
+        }
+
+        if (NetworkManager.Singleton != null &&
+            NetworkManager.Singleton.IsServer &&
+            NetworkManager.Singleton.ConnectedClientsIds.Count > 0) {
+            Debug.Log("[ServerBootstrap] Quit cancelled because a client reconnected.", this);
+            emptyServerQuitCoroutine = null;
+            yield break;
+        }
+
+        Debug.Log("[ServerBootstrap] Empty server quitting for fresh pod restart.", this);
+        Application.Quit();
     }
 }

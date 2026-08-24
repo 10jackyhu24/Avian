@@ -154,6 +154,15 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
                     ""processors"": """",
                     ""interactions"": """",
                     ""initialStateCheck"": false
+                },
+                {
+                    ""name"": ""Map"",
+                    ""type"": ""Button"",
+                    ""id"": ""04ffdecc-f8f5-4a34-af4a-d0874dc73174"",
+                    ""expectedControlType"": """",
+                    ""processors"": """",
+                    ""interactions"": """",
+                    ""initialStateCheck"": false
                 }
             ],
             ""bindings"": [
@@ -299,6 +308,17 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
                     ""action"": ""Run"",
                     ""isComposite"": false,
                     ""isPartOfComposite"": false
+                },
+                {
+                    ""name"": """",
+                    ""id"": ""dd5f63d6-76d5-4f7a-a58a-bc796a538de2"",
+                    ""path"": ""<Keyboard>/m"",
+                    ""interactions"": """",
+                    ""processors"": """",
+                    ""groups"": """",
+                    ""action"": ""Map"",
+                    ""isComposite"": false,
+                    ""isPartOfComposite"": false
                 }
             ]
         }
@@ -314,6 +334,7 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
         m_Player_Interact = m_Player.FindAction("Interact", throwIfNotFound: true);
         m_Player_Item = m_Player.FindAction("Item", throwIfNotFound: true);
         m_Player_Run = m_Player.FindAction("Run", throwIfNotFound: true);
+        m_Player_Map = m_Player.FindAction("Map", throwIfNotFound: true);
     }
 
     ~@GameInput()
@@ -401,6 +422,7 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
     private readonly InputAction m_Player_Interact;
     private readonly InputAction m_Player_Item;
     private readonly InputAction m_Player_Run;
+    private readonly InputAction m_Player_Map;
     /// <summary>
     /// Provides access to input actions defined in input action map "Player".
     /// </summary>
@@ -440,6 +462,10 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
         /// Provides access to the underlying input action "Player/Run".
         /// </summary>
         public InputAction @Run => m_Wrapper.m_Player_Run;
+        /// <summary>
+        /// Provides access to the underlying input action "Player/Map".
+        /// </summary>
+        public InputAction @Map => m_Wrapper.m_Player_Map;
         /// <summary>
         /// Provides access to the underlying input action map instance.
         /// </summary>
@@ -487,6 +513,9 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
             @Run.started += instance.OnRun;
             @Run.performed += instance.OnRun;
             @Run.canceled += instance.OnRun;
+            @Map.started += instance.OnMap;
+            @Map.performed += instance.OnMap;
+            @Map.canceled += instance.OnMap;
         }
 
         /// <summary>
@@ -519,6 +548,9 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
             @Run.started -= instance.OnRun;
             @Run.performed -= instance.OnRun;
             @Run.canceled -= instance.OnRun;
+            @Map.started -= instance.OnMap;
+            @Map.performed -= instance.OnMap;
+            @Map.canceled -= instance.OnMap;
         }
 
         /// <summary>
@@ -608,5 +640,12 @@ public partial class @GameInput: IInputActionCollection2, IDisposable
         /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
         /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
         void OnRun(InputAction.CallbackContext context);
+        /// <summary>
+        /// Method invoked when associated input action "Map" is either <see cref="UnityEngine.InputSystem.InputAction.started" />, <see cref="UnityEngine.InputSystem.InputAction.performed" /> or <see cref="UnityEngine.InputSystem.InputAction.canceled" />.
+        /// </summary>
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.started" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.performed" />
+        /// <seealso cref="UnityEngine.InputSystem.InputAction.canceled" />
+        void OnMap(InputAction.CallbackContext context);
     }
 }

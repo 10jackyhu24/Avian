@@ -1,3 +1,4 @@
+using System;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -16,6 +17,7 @@ public class EnemyHealthDrop : MonoBehaviour {
     private bool isDead;
 
     public bool IsAlive => !isDead && currentHealth > 0;
+    public event Action<EnemyHealthDrop> Died;
 
     private void Awake() {
         currentHealth = maxHealth;
@@ -40,6 +42,7 @@ public class EnemyHealthDrop : MonoBehaviour {
         }
 
         isDead = true;
+        Died?.Invoke(this);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
 
@@ -62,13 +65,13 @@ public class EnemyHealthDrop : MonoBehaviour {
             return;
         }
 
-        int coinCount = Random.Range(
+        int coinCount = UnityEngine.Random.Range(
             Mathf.Min(minCoinsDropped, maxCoinsDropped),
             Mathf.Max(minCoinsDropped, maxCoinsDropped) + 1
         );
 
         for (int i = 0; i < coinCount; i++) {
-            Vector2 offset = Random.insideUnitCircle * dropScatterRadius;
+            Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
             Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
             GameObject coin = Instantiate(coinPickupPrefab, spawnPosition, Quaternion.identity);
 
