@@ -117,8 +117,6 @@ public class UI_DragDropManager : MonoBehaviour {
         if (dragData.draggedSlot != null) {
             int slotIndex = ObjectControll.GetIndex(dragData.draggedSlot);
             if (slotIndex >= 0 && slotIndex < bagManager.bagDataList.Count) {
-                ItemData itemData = bagManager.bagDataList[slotIndex].itemData;
-                int count = bagManager.bagDataList[slotIndex].count;
                 ItemManager.AddItemInScene(bagManager.bagDataList[slotIndex], spawnPosition, Quaternion.Euler(0f, 0f, 90f));
                 bagManager.RemoveSlot(slotIndex);
             }
@@ -135,9 +133,11 @@ public class UI_DragDropManager : MonoBehaviour {
             if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) {
                 return;
             }
-
-            ItemData itemData = dragData.draggedAttachment.CurrentAttachment;
-            ItemManager.AddItemInScene(bagManager.bagDataList[slotIndex], spawnPosition, Quaternion.Euler(0f, 0f, 90f));
+            BagSlotData slotData = new BagSlotData {
+                itemData = dragData.draggedAttachment.CurrentAttachment,
+                count = 1
+            };
+            ItemManager.AddItemInScene(slotData, spawnPosition, Quaternion.Euler(0f, 0f, 90f));
             bagManager.ClearAttachmentItem(slotIndex, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
             return;
         }
