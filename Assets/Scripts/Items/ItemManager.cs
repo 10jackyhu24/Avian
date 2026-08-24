@@ -4,26 +4,23 @@ using UnityEngine;
 public static class ItemManager {
     public static Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
 
-    public static GameObject AddItemInScene(string item_name, Vector3 position, Quaternion rotation, int count = 1) {
-        if (string.IsNullOrWhiteSpace(item_name)) {
-            Debug.LogWarning("[ItemManager] AddItemInScene failed because item_name is empty.");
+    public static GameObject AddItemInScene(BagSlotData bagSlotData, Vector3 position, Quaternion rotation) {
+        if (bagSlotData == null || bagSlotData.IsEmpty || !bagSlotData.itemData.IsValid) {
+            Debug.LogWarning("[ItemManager] AddItemInScene failed because bag slot data is empty.");
             return null;
         }
 
-        if (items == null || !items.TryGetValue(item_name, out ItemData itemData) || !itemData.IsValid) {
-            Debug.LogWarning($"[ItemManager] AddItemInScene failed because '{item_name}' was not found.");
+        if (bagSlotData.itemData.itemObject.gameObject == null) {
+            Debug.LogWarning($"[ItemManager] AddItemInScene failed because '{bagSlotData.itemData.itemObject.itemName}' has no scene prefab assigned.");
             return null;
         }
 
-        if (itemData.itemObject.gameObject == null) {
-            Debug.LogWarning($"[ItemManager] AddItemInScene failed because '{item_name}' has no scene prefab assigned.");
-            return null;
-        }
-
-        GameObject spawnedObject = Object.Instantiate(itemData.itemObject.gameObject, position, rotation);
+        GameObject spawnedObject = Object.Instantiate(bagSlotData.itemData.itemObject.gameObject, position, rotation);
         Pickupable pickupable = spawnedObject.GetComponent<Pickupable>();
         if (pickupable != null) {
-            pickupable.SetCount(count);
+            pickupable.SetItemData(bagSlotData.itemData);
+            pickupable.SetCount(bagSlotData.count);
+            pickupable.SetAttachment(bagSlotData.attachments);
         }
 
         return spawnedObject;

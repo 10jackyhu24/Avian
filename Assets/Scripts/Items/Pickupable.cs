@@ -1,18 +1,30 @@
 using UnityEngine;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 
 public class Pickupable : MonoBehaviour {
-    [SerializeField] private ItemObject itemObject;
+    private ItemData itemData;
     [SerializeField, Min(1)] private int count = 1;
+    private List<AttachmentSlotData> attachments;
 
-    public ItemObject ItemObject => itemObject;
-    public bool HasItem => itemObject != null;
+    public ItemData ItemData => itemData;
+    public bool HasItem => itemData.IsValid;
     public int Count => count;
+    public List<AttachmentSlotData> Attachments => attachments;
+
+    public void SetItemData(ItemData value) {
+        itemData = value;
+    }
+
+    public void SetAttachment(List<AttachmentSlotData> value) {
+        attachments = value;
+    }
 
     public void SetCount(int value) {
         count = Mathf.Max(1, value);
     }
 
     private void Reset() {
-        // Intentionally left blank; ItemObject is a ScriptableObject and should be assigned manually.
+        itemData = ItemData.Empty;
     }
 }

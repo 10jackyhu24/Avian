@@ -34,6 +34,7 @@ public class UI_BagManager : MonoBehaviour {
         AddItem(items["Arrow"], 3);
         AddItem(items["Axe"]);
         AddItem(items["Sickle"]);
+        SetAttachmentItem(1, AttachmentType.AttackSpeed, items["AttackSpeed"]);
         // SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
     }
 
@@ -64,7 +65,6 @@ public class UI_BagManager : MonoBehaviour {
 
             if (!nearbyPickupables.Contains(pickupable)) {
                 nearbyPickupables.Add(pickupable);
-                Debug.Log(pickupable);
             }
         }
     }
@@ -283,10 +283,10 @@ public class UI_BagManager : MonoBehaviour {
             return;
         }
 
-        ItemData itemData = ItemData.FromItemObject(pickupable.ItemObject);
         BagSlotData slotData = new BagSlotData {
-            itemData = itemData,
-            count = pickupable.Count
+            itemData = pickupable.ItemData,
+            count = pickupable.Count,
+            attachments = pickupable.Attachments,
         };
 
         if (slotData.IsWeapon) {
