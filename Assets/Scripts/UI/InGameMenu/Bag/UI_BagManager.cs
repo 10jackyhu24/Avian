@@ -14,6 +14,7 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private float pickupScanRadius = 6f;
     [SerializeField] private LayerMask pickupScanLayerMask = ~0;
     [SerializeField] private List<Pickupable> nearbyPickupables = new List<Pickupable>();
+    [SerializeField] private GameObject pickupableUI;
 
     [Header("UI Spawn Setup")]
     [SerializeField] private Transform bagContentRoot;
@@ -35,6 +36,7 @@ public class UI_BagManager : MonoBehaviour {
         AddItem(items["Axe"]);
         AddItem(items["Sickle"]);
         SetAttachmentItem(1, AttachmentType.AttackSpeed, items["AttackSpeed"]);
+        AddItem(items["Sword"]);
         // SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
     }
 
@@ -74,11 +76,16 @@ public class UI_BagManager : MonoBehaviour {
     }
 
     public void RefreshNearbyPickupablesUI() {
-        ClearSpawnedSlots();
-
+        ClearSpawnedSlots(pickupableContentRoot);
+        if (nearbyPickupables.Count == 0) {
+            pickupableUI.SetActive(false);
+            return;
+        }
+        
         foreach (var pickupable in nearbyPickupables) {
             SpawnSlot(pickupable);
         }
+        pickupableUI.SetActive(true);
     }
 
     // Refresh the entire bag UI and total capacity

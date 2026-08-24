@@ -63,6 +63,8 @@ public class UI_DragDropManager : MonoBehaviour {
         dragIndicator.Hide();
         if (dragData.isMyBagBegin && !dragData.isMyBagEnd) {
             HandleDropOutOfBag();
+            bagManager.RefreshNearbyPickupables();
+            bagManager.RefreshNearbyPickupablesUI();
         }
         else if (dragData.isMyBagBegin && dragData.isMyBagEnd) {
             if (dragData.draggedSlot != null) {
@@ -117,7 +119,7 @@ public class UI_DragDropManager : MonoBehaviour {
         if (dragData.draggedSlot != null) {
             int slotIndex = ObjectControll.GetIndex(dragData.draggedSlot);
             if (slotIndex >= 0 && slotIndex < bagManager.bagDataList.Count) {
-                ItemManager.AddItemInScene(bagManager.bagDataList[slotIndex], spawnPosition, Quaternion.Euler(0f, 0f, 90f));
+                ItemManager.AddItemInScene(bagManager.bagDataList[slotIndex], spawnPosition, Quaternion.Euler(90f, 0f, 90f));
                 bagManager.RemoveSlot(slotIndex);
             }
             return;
@@ -137,7 +139,7 @@ public class UI_DragDropManager : MonoBehaviour {
                 itemData = dragData.draggedAttachment.CurrentAttachment,
                 count = 1
             };
-            ItemManager.AddItemInScene(slotData, spawnPosition, Quaternion.Euler(0f, 0f, 90f));
+            ItemManager.AddItemInScene(slotData, spawnPosition, Quaternion.Euler(90f, 0f, 90f));
             bagManager.ClearAttachmentItem(slotIndex, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
             return;
         }

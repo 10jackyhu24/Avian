@@ -6,8 +6,6 @@ public class BagMenu : MonoBehaviour {
     private GameInput inputActions;
     private MenuManager menuManager;
     [SerializeField] private GameObject bagMenuUI;
-    [SerializeField] private GameObject pickupableUI;
-    [SerializeField] private Transform pickupableContentRoot;
 
     private UI_BagManager bagManager;
     private PlayerController player;
@@ -71,24 +69,14 @@ public class BagMenu : MonoBehaviour {
 
         lastPlayerPosition = player.transform.position;
         bagManager.RefreshNearbyPickupables();
-
-        IReadOnlyList<Pickupable> pickupables = bagManager.GetNearbyPickupables();
-        if (pickupables.Count == 0) {
-            pickupableUI.SetActive(false);
-        }
-        else {
-            bagManager.ClearSpawnedSlots(pickupableContentRoot);
-            foreach (var pickupable in pickupables) {
-                bagManager.SpawnSlot(pickupable);
-            }
-            pickupableUI.SetActive(true);
-        }
+        bagManager.RefreshNearbyPickupablesUI();
     }
 
     private void ShowBagMenu() {
         menuManager.SwitchToPanel(PanelType.BagMenu);
         if (bagManager != null) {
             bagManager.RefreshNearbyPickupables();
+            bagManager.RefreshNearbyPickupablesUI();
         }
 
         if (player != null) {

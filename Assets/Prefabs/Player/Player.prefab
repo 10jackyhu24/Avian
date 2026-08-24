@@ -20,7 +20,7 @@ GameObject:
   - component: {fileID: 6334219223960730493}
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
-  m_Layer: 3
+  m_Layer: 6
   m_Name: Player
   m_TagString: Player
   m_Icon: {fileID: 0}
@@ -352,6 +352,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d395a05ec1624c158d4fec2329ac7ff3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCurrency
+  ShowTopMostFoldoutHeaderGroup: 1
   startingCoins: 0
 --- !u!1 &5279530500253440966
 GameObject:
@@ -362,7 +363,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8526152859912152380}
-  m_Layer: 3
+  m_Layer: 6
   m_Name: AttackOriginPoint
   m_TagString: Untagged
   m_Icon: {fileID: 0}
