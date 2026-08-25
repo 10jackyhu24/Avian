@@ -24,6 +24,29 @@ public class Pickupable : MonoBehaviour {
         count = Mathf.Max(1, value);
     }
 
+    public BagSlotData ToBagSlotData() {
+        BagSlotData bagSlotData = new BagSlotData {
+            itemData = itemData,
+            count = count
+        };
+
+        if (attachments != null) {
+            bagSlotData.attachments = new List<AttachmentSlotData>(attachments.Count);
+            foreach (AttachmentSlotData attachment in attachments) {
+                if (attachment == null) {
+                    continue;
+                }
+
+                bagSlotData.attachments.Add(new AttachmentSlotData {
+                    requiredType = attachment.requiredType,
+                    attachedItem = attachment.attachedItem
+                });
+            }
+        }
+
+        return bagSlotData;
+    }
+
     private void Awake() {
         IgnorePlayerAndEnemyCollision();
     }

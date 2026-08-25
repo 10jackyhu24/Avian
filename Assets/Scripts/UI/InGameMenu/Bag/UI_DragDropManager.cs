@@ -1,5 +1,7 @@
 using System.Runtime.CompilerServices;
+using System.Collections;
 using Unity.VisualScripting;
+using Unity.Netcode;
 using UnityEngine;
 
 public class UI_DragDropManager : MonoBehaviour {
@@ -65,6 +67,10 @@ public class UI_DragDropManager : MonoBehaviour {
             HandleDropOutOfBag();
             bagManager.RefreshNearbyPickupables();
             bagManager.RefreshNearbyPickupablesUI();
+        }
+        else if (!dragData.isMyBagBegin && dragData.isMyBagEnd) {
+            HandleDropIntoBag();
+            StartCoroutine(RefreshPickupablesNextFrame());
         }
         else if (dragData.isMyBagBegin && dragData.isMyBagEnd) {
             if (dragData.draggedSlot != null) {
@@ -143,6 +149,67 @@ public class UI_DragDropManager : MonoBehaviour {
             bagManager.ClearAttachmentItem(slotIndex, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
             return;
         }
+    }
+
+    private void HandleDropIntoBag() {
+        if (dragData.draggedSlot != null) {
+            int pickupableIndex = ObjectControll.GetIndex(dragData.draggedSlot);
+            if (pickupableIndex < 0 || pickupableIndex >= bagManager.nearbyPickupables.Count) {
+                return;
+            }
+
+            Pickupable pickupable = bagManager.nearbyPickupables[pickupableIndex];
+            if (pickupable == null || !pickupable.HasItem) {
+                return;
+            }
+
+            BagSlotData slotData = pickupable.ToBagSlotData();
+            int insertIndex = dragData.hoveredSlot != null
+                ? ObjectControll.GetIndex(dragData.hoveredSlot)
+                : bagManager.bagDataList.Count;
+
+            int beforeCount = bagManager.bagDataList.Count;
+            bagManager.AddItem(slotData.itemData, slotData.count, dragData.isAbove ? insertIndex : insertIndex + 1, slotData.attachments?.ConvertAll(a => a.requiredType).ToArray());
+            if (bagManager.bagDataList.Count > beforeCount) {
+                int addedIndex = insertIndex == -1 ? bagManager.bagDataList.Count - 1 : Mathf.Clamp(insertIndex, 0, bagManager.bagDataList.Count - 1);
+                if (addedIndex >= 0 && addedIndex < bagManager.bagDataList.Count) {
+                    BagSlotData addedSlot = bagManager.bagDataList[addedIndex];
+                    if (addedSlot != null) {
+                        addedSlot.attachments = slotData.attachments;
+                        bagManager.RebuildSlots();
+                        RemovePickupableFromScene(pickupable);
+                    }
+                }
+            }
+        }
+        if (dragData.draggedAttachment != null) {
+            
+        }
+    }
+
+    private void RemovePickupableFromScene(Pickupable pickupable) {
+        if (pickupable == null) {
+            return;
+        }
+
+        NetworkObject networkObject = pickupable.GetComponentInParent<NetworkObject>();
+        if (networkObject != null && networkObject.IsSpawned) {
+            networkObject.Despawn(true);
+            return;
+        }
+
+        GameObject targetObject = pickupable.gameObject;
+        if (pickupable.transform.parent != null && pickupable.GetComponent<NetworkObject>() == null) {
+            targetObject = pickupable.transform.root.gameObject;
+        }
+
+        Destroy(targetObject);
+    }
+
+    private IEnumerator RefreshPickupablesNextFrame() {
+        yield return null;
+        bagManager.RefreshNearbyPickupables();
+        bagManager.RefreshNearbyPickupablesUI();
     }
 
     private void HandleSlotDropInBag() {

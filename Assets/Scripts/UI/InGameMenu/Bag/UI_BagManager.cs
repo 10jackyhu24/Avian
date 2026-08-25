@@ -13,7 +13,7 @@ public class UI_BagManager : MonoBehaviour {
     [Header("Nearby Pickup Scan")]
     [SerializeField] private float pickupScanRadius = 6f;
     [SerializeField] private LayerMask pickupScanLayerMask = ~0;
-    [SerializeField] private List<Pickupable> nearbyPickupables = new List<Pickupable>();
+    [SerializeField] public List<Pickupable> nearbyPickupables = new List<Pickupable>();
     [SerializeField] private GameObject pickupableUI;
 
     [Header("UI Spawn Setup")]
