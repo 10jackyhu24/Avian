@@ -196,6 +196,10 @@ public class PlayerController : NetworkBehaviour {
         );
 
         foreach (Collider hit in hits) {
+            if (!IsInsideAttackRing(hit, attackCenter)) {
+                continue;
+            }
+
             PlayerController target = hit.GetComponentInParent<PlayerController>();
             if (target != null) {
                 if (target == this || !target.IsSpawned) {
@@ -218,6 +222,15 @@ public class PlayerController : NetworkBehaviour {
         }
     }
 
+    // The inner safe radius is the character's width (diameter), matching CombatController's unarmed ring.
+    private bool IsInsideAttackRing(Collider hit, Vector3 attackCenter) {
+        float innerRadius = characterController.radius * 2f;
+        Vector3 horizontalOffset = hit.ClosestPoint(attackCenter) - attackCenter;
+        horizontalOffset.y = 0f;
+        float distanceSquared = horizontalOffset.sqrMagnitude;
+        return distanceSquared >= innerRadius * innerRadius && distanceSquared <= attackRadius * attackRadius;
+    }
+
     private void MovePlayer() {
         if (currentHealth.Value <= 0) {
             return;
@@ -227,7 +240,14 @@ public class PlayerController : NetworkBehaviour {
             verticalVelocity = -2f;
         }
 
-        Vector3 moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
+        //Vector3 moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
+        Vector3 moveDirection = Vector3.zero;
+        if (characterController.isGrounded) {
+            //Vector3的3個參數表示xyz軸，0f鎖死y軸的變化，normalized避免斜著走速度比較快
+            moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
+        }
+
+        //moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
         bool isMoving = moveDirection.sqrMagnitude > 0f;
         bool isRunning = isMoving && runRequested;
 

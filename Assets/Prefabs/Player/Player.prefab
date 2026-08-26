@@ -129,9 +129,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 24.21
-  runSpeedMultiplier: 1.75
-  jumpHeight: 3.11
+  moveSpeed: 5.75
+  runSpeedMultiplier: 1.25
+  jumpHeight: 2.2
   gravity: -20
   maxHealth: 100
   respawnDelaySeconds: 2
@@ -291,6 +291,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 8
   unarmedRadiusWidthMultiplier: 2
+  unarmedInnerRadiusWidthMultiplier: 1
   unarmedRadiusFallback: 1.2
   visualTestOnly: 1
   punchEffectPrefab: {fileID: 6274209533740340183, guid: 3a646f48375c8dc4a8ec482516b21fc2,
