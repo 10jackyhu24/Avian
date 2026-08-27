@@ -171,15 +171,11 @@ public class UI_DragDropManager : MonoBehaviour {
             int beforeCount = bagManager.bagDataList.Count;
             bagManager.AddItem(slotData.itemData, slotData.count, dragData.isAbove ? insertIndex : insertIndex + 1, slotData.attachments?.ConvertAll(a => a.requiredType).ToArray());
             if (bagManager.bagDataList.Count > beforeCount) {
-                int addedIndex = insertIndex == -1 ? bagManager.bagDataList.Count - 1 : Mathf.Clamp(insertIndex, 0, bagManager.bagDataList.Count - 1);
-                if (addedIndex >= 0 && addedIndex < bagManager.bagDataList.Count) {
-                    BagSlotData addedSlot = bagManager.bagDataList[addedIndex];
-                    if (addedSlot != null) {
-                        addedSlot.attachments = slotData.attachments;
-                        bagManager.RebuildSlots();
-                        RemovePickupableFromScene(pickupable);
-                    }
-                }
+                int addedIndex = dragData.isAbove ? insertIndex : insertIndex + 1;
+                BagSlotData addedSlot = bagManager.bagDataList[addedIndex];
+                addedSlot.attachments = slotData.attachments;
+                bagManager.RebuildSlots();
+                RemovePickupableFromScene(pickupable);
             }
         }
         if (dragData.draggedAttachment != null) {
