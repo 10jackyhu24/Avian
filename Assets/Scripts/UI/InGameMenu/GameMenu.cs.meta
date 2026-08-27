@@ -1,2 +1,17 @@
 fileFormatVersion: 2
 guid: 5b694ae83166d4148839c7e4920ccd5d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - hotbarParent: {fileID: 1635499406676730542, guid: 223d25196b676d546a7a998f052bed97,
+      type: 3}
+  - hotbarPrefab: {fileID: 1730075809368487313, guid: 7714d9432d1700c49b7ab033d97d2efc,
+      type: 3}
+  - hatbarSelectedPrefrab: {fileID: 1730075809368487313, guid: 5302eac1e72a25a498dfec001438f04f,
+      type: 3}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

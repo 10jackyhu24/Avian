@@ -29,6 +29,8 @@ public class PlayerController : NetworkBehaviour {
     private SpriteRenderer spriteRenderer;
     private Animator animator;
 
+    private GameMenu gameMenu;
+
     private readonly NetworkVariable<int> currentHealth = new NetworkVariable<int>(
         readPerm: NetworkVariableReadPermission.Everyone,
         writePerm: NetworkVariableWritePermission.Server
@@ -61,6 +63,10 @@ public class PlayerController : NetworkBehaviour {
         animator = GetComponent<Animator>();
         inputActions = new GameInput();
         KeyBinding.LoadBindingOverrides(inputActions);
+
+        // 1 2 3 testing
+        gameMenu = FindFirstObjectByType<GameMenu>();
+        inputActions.Player.Item.performed += OnItemPerformed;
     }
 
     private void OnEnable() {
@@ -308,10 +314,53 @@ public class PlayerController : NetworkBehaviour {
         KeyBinding.LoadBindingOverrides(inputActions);
     }
 
+    // 選取物品欄
+    private void OnItemPerformed(InputAction.CallbackContext context) {
+    Debug.Log($"[Item] performed={context.performed}, control={context.control?.path}, action={context.action?.name}", this);
+
+    if (!context.performed || !IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) {
+        return;
+    }
+
+    int slotIndex = GetHotbarIndex(context);
+    Debug.Log($"[Item] resolved slotIndex={slotIndex}", this);
+
+    if (slotIndex < 0) return;
+
+    gameMenu?.SetSelectedIndex(slotIndex);    
+    // TODO: 裝備邏輯
+    Debug.Log($"[PlayerController] Item hotkey pressed: {slotIndex}", this);
+
+}
+
+private int GetHotbarIndex(InputAction.CallbackContext context) {
+    var action = context.action;
+    if (action == null || context.control == null) return -1;
+
+    // Unity 官方 API：找出是哪個 binding 觸發
+    int bindingIndex = action.GetBindingIndexForControl(context.control);
+    if (bindingIndex < 0) return -1;
+
+    // 只計算「非 composite」的離散 binding，壓縮成 0..N-1
+    int slot = 0;
+    for (int i = 0; i < action.bindings.Count; i++) {
+        var b = action.bindings[i];
+        if (b.isComposite || b.isPartOfComposite) continue;
+
+        if (i == bindingIndex) return slot;
+        slot++;
+    }
+
+    return -1;
+}
+
     private void OnDestroy() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        // 1 2 3 testing
+        inputActions.Player.Item.performed -= OnItemPerformed;
         inputActions?.Disable();
         inputActions?.Dispose();
+
     }
 
     private void OnDrawGizmosSelected() {
