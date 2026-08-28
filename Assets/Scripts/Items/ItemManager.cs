@@ -25,4 +25,15 @@ public static class ItemManager {
 
         return spawnedObject;
     }
+
+    public static bool ClearAttachmentItemInScene(Pickupable pickupable, AttachmentType attachmentType) {
+        List<AttachmentSlotData> attachments = pickupable.Attachments;
+        foreach (var attachmentSlot in attachments) {
+            if (attachmentSlot != null && attachmentSlot.requiredType == attachmentType) {
+                attachmentSlot.Clear();
+                return true;
+            }
+        }
+        return false;
+    }
 }

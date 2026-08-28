@@ -3,6 +3,7 @@ using System.Collections;
 using Unity.VisualScripting;
 using Unity.Netcode;
 using UnityEngine;
+using System.Collections.Generic;
 
 public class UI_DragDropManager : MonoBehaviour {
     private struct DragData {
@@ -179,7 +180,35 @@ public class UI_DragDropManager : MonoBehaviour {
             }
         }
         if (dragData.draggedAttachment != null) {
-            
+            UI_BagItemSlot parentSlot = dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>();
+
+            int pickupableIndex = ObjectControll.GetIndex(parentSlot);
+            if (pickupableIndex < 0 || pickupableIndex >= bagManager.nearbyPickupables.Count) {
+                return;
+            }
+
+            Pickupable pickupable = bagManager.nearbyPickupables[pickupableIndex];
+            if (pickupable == null || !pickupable.HasItem) {
+                return;
+            }
+
+            ItemData attachmentItem = dragData.draggedAttachment.CurrentAttachment;
+            if (!attachmentItem.IsValid) {
+                return;
+            }
+
+            AttachmentType attachmentType = ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType());
+            ItemManager.ClearAttachmentItemInScene(pickupable, attachmentType);
+
+            int insertIndex = dragData.hoveredSlot != null
+                ? ObjectControll.GetIndex(dragData.hoveredSlot)
+                : bagManager.bagDataList.Count;
+
+            bagManager.AddItem(
+                attachmentItem,
+                1,
+                dragData.isAbove ? insertIndex : insertIndex + 1
+            );
         }
     }
 
