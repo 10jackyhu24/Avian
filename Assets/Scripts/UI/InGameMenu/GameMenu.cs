@@ -9,12 +9,24 @@ public class GameMenu : MonoBehaviour {
     [SerializeField] GameObject hotbarParent;
     [SerializeField] GameObject hotbarPrefab;
     private List<GameObject> hotbar = new List<GameObject>();
+    private int selectedIndex = -1;
+    public event Action<int> OnSelectedIndexChanged; // 事件(selectHotbar 改變)
+    /*  事件廣播接收
+        在Awake()寫 gameMenu.OnSelectedIndexChanged += 功能名; 然後在OnDestroy() 裡面寫gameMenu.OnSelectedIndexChanged += 功能名;
+        例：
+        private void funtionName(int index) {
+        ...
+        }
+        Awake() 寫 gameMenu.OnSelectedIndexChanged += funtionName;
+        OnDestroy 寫gameMenu.OnSelectedIndexChanged -= funtionName;
+    */
 
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
         for (int i = 0; i < 3; ++i) {
             hotbar.Add(PrefabSpawn.SpawnInit(hotbarPrefab, hotbarParent.transform));
         }
+        SetSelectedIndex(0);
     }
 
     public void Refresh() {
@@ -39,4 +51,24 @@ public class GameMenu : MonoBehaviour {
             hotbar_count.SetActive(false);
         }
     }
+
+    // 設定Selected HotBar (外部取用)
+    public void SetSelectedIndex(int newIndex) {
+        if(newIndex == selectedIndex) return;
+        if(newIndex < 0 || newIndex >= hotbar.Count) return;
+
+        //避免原先index = -1(初始值) 加if 限制範圍
+        if(selectedIndex >= 0 && selectedIndex < hotbar.Count) {
+            GameObject oldFrame = hotbar[selectedIndex].FindChildObject("SelectedFrame");
+            if (oldFrame != null) oldFrame.SetActive(false);
+        }
+
+        GameObject newFrame = hotbar[newIndex].FindChildObject("SelectedFrame");
+        if (newFrame != null) newFrame.SetActive(true);
+        
+        selectedIndex = newIndex;
+
+        OnSelectedIndexChanged?.Invoke(selectedIndex); //把index廣撥給有訂閱此事件的物件(腳本)
+    }
+
 }
