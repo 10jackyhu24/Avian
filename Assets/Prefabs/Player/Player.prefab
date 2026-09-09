@@ -135,13 +135,9 @@ MonoBehaviour:
   gravity: -20
   maxHealth: 100
   respawnDelaySeconds: 2
-  attackDamage: 10
-  attackRadius: 7.06
-  attackCooldownSeconds: 0.6
-  attackCenterOffset: {x: 0, y: 1, z: 0}
-  attackLayerMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
+  combatController: {fileID: 0}
+  currentAttackData: {fileID: 11400000, guid: 78e3dc714cef7944b8e9a47ff2e000cd, type: 2}
+  unarmedAttackData: {fileID: 11400000, guid: c0a1fd7924d3c164cb97249b6177e0f9, type: 2}
   healthLabelOffset: {x: 0, y: 2.2, z: 0}
 --- !u!114 &-2242094449183278105
 MonoBehaviour:
@@ -285,7 +281,7 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   attackMode: 0
   requireCombatState: 0
-  currentAttack: {fileID: 11400000, guid: 74eddd7f6613e9140a9018f2a94a0f82, type: 2}
+  currentAttack: {fileID: 11400000, guid: 78e3dc714cef7944b8e9a47ff2e000cd, type: 2}
   originPoint: {fileID: 8526152859912152380}
   targetLayer:
     serializedVersion: 2

@@ -12,15 +12,14 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private float gravity = -20f;
 
     [Header("Health")]
-    [SerializeField] private int maxHealth = 100;
+    [SerializeField] private float maxHealth = 100f;
     [SerializeField] private float respawnDelaySeconds = 2f;
 
     [Header("Combat")]
-    [SerializeField] private int attackDamage = 10;
-    [SerializeField] private float attackRadius = 2f;
-    [SerializeField] private float attackCooldownSeconds = 0.6f;
-    [SerializeField] private Vector3 attackCenterOffset = new Vector3(0f, 1f, 0f);
-    [SerializeField] private LayerMask attackLayerMask = ~0;
+    [SerializeField] private CombatController combatController;
+    [SerializeField] private AttackData currentAttackData;
+    [SerializeField] private AttackData unarmedAttackData;
+
 
     [Header("Debug Health Display")]
     [SerializeField] private Vector3 healthLabelOffset = new Vector3(0f, 2.2f, 0f);
@@ -28,10 +27,9 @@ public class PlayerController : NetworkBehaviour {
     private CharacterController characterController;
     private SpriteRenderer spriteRenderer;
     private Animator animator;
-
     private GameMenu gameMenu;
-
-    private readonly NetworkVariable<int> currentHealth = new NetworkVariable<int>(
+    private UI_BagManager bagManager;
+    private readonly NetworkVariable<float> currentHealth = new NetworkVariable<float>(
         readPerm: NetworkVariableReadPermission.Everyone,
         writePerm: NetworkVariableWritePermission.Server
     );
@@ -69,6 +67,11 @@ public class PlayerController : NetworkBehaviour {
         // 1 2 3 testing
         gameMenu = FindFirstObjectByType<GameMenu>();
         inputActions.Player.Item.performed += OnItemPerformed;
+
+        if (combatController == null) {
+            combatController = GetComponent<CombatController>();
+        }
+        bagManager = FindFirstObjectByType<UI_BagManager>();
     }
 
     private void OnEnable() {
@@ -165,7 +168,14 @@ public class PlayerController : NetworkBehaviour {
         SubmitMovementServerRpc(moveInput.x, moveInput.y, runPressed, jumpPressed);
 
         if (attackPressed) {
-            TryAttackServerRpc();
+            if (currentAttackData == null) {
+                Debug.LogWarning("[PlayerController] currentAttackData 未指定。", this);
+                return;
+            }
+            
+            if(combatController.IsCombating.Value){
+                TryAttackServerRpc();
+            }
         }
     }
 
@@ -191,13 +201,13 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        nextServerAttackTime = Time.time + attackCooldownSeconds;
+        nextServerAttackTime = Time.time + currentAttackData.cooldown;
 
-        Vector3 attackCenter = transform.position + attackCenterOffset;
+        Vector3 attackCenter = transform.position + currentAttackData.centerOffset;
         Collider[] hits = Physics.OverlapSphere(
             attackCenter,
-            attackRadius,
-            attackLayerMask,
+            currentAttackData.radius,
+            currentAttackData.targetLayer,
             QueryTriggerInteraction.Ignore
         );
 
@@ -208,8 +218,8 @@ public class PlayerController : NetworkBehaviour {
                     continue;
                 }
 
-                target.TakeDamage(attackDamage, OwnerClientId);
-                Debug.Log($"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {attackDamage}.", this);
+                target.TakeDamage(currentAttackData.damage, OwnerClientId);
+                Debug.Log($"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {currentAttackData.damage}.", this);
                 return;
             }
 
@@ -218,8 +228,8 @@ public class PlayerController : NetworkBehaviour {
                 continue;
             }
 
-            enemy.TakeDamage(attackDamage, OwnerClientId);
-            Debug.Log($"[PlayerController] Client {OwnerClientId} hit enemy {enemy.name} for {attackDamage}.", this);
+            enemy.TakeDamage(currentAttackData.damage, OwnerClientId);
+            Debug.Log($"[PlayerController] Client {OwnerClientId} hit enemy {enemy.name} for {currentAttackData.damage}.", this);
             return;
         }
     }
@@ -254,7 +264,7 @@ public class PlayerController : NetworkBehaviour {
         characterController.Move(velocity * Time.deltaTime);
     }
 
-    private void TakeDamage(int amount, ulong attackerClientId) {
+    private void TakeDamage(float amount, ulong attackerClientId) {
         if (!IsServer || currentHealth.Value <= 0) {
             return;
         }
@@ -290,7 +300,7 @@ public class PlayerController : NetworkBehaviour {
         respawnCoroutine = null;
     }
 
-    private void OnHealthChanged(int previousValue, int newValue) {
+    private void OnHealthChanged(float previousValue, float newValue) {
         Debug.Log($"[PlayerController] Client {OwnerClientId} health changed: {previousValue} -> {newValue}", this);
     }
 
@@ -330,32 +340,58 @@ public class PlayerController : NetworkBehaviour {
     if (slotIndex < 0) return;
 
     gameMenu?.SetSelectedIndex(slotIndex);    
-    // TODO: 裝備邏輯
-    Debug.Log($"[PlayerController] Item hotkey pressed: {slotIndex}", this);
-
+    
+    HandleSelectedIndexChange(slotIndex);
 }
 
-private int GetHotbarIndex(InputAction.CallbackContext context) {
-    var action = context.action;
-    if (action == null || context.control == null) return -1;
+    private int GetHotbarIndex(InputAction.CallbackContext context) {
+        var action = context.action;
+        if (action == null || context.control == null) return -1;
 
-    // Unity 官方 API：找出是哪個 binding 觸發
-    int bindingIndex = action.GetBindingIndexForControl(context.control);
-    if (bindingIndex < 0) return -1;
+        // Unity 官方 API：找出是哪個 binding 觸發
+        int bindingIndex = action.GetBindingIndexForControl(context.control);
+        if (bindingIndex < 0) return -1;
 
-    // 只計算「非 composite」的離散 binding，壓縮成 0..N-1
-    int slot = 0;
-    for (int i = 0; i < action.bindings.Count; i++) {
-        var b = action.bindings[i];
-        if (b.isComposite || b.isPartOfComposite) continue;
+        // 只計算「非 composite」的離散 binding，壓縮成 0..N-1
+        int slot = 0;
+        for (int i = 0; i < action.bindings.Count; i++) {
+            var b = action.bindings[i];
+            if (b.isComposite || b.isPartOfComposite) continue;
 
-        if (i == bindingIndex) return slot;
-        slot++;
+            if (i == bindingIndex) return slot;
+            slot++;
+        }
+        return -1;
     }
 
-    return -1;
-}
+    private void HandleSelectedIndexChange(int slotIndex) {
+    if (!IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) return;
+    if (bagManager == null) return;
+    if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) return;
 
+    BagSlotData slot = bagManager.bagDataList[slotIndex];
+    if (slot == null || slot.IsEmpty || slot.itemData.itemObject == null) {
+        combatController.SetAttackData(unarmedAttackData);
+        return;
+    }
+
+    ItemObject item = slot.itemData.itemObject;
+    if (!item.IsWeapon) {
+        combatController.ExitCombat();
+        return;
+    }
+
+    // 是武器 -> 切換 AttackData + 進入戰鬥
+    AttackData weaponAttackData = item.attackData;
+    currentAttackData = weaponAttackData;
+
+    if (combatController != null) {
+        combatController.SetAttackData(weaponAttackData);
+        combatController.EntryCombat();
+    }
+
+    Debug.Log($"[Combat] Equipped weapon={item.itemName}, attackData={(weaponAttackData ? weaponAttackData.attackName : "NULL")}", this);
+}
     private void OnDestroy() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         // 1 2 3 testing
@@ -367,6 +403,6 @@ private int GetHotbarIndex(InputAction.CallbackContext context) {
 
     private void OnDrawGizmosSelected() {
         Gizmos.color = Color.red;
-        Gizmos.DrawWireSphere(transform.position + attackCenterOffset, attackRadius);
+        Gizmos.DrawWireSphere(transform.position + currentAttackData.centerOffset, currentAttackData.radius);
     }
 }

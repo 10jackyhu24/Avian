@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -44,10 +44,14 @@ public class CombatController : NetworkBehaviour{
     public NetworkVariable<bool> IsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     private GameInput inputActions;
+    private PlayerController playerController;
+    private Health health;
     private float nextAttackTime;
 
     private void Awake() {
         inputActions = new GameInput();
+        playerController = GetComponent<PlayerController>();
+        health = GetComponent<Health>();
         KeyBinding.LoadBindingOverrides(inputActions);
         if (originPoint == null) originPoint = transform;
     }
@@ -65,17 +69,24 @@ public class CombatController : NetworkBehaviour{
         if (!IsOwner || !IsClient) return;
         CharacterController controller = GetComponent<CharacterController>();
         if (controller != null && !controller.isGrounded) return;
+
         if (inputActions.Player.Attack.WasPressedThisFrame()) RequestAttack();
     }
 
     public void EntryCombat() {
-        if (IsServer) IsCombating.Value = true;
+        // if (IsServer)
+        IsCombating.Value = true;
     }
     public void ExitCombat() {
-        if (IsServer) IsCombating.Value = false;
+        // if (IsServer) 
+        IsCombating.Value = false;
     }
     public void RequestAttack() {
         if (IsOwner) RequestAttackServerRpc();
+    }
+
+    public void SetAttackData(AttackData data) {
+        currentAttack = data;
     }
 
     // Compatibility for existing UnityEvent/script references using the old spelling.
@@ -144,6 +155,10 @@ public class CombatController : NetworkBehaviour{
     // Reserved: obtain mouse world position and spawn an arrow from projectileSpawnPoint on the server.
     private void StartWeaponRangedAttack() {
         Debug.Log("Weapon ranged attack is reserved for the bow/projectile implementation.", this);
+    }
+
+    private void RefreshAttackData(AttackData newAttackData) {
+        currentAttack = newAttackData;
     }
 
     [ClientRpc]

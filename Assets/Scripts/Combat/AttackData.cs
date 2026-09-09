@@ -1,6 +1,5 @@
 using UnityEngine;
 
-
 [CreateAssetMenu(fileName = "NewAttackData", menuName = "Combat/Attack Data")]
 public class AttackData : ScriptableObject
 {
@@ -10,32 +9,22 @@ public class AttackData : ScriptableObject
     public float warningDuration = 1f;
     public float cooldown = 1f;
 
-    [Header("Warning")]
-    public GameObject warningPrefab;
+    [Header("Range / Hit")]
+    public float radius = 2f; // attackRadius
+    public Vector3 centerOffset = new Vector3(0f, 1f, 0f); // attackCenterOffset
+    public LayerMask targetLayer = ~0; // attackLayerMask
 
-    [Header("Attack Shape")]
-    public AttackShape attackShape = AttackShape.Circle;
+    [Header("Attack Effect")]
+    public GameObject attackEffect;
+    public float effectLifetime = 0.3f;
 
-    [Header("Circle")]
-    public float radius = 2f;
-
-    [Header("Cone")]
-    public float coneRadius = 2f;
-    public float coneAngle = 90f;
-
-    [Header("Line")]
-    public float lineLength = 4f;
-    public float lineWidth = 1f;
-
-    [Header("Rectangle")]
-    public float rectangleLength = 4f;
-    public float rectangleWidth = 2f;
+    [Header("Attack Mode")]
+    public AttackMode attackmode = AttackMode.UnarmedMelee;
 }
 
-public enum AttackShape
+public enum AttackMode
 {
-    Circle,
-    Cone,
-    Line,
-    Rectangle
+    UnarmedMelee, // 徒手近戰
+    WeaponMelee,  // 近戰武器
+    WeaponRanged  // 遠程武器
 }

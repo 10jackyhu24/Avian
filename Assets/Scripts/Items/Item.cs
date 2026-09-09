@@ -27,8 +27,10 @@ public class ItemObject : ScriptableObject {
     public bool isWeapon;
     public int maxCount = 1;
     public int baseWeight = 1;
-
+    [Header("Combat")]
+    public AttackData attackData;
     public bool IsWeapon => isWeapon || itemType == ItemType.Weapon;
+    
     public bool IsStackable => maxCount > 1 && !IsWeapon;
 }
 
