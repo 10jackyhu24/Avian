@@ -79,6 +79,7 @@ services:
       ROOM_GAME_PORT: ${ROOM_GAME_PORT:-7777}
       KUBECONFIG: ${KUBECONFIG:-/kube/config}
       KUBERNETES_API_HOST: ${KUBERNETES_API_HOST:-}
+      KUBERNETES_VERIFY_SSL: ${KUBERNETES_VERIFY_SSL:-true}
     ports:
       - "8080:8080"
     volumes:

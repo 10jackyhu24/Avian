@@ -54,7 +54,7 @@ class RoomServerAllocation:
 queue = deque()
 next_room_id = 1
 next_seed = 100000
-next_node_port = None
+allocated_node_ports = set()
 queue_lock = Lock()
 matches_by_user_id = {}
 rooms_by_id = {}
@@ -125,6 +125,16 @@ def get_room_game_port():
     return get_int_env("ROOM_GAME_PORT", 7777)
 
 
+def build_k8s_room_settings():
+    from k8s_rooms import K8sRoomSettings
+
+    return K8sRoomSettings(
+        namespace=get_room_namespace(),
+        image=get_room_image(),
+        game_port=get_room_game_port(),
+    )
+
+
 def allocate_room_id():
     global next_room_id
 
@@ -155,8 +165,6 @@ def allocate_static_room_server():
 
 
 def allocate_node_port():
-    global next_node_port
-
     start_port = get_room_node_port_start()
     end_port = get_room_node_port_end()
     if start_port > end_port:
@@ -165,35 +173,36 @@ def allocate_node_port():
             detail="ROOM_NODE_PORT_START must be less than or equal to ROOM_NODE_PORT_END",
         )
 
-    if next_node_port is None:
-        next_node_port = start_port
+    for node_port in range(start_port, end_port + 1):
+        if node_port not in allocated_node_ports:
+            allocated_node_ports.add(node_port)
+            return node_port
 
-    if next_node_port > end_port:
-        raise HTTPException(
-            status_code=503,
-            detail="No room server ports available",
-        )
+    raise HTTPException(
+        status_code=503,
+        detail="No room server ports available",
+    )
 
-    node_port = next_node_port
-    next_node_port += 1
-    return node_port
+
+def release_node_port(node_port):
+    if node_port is not None:
+        allocated_node_ports.discard(node_port)
 
 
 def allocate_k8s_room_server(room_id, room_seed):
-    from k8s_rooms import K8sRoomSettings, create_room_server
+    from k8s_rooms import create_room_server
 
     node_port = allocate_node_port()
-    settings = K8sRoomSettings(
-        namespace=get_room_namespace(),
-        image=get_room_image(),
-        game_port=get_room_game_port(),
-    )
-    room_server = create_room_server(
-        room_id=room_id,
-        room_seed=room_seed,
-        node_port=node_port,
-        settings=settings,
-    )
+    try:
+        room_server = create_room_server(
+            room_id=room_id,
+            room_seed=room_seed,
+            node_port=node_port,
+            settings=build_k8s_room_settings(),
+        )
+    except Exception:
+        release_node_port(node_port)
+        raise
 
     return RoomServerAllocation(
         room_mode="k8s",
@@ -252,6 +261,57 @@ def build_match_payload(room):
     }
 
 
+def refresh_k8s_room_status(room):
+    if room.room_mode != "k8s":
+        return room.status
+
+    from k8s_rooms import read_room_status
+
+    room_status = read_room_status(
+        server_name=room.server_name,
+        room_id=room.room_id,
+        settings=build_k8s_room_settings(),
+    )
+    room.status = room_status.status
+    return room.status
+
+
+def refresh_all_room_statuses():
+    for room in rooms_by_id.values():
+        if room.room_mode == "k8s":
+            refresh_k8s_room_status(room)
+
+
+def cleanup_finished_k8s_rooms():
+    from k8s_rooms import delete_room_server
+
+    refresh_all_room_statuses()
+
+    deleted_rooms = []
+    for room_id, room in list(rooms_by_id.items()):
+        if room.room_mode != "k8s" or room.status not in ("complete", "failed", "missing"):
+            continue
+
+        delete_room_server(
+            server_name=room.server_name,
+            settings=build_k8s_room_settings(),
+        )
+        release_node_port(room.node_port)
+        remove_room_from_memory(room_id)
+        deleted_rooms.append(asdict(room))
+
+    return deleted_rooms
+
+
+def remove_room_from_memory(room_id):
+    room = rooms_by_id.pop(room_id, None)
+    if room is None:
+        return
+
+    for player in room.players:
+        matches_by_user_id.pop(player["user_id"], None)
+
+
 @app.get("/health")
 def health():
     return {"ok": True, "queue_size": len(queue)}
@@ -275,9 +335,21 @@ def queue_users():
 @app.get("/match/rooms")
 def list_rooms():
     with queue_lock:
+        refresh_all_room_statuses()
         return {
             "room_count": len(rooms_by_id),
             "rooms": [asdict(room) for room in rooms_by_id.values()],
+        }
+
+
+@app.post("/match/rooms/cleanup")
+def cleanup_rooms():
+    with queue_lock:
+        deleted_rooms = cleanup_finished_k8s_rooms()
+        return {
+            "deleted_count": len(deleted_rooms),
+            "deleted_rooms": deleted_rooms,
+            "remaining_room_count": len(rooms_by_id),
         }
 
 
@@ -287,7 +359,9 @@ def room_status(room_id: str):
         if room_id not in rooms_by_id:
             raise HTTPException(status_code=404, detail="Room not found")
 
-        return asdict(rooms_by_id[room_id])
+        room = rooms_by_id[room_id]
+        refresh_k8s_room_status(room)
+        return asdict(room)
 
 
 @app.post("/match/join")

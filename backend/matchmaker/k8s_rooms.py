@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from urllib.parse import urlparse, urlunparse
 
 from kubernetes import client, config
+from kubernetes.client.exceptions import ApiException
 
 
 @dataclass
@@ -19,15 +20,20 @@ class K8sRoomSettings:
     game_port: int
 
 
+@dataclass
+class K8sRoomStatus:
+    status: str
+
+
 def load_kubernetes_client():
     if os.getenv("KUBERNETES_SERVICE_HOST"):
         config.load_incluster_config()
     else:
         config.load_kube_config(config_file=os.getenv("KUBECONFIG"))
 
+    configuration = client.Configuration.get_default_copy()
     api_host_override = os.getenv("KUBERNETES_API_HOST", "").strip()
     if api_host_override:
-        configuration = client.Configuration.get_default_copy()
         parsed = urlparse(configuration.host)
         configuration.host = urlunparse((
             parsed.scheme or "https",
@@ -37,7 +43,25 @@ def load_kubernetes_client():
             parsed.query,
             parsed.fragment,
         ))
-        client.Configuration.set_default(configuration)
+
+    if not get_bool_env("KUBERNETES_VERIFY_SSL", True):
+        configuration.verify_ssl = False
+
+    client.Configuration.set_default(configuration)
+
+
+def get_bool_env(name, default_value):
+    raw_value = os.getenv(name, "").strip().lower()
+    if not raw_value:
+        return default_value
+
+    if raw_value in ("1", "true", "yes", "on"):
+        return True
+
+    if raw_value in ("0", "false", "no", "off"):
+        return False
+
+    raise ValueError(f"{name} must be true or false")
 
 
 def create_room_server(room_id, room_seed, node_port, settings):
@@ -58,6 +82,80 @@ def create_room_server(room_id, room_seed, node_port, settings):
         service_name=server_name,
         node_port=node_port,
     )
+
+
+def read_room_status(server_name, room_id, settings):
+    load_kubernetes_client()
+
+    try:
+        job = client.BatchV1Api().read_namespaced_job(
+            name=server_name,
+            namespace=settings.namespace,
+        )
+    except ApiException as exception:
+        if exception.status == 404:
+            return K8sRoomStatus(status="missing")
+
+        raise
+
+    job_status = job.status
+    if job_status.succeeded and job_status.succeeded > 0:
+        return K8sRoomStatus(status="complete")
+
+    if job_status.failed and job_status.failed > 0:
+        return K8sRoomStatus(status="failed")
+
+    if has_running_ready_pod(room_id, settings):
+        return K8sRoomStatus(status="running")
+
+    return K8sRoomStatus(status="starting")
+
+
+def delete_room_server(server_name, settings):
+    load_kubernetes_client()
+
+    delete_job(server_name, settings)
+    delete_service(server_name, settings)
+
+
+def has_running_ready_pod(room_id, settings):
+    pods = client.CoreV1Api().list_namespaced_pod(
+        namespace=settings.namespace,
+        label_selector=f"avian-room-id={room_id}",
+    )
+
+    for pod in pods.items:
+        if pod.status.phase != "Running":
+            continue
+
+        container_statuses = pod.status.container_statuses or []
+        if any(container.ready for container in container_statuses):
+            return True
+
+    return False
+
+
+def delete_job(server_name, settings):
+    try:
+        client.BatchV1Api().delete_namespaced_job(
+            name=server_name,
+            namespace=settings.namespace,
+            propagation_policy="Background",
+        )
+    except ApiException as exception:
+        if exception.status != 404:
+            raise
+
+
+def delete_service(server_name, settings):
+    try:
+        client.CoreV1Api().delete_namespaced_service(
+            name=server_name,
+            namespace=settings.namespace,
+        )
+    except ApiException as exception:
+        if exception.status != 404:
+            raise
 
 
 def create_service(server_name, node_port, settings, labels):
