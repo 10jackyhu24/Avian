@@ -108,6 +108,10 @@ def get_room_endpoint_host():
     return os.getenv("ROOM_ENDPOINT_HOST", "127.0.0.1").strip() or "127.0.0.1"
 
 
+def build_room_endpoint(node_port):
+    return f"{get_room_endpoint_host()}:{node_port}"
+
+
 def get_room_node_port_start():
     return get_int_env("ROOM_NODE_PORT_START", 30081)
 
@@ -154,16 +158,29 @@ def allocate_room_id():
     return room_id
 
 
-def allocate_room_seed():
+def allocate_room_seed(room_id, room_mode):
     global next_seed
 
     static_room_seed = get_static_room_seed()
-    if static_room_seed is not None:
+    if room_mode == "static" and static_room_seed is not None:
         return static_room_seed
+
+    if room_mode == "k8s" and static_room_seed is not None:
+        return static_room_seed + get_room_number(room_id) - 1
 
     room_seed = next_seed
     next_seed += 1
     return room_seed
+
+
+def get_room_number(room_id):
+    try:
+        return int(room_id.split("-", 1)[1])
+    except (IndexError, ValueError):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Room id does not contain a number: {room_id}",
+        )
 
 
 def allocate_static_room_server():
@@ -231,15 +248,13 @@ def allocate_k8s_room_server(room_id, room_seed):
     return RoomServerAllocation(
         room_mode="k8s",
         status="starting",
-        world_endpoint=f"{get_room_endpoint_host()}:{room_server.node_port}",
+        world_endpoint=build_room_endpoint(room_server.node_port),
         server_name=room_server.server_name,
         node_port=room_server.node_port,
     )
 
 
-def allocate_room_server(room_id, room_seed):
-    room_mode = get_room_mode()
-
+def allocate_room_server(room_id, room_seed, room_mode):
     if room_mode == "static":
         return allocate_static_room_server()
 
@@ -254,8 +269,9 @@ def allocate_room_server(room_id, room_seed):
 
 def create_match_room(player_a, player_b):
     room_id = allocate_room_id()
-    room_seed = allocate_room_seed()
-    allocation = allocate_room_server(room_id, room_seed)
+    room_mode = get_room_mode()
+    room_seed = allocate_room_seed(room_id, room_mode)
+    allocation = allocate_room_server(room_id, room_seed, room_mode)
 
     room = RoomRecord(
         room_id=room_id,
@@ -291,9 +307,11 @@ def build_diagnostics_payload():
         "room_mode": room_mode,
         "queue_size": len(queue),
         "room_count": len(rooms_by_id),
-        "world_endpoint": get_world_endpoint(),
+        "static_world_endpoint": get_world_endpoint(),
         "static_room_seed": get_static_room_seed(),
         "room_endpoint_host": get_room_endpoint_host(),
+        "room_endpoint_format": f"{get_room_endpoint_host()}:<node_port>",
+        "room_endpoint_example": build_room_endpoint(get_room_node_port_start()),
         "room_node_port_start": get_room_node_port_start(),
         "room_node_port_end": get_room_node_port_end(),
         "allocated_node_ports": sorted(allocated_node_ports),

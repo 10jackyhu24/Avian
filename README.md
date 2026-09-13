@@ -92,7 +92,7 @@ The host machine is the computer running the backend and dedicated server. A pla
 * Docker image `avian-dedicated-server:v1`.
 * Playit agent open for UDP game traffic.
 * ngrok tunnel open for public HTTP backend traffic, if testing across different networks.
-* `backend/.env` configured with `WORLD_ENDPOINT`.
+* `backend/.env` configured with the room mode and endpoint values.
 
 **Player machine needs:**
 
@@ -129,6 +129,7 @@ Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export i
 
 ```env
 NGROK_AUTHTOKEN=your_ngrok_token
+ROOM_MODE=static
 WORLD_ENDPOINT=127.0.0.1:30080
 ```
 
@@ -155,10 +156,22 @@ This starts:
 * `avian_ngrok` exposing a public HTTPS tunnel to the lobby
 * `avian_matchmaker` on `localhost:8080`
 
-`WORLD_ENDPOINT` is the game-room endpoint that matchmaking returns to Unity after two players are matched. For local Kind testing, use:
+`WORLD_ENDPOINT` is used by static room mode. Dynamic k8s rooms use `ROOM_ENDPOINT_HOST` plus the allocated NodePort instead.
+
+For local static testing, use:
 
 ```env
+ROOM_MODE=static
 WORLD_ENDPOINT=127.0.0.1:30080
+```
+
+For local dynamic k8s room testing, use:
+
+```env
+ROOM_MODE=k8s
+ROOM_ENDPOINT_HOST=127.0.0.1
+ROOM_NODE_PORT_START=30081
+ROOM_NODE_PORT_END=30084
 ```
 
 **4. Verify the API**
@@ -200,8 +213,9 @@ Use this path if you want to test the world/game-room deployment model with a Un
 Current tested flow:
 
 * Docker Compose still runs auth, lobby, matchmaking, Postgres, Caddy, and ngrok.
-* Kind/Kubernetes runs the Unity game-room server.
-* Unity clients authenticate and match through the backend, then connect to the game-room server through UDP port `30080`.
+* Kind/Kubernetes runs one Unity game-room server per match.
+* Each match gets its own Kubernetes Job, Service, seed, and NodePort.
+* Unity clients authenticate and match through the backend, then connect to their assigned room endpoint.
 
 Open PowerShell **as Administrator** and install Kind and Kubectl if needed:
 ```powershell
@@ -271,46 +285,41 @@ kind export kubeconfig --name avian-cluster
 kind load docker-image avian-dedicated-server:v1 --name avian-cluster
 ```
 
-**4. Deploy the world workload**
+**4. Configure dynamic room allocation**
+
+Set the matchmaker to create one Kubernetes room server for each match:
+
+```env
+ROOM_MODE=k8s
+ROOM_ENDPOINT_HOST=127.0.0.1
+ROOM_NODE_PORT_START=30081
+ROOM_NODE_PORT_END=30084
+ROOM_IMAGE=avian-dedicated-server:v1
+ROOM_NAMESPACE=default
+```
+
+For local testing, `ROOM_ENDPOINT_HOST=127.0.0.1` is correct. For a public host later, replace it with the IP or host name that player computers can reach.
+
+Restart the matchmaker after changing these values:
 
 ```powershell
-kubectl apply -f backend/avian-cluster.yaml
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
 ```
 
-**5. Verify the deployment**
+**5. Verify the matchmaker config**
 
-Verify that the world components are healthy:
 ```powershell
-kubectl get pods
-
-kubectl get svc
-
-kubectl logs -f deployment/avian-rooms-pool-deployment
+Invoke-RestMethod http://127.0.0.1:8080/match/diagnostics | ConvertTo-Json -Depth 10
 ```
 
-Expected service output should include:
+Expected local k8s signs:
 
 ```text
-world-service   NodePort   ...   7777:30080/UDP
+room_mode: k8s
+room_endpoint_host: 127.0.0.1
+room_endpoint_example: 127.0.0.1:30081
+allocated_node_ports: []
 ```
-
-Expected server logs should include:
-
-```text
-[ServerBootstrap] Loaded room seed=100000
-[ServerBootstrap] Listening on 0.0.0.0:7777
-[ServerBootstrap] StartServer=True
-```
-
-The K8s path currently hosts one game-room pod. Lobby auth and matchmaking stay in Docker.
-
-The deployment intentionally uses one replica:
-
-```yaml
-replicas: 1
-```
-
-For the current proof-of-concept, one replica means one Unity dedicated server room. This keeps both matched players on the same server. Do not raise this to `3` yet unless the matchmaker also knows how to assign players to specific pods/endpoints. Multiple replicas behind one UDP service can route players unpredictably for room-based gameplay.
 
 **6. Build and test the Windows client**
 
@@ -319,10 +328,11 @@ For the Windows client build:
 * Make sure `Assets/Scenes/SampleScene.unity` is the first scene.
 * Keep `Assets/Scenes/GameRoon_Server.unity` included in the build list so Netcode scene synchronization can load it.
 * Keep `URL.WorldServer` empty unless you intentionally need a local fallback override.
-* Confirm the matchmaker returns this endpoint through `WORLD_ENDPOINT`:
+* Confirm the matchmaker returns a room endpoint through `/match/rooms`:
 
 ```text
-127.0.0.1:30080
+room-1 -> 127.0.0.1:30081
+room-2 -> 127.0.0.1:30082
 ```
 
 Then start two Windows clients, log in with different accounts, and press **Match** on both clients.
@@ -332,16 +342,25 @@ Successful k8s test signs:
 * Both clients enter the same server scene.
 * Both clients can see each other.
 * Movement and jumping sync between clients.
+* Kubernetes shows one room pod and service per match.
 * Kubernetes logs show client connections, for example:
 
 ```text
-[ServerBootstrap] Client connected: 1
-[ServerBootstrap] Client connected: 2
+[ServerBootstrap] room=room-1 Client connected: 1
+[ServerBootstrap] room=room-1 Client connected: 2
 ```
 
-### Public Two-Computer Test With ngrok + Playit
+### Public Two-Computer Test
 
 Use this when two players are on different internet connections.
+
+The backend HTTP API and the UDP game-room traffic are separate:
+
+* `URL.BaseUrl` points to the public backend HTTP address, usually ngrok.
+* `ROOM_ENDPOINT_HOST` points to the public UDP room host.
+* Each k8s room uses a different UDP NodePort, such as `30081`, `30082`, `30083`.
+
+For multiple k8s rooms across different networks, the player computers must be able to reach the host on every configured room port.
 
 **Computer A: host**
 
@@ -351,42 +370,45 @@ Use this when two players are on different internet connections.
 docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build
 ```
 
-2. Make sure the Kind game server is running:
+2. Make sure the Kind cluster and room image are ready:
 
 ```powershell
-kubectl get pods
-kubectl get svc
+kubectl cluster-info
+kind load docker-image avian-dedicated-server:v1 --name avian-cluster
+```
+
+3. Configure the public room host.
+
+For a public VPS, cloud machine, or router port-forwarding setup:
+
+```env
+ROOM_MODE=k8s
+ROOM_ENDPOINT_HOST=your-public-ip-or-hostname
+ROOM_NODE_PORT_START=30081
+ROOM_NODE_PORT_END=30084
+```
+
+Then allow/forward UDP ports `30081` through `30084` to the host machine.
+
+For Playit-style tunnels, one tunnel usually maps to one local UDP port. That works for one room, but multiple simultaneous k8s rooms need one public tunnel per NodePort, or a later endpoint-mapping feature.
+
+4. Restart the matchmaker:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+```
+
+5. Check the endpoint preview:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8080/match/diagnostics | ConvertTo-Json -Depth 10
 ```
 
 Expected:
 
 ```text
-avian-rooms-pool-deployment ... Running
-world-service ... 7777:30080/UDP
-```
-
-3. Keep the Playit agent open. The tunnel should point to:
-
-```text
-127.0.0.1:30080
-```
-
-Example:
-
-```text
-your-playit-address.ply.gg:12345 -> 127.0.0.1:30080
-```
-
-4. Set `backend/.env`:
-
-```env
-WORLD_ENDPOINT=your-playit-address.ply.gg:12345
-```
-
-5. Restart the matchmaker:
-
-```powershell
-docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+room_mode: k8s
+room_endpoint_example: your-public-ip-or-hostname:30081
 ```
 
 6. Open the ngrok inspector and copy the HTTPS forwarding URL:
@@ -426,8 +448,8 @@ Expected result:
 Known current limitations:
 
 * Two clients using the same account should not be used for matchmaking. The matchmaker keys queue entries by `user_id`, so use different accounts.
-* The public tunnel test may lag because traffic is routed through ngrok, Playit, Docker, and Kind.
-* The current setup exposes one room server, not multiple simultaneous room pods.
+* Public tunnel tests may lag because traffic is routed through tunneling services, Docker, and Kind.
+* Local `127.0.0.1` room endpoints only work on the host machine. Other computers need a reachable public `ROOM_ENDPOINT_HOST`.
 
 ### Authentication Flow
 
