@@ -25,6 +25,7 @@ public class ServerBootstrap : MonoBehaviour {
 
     private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
     private int activeSeed;
+    private string activeRoomId = string.Empty;
     private bool hasAcceptedClient;
     private Coroutine emptyServerQuitCoroutine;
 
@@ -43,13 +44,13 @@ public class ServerBootstrap : MonoBehaviour {
             return;
         }
 
-        LoadSeed();
+        LoadRoomSettings();
         ConfigureTransport();
         NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
 
         if (!NetworkManager.Singleton.IsListening) {
             bool started = NetworkManager.Singleton.StartServer();
-            Debug.Log($"[ServerBootstrap] StartServer={started}", this);
+            Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} StartServer={started}", this);
         }
 
         NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
@@ -85,21 +86,28 @@ public class ServerBootstrap : MonoBehaviour {
             emptyServerQuitCoroutine = null;
         }
 
-        Debug.Log($"[ServerBootstrap] Client connected: {clientId}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Client connected: {clientId}", this);
     }
 
     private void OnClientDisconnected(ulong clientId) {
-        Debug.Log($"[ServerBootstrap] Client disconnected: {clientId}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Client disconnected: {clientId}", this);
         ScheduleQuitIfServerIsEmpty();
     }
 
-    private void LoadSeed() {
+    private void LoadRoomSettings() {
+        activeRoomId = Environment.GetEnvironmentVariable("ROOM_ID");
+        if (string.IsNullOrWhiteSpace(activeRoomId)) {
+            activeRoomId = string.IsNullOrWhiteSpace(GameState.currentRoomId)
+                ? "local-room"
+                : GameState.currentRoomId;
+        }
+
         string mapSeed = Environment.GetEnvironmentVariable("MAP_SEED");
         activeSeed = int.TryParse(mapSeed, out int parsedSeed)
             ? parsedSeed
             : fallbackSeed;
 
-        GameState.SetWorld(GameState.currentRoomId, activeSeed);
+        GameState.SetWorld(activeRoomId, activeSeed);
 
         TerrainController targetTerrain = ResolveTerrainController();
 
@@ -109,7 +117,7 @@ public class ServerBootstrap : MonoBehaviour {
             Debug.LogError("[ServerBootstrap] TerrainController not found. Dedicated server will have no collidable world.", this);
         }
 
-        Debug.Log($"[ServerBootstrap] Loaded room seed={activeSeed}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Loaded seed={activeSeed}", this);
     }
 
     private TerrainController ResolveTerrainController() {
@@ -138,7 +146,7 @@ public class ServerBootstrap : MonoBehaviour {
         }
 
         unityTransport.SetConnectionData(listenAddress, port, listenAddress);
-        Debug.Log($"[ServerBootstrap] Listening on {listenAddress}:{port}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}", this);
     }
 
     private void SpawnEnemies() {
@@ -166,7 +174,7 @@ public class ServerBootstrap : MonoBehaviour {
             }
         }
 
-        Debug.Log($"[ServerBootstrap] Spawned {spawnedEnemies.Count} enemy/enemies.", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Spawned {spawnedEnemies.Count} enemy/enemies.", this);
     }
 
     private Vector3 GetEnemySpawnPosition(int index) {
@@ -204,7 +212,7 @@ public class ServerBootstrap : MonoBehaviour {
 
     private IEnumerator QuitWhenEmptyAfterDelay() {
         float delaySeconds = Mathf.Max(0f, emptyServerQuitDelaySeconds);
-        Debug.Log($"[ServerBootstrap] Server is empty. Quitting in {delaySeconds:0.##} second(s).", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Server is empty. Quitting in {delaySeconds:0.##} second(s).", this);
 
         if (delaySeconds > 0f) {
             yield return new WaitForSeconds(delaySeconds);
@@ -213,12 +221,16 @@ public class ServerBootstrap : MonoBehaviour {
         if (NetworkManager.Singleton != null &&
             NetworkManager.Singleton.IsServer &&
             NetworkManager.Singleton.ConnectedClientsIds.Count > 0) {
-            Debug.Log("[ServerBootstrap] Quit cancelled because a client reconnected.", this);
+            Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Quit cancelled because a client reconnected.", this);
             emptyServerQuitCoroutine = null;
             yield break;
         }
 
-        Debug.Log("[ServerBootstrap] Empty server quitting for fresh pod restart.", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Empty server quitting.", this);
         Application.Quit();
     }
+
+    private string ActiveRoomLabel => string.IsNullOrWhiteSpace(activeRoomId)
+        ? "unassigned"
+        : activeRoomId;
 }

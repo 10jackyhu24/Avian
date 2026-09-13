@@ -1,7 +1,9 @@
 from collections import deque
 from dataclasses import dataclass, asdict
+import asyncio
 import os
 from threading import Lock
+import time
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
@@ -40,6 +42,7 @@ class RoomRecord:
     selected_characters: dict
     server_name: str
     node_port: int | None = None
+    finished_at: float | None = None
 
 
 @dataclass
@@ -125,6 +128,14 @@ def get_room_game_port():
     return get_int_env("ROOM_GAME_PORT", 7777)
 
 
+def get_room_cleanup_grace_seconds():
+    return get_int_env("ROOM_CLEANUP_GRACE_SECONDS", 30)
+
+
+def get_room_cleanup_interval_seconds():
+    return get_int_env("ROOM_CLEANUP_INTERVAL_SECONDS", 10)
+
+
 def build_k8s_room_settings():
     from k8s_rooms import K8sRoomSettings
 
@@ -190,7 +201,7 @@ def release_node_port(node_port):
 
 
 def allocate_k8s_room_server(room_id, room_seed):
-    from k8s_rooms import create_room_server
+    from k8s_rooms import K8sRoomError, create_room_server
 
     node_port = allocate_node_port()
     try:
@@ -200,6 +211,19 @@ def allocate_k8s_room_server(room_id, room_seed):
             node_port=node_port,
             settings=build_k8s_room_settings(),
         )
+    except K8sRoomError as exception:
+        release_node_port(node_port)
+        print(
+            f"[Matchmaker] Failed to create k8s room {room_id} on port {node_port}: {exception}",
+            flush=True,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Kubernetes room creation failed. Check the Kind cluster, "
+                "KUBERNETES_API_HOST, available NodePorts, and that the server image is loaded."
+            ),
+        ) from exception
     except Exception:
         release_node_port(node_port)
         raise
@@ -261,10 +285,35 @@ def build_match_payload(room):
     }
 
 
+def build_diagnostics_payload():
+    room_mode = get_room_mode()
+    return {
+        "room_mode": room_mode,
+        "queue_size": len(queue),
+        "room_count": len(rooms_by_id),
+        "world_endpoint": get_world_endpoint(),
+        "static_room_seed": get_static_room_seed(),
+        "room_endpoint_host": get_room_endpoint_host(),
+        "room_node_port_start": get_room_node_port_start(),
+        "room_node_port_end": get_room_node_port_end(),
+        "allocated_node_ports": sorted(allocated_node_ports),
+        "room_image": get_room_image(),
+        "room_namespace": get_room_namespace(),
+        "room_game_port": get_room_game_port(),
+        "cleanup_grace_seconds": get_room_cleanup_grace_seconds(),
+        "cleanup_interval_seconds": get_room_cleanup_interval_seconds(),
+        "kubernetes_configured": room_mode == "k8s",
+        "kubernetes_api_host": os.getenv("KUBERNETES_API_HOST", "").strip(),
+        "kubernetes_verify_ssl": os.getenv("KUBERNETES_VERIFY_SSL", "true").strip(),
+        "kubeconfig": os.getenv("KUBECONFIG", "").strip(),
+    }
+
+
 def refresh_k8s_room_status(room):
     if room.room_mode != "k8s":
         return room.status
 
+    previous_status = room.status
     from k8s_rooms import read_room_status
 
     room_status = read_room_status(
@@ -273,6 +322,12 @@ def refresh_k8s_room_status(room):
         settings=build_k8s_room_settings(),
     )
     room.status = room_status.status
+    if is_finished_status(room.status):
+        if room.finished_at is None:
+            room.finished_at = time.time()
+    elif room.status != previous_status:
+        room.finished_at = None
+
     return room.status
 
 
@@ -282,14 +337,17 @@ def refresh_all_room_statuses():
             refresh_k8s_room_status(room)
 
 
-def cleanup_finished_k8s_rooms():
+def cleanup_finished_k8s_rooms(min_finished_age_seconds=0):
     from k8s_rooms import delete_room_server
 
     refresh_all_room_statuses()
 
     deleted_rooms = []
     for room_id, room in list(rooms_by_id.items()):
-        if room.room_mode != "k8s" or room.status not in ("complete", "failed", "missing"):
+        if room.room_mode != "k8s" or not is_finished_status(room.status):
+            continue
+
+        if get_finished_age_seconds(room) < min_finished_age_seconds:
             continue
 
         delete_room_server(
@@ -303,6 +361,17 @@ def cleanup_finished_k8s_rooms():
     return deleted_rooms
 
 
+def is_finished_status(status):
+    return status in ("complete", "failed", "missing")
+
+
+def get_finished_age_seconds(room):
+    if room.finished_at is None:
+        return 0
+
+    return time.time() - room.finished_at
+
+
 def remove_room_from_memory(room_id):
     room = rooms_by_id.pop(room_id, None)
     if room is None:
@@ -310,6 +379,28 @@ def remove_room_from_memory(room_id):
 
     for player in room.players:
         matches_by_user_id.pop(player["user_id"], None)
+
+
+@app.on_event("startup")
+async def start_room_cleanup_loop():
+    asyncio.create_task(room_cleanup_loop())
+
+
+async def room_cleanup_loop():
+    while True:
+        await asyncio.sleep(get_room_cleanup_interval_seconds())
+
+        try:
+            with queue_lock:
+                deleted_rooms = cleanup_finished_k8s_rooms(
+                    min_finished_age_seconds=get_room_cleanup_grace_seconds(),
+                )
+
+            if deleted_rooms:
+                deleted_ids = ", ".join(room["room_id"] for room in deleted_rooms)
+                print(f"[Matchmaker] Auto-cleaned room(s): {deleted_ids}", flush=True)
+        except Exception as exception:
+            print(f"[Matchmaker] Auto-cleanup failed: {exception}", flush=True)
 
 
 @app.get("/health")
@@ -330,6 +421,12 @@ def queue_users():
             "queue_size": len(queue),
             "users": [asdict(entry) for entry in queue],
         }
+
+
+@app.get("/match/diagnostics")
+def diagnostics():
+    with queue_lock:
+        return build_diagnostics_payload()
 
 
 @app.get("/match/rooms")

@@ -4,6 +4,7 @@ from urllib.parse import urlparse, urlunparse
 
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
+from urllib3.exceptions import HTTPError as UrllibHttpError
 
 
 @dataclass
@@ -23,6 +24,10 @@ class K8sRoomSettings:
 @dataclass
 class K8sRoomStatus:
     status: str
+
+
+class K8sRoomError(Exception):
+    pass
 
 
 def load_kubernetes_client():
@@ -65,17 +70,33 @@ def get_bool_env(name, default_value):
 
 
 def create_room_server(room_id, room_seed, node_port, settings):
-    load_kubernetes_client()
+    server_name = None
+    created_service = False
 
-    server_name = build_resource_name("avian-room", room_id)
-    labels = {
-        "app": "avian-game-room",
-        "avian-managed-by": "matchmaker",
-        "avian-room-id": room_id,
-    }
+    try:
+        load_kubernetes_client()
 
-    create_service(server_name, node_port, settings, labels)
-    create_job(server_name, room_id, room_seed, settings, labels)
+        server_name = build_resource_name("avian-room", room_id)
+        labels = {
+            "app": "avian-game-room",
+            "avian-managed-by": "matchmaker",
+            "avian-room-id": room_id,
+        }
+
+        create_service(server_name, node_port, settings, labels)
+        created_service = True
+        create_job(server_name, room_id, room_seed, settings, labels)
+    except (ApiException, UrllibHttpError, OSError, ValueError) as exception:
+        if created_service and server_name:
+            try:
+                delete_service(server_name, settings)
+            except Exception as cleanup_exception:
+                print(
+                    f"[Matchmaker] Failed to clean partial k8s service {server_name}: {cleanup_exception}",
+                    flush=True,
+                )
+
+        raise K8sRoomError(str(exception)) from exception
 
     return K8sRoomServer(
         server_name=server_name,
