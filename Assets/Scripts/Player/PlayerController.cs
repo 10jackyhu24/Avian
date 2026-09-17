@@ -244,7 +244,7 @@ public class PlayerController : NetworkBehaviour {
         Vector3 horizontalOffset = hit.ClosestPoint(attackCenter) - attackCenter;
         horizontalOffset.y = 0f;
         float distanceSquared = horizontalOffset.sqrMagnitude;
-        return distanceSquared >= innerRadius * innerRadius && distanceSquared <= attackRadius * attackRadius;
+        return distanceSquared >= innerRadius * innerRadius && distanceSquared <= currentAttackData.radius * currentAttackData.radius;
     }
 
     private void MovePlayer() {
