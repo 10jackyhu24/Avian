@@ -1,5 +1,5 @@
 public static class URL {
-    public static string BaseUrl = "https://easiest-venally-paola.ngrok-free.dev";
+    public static string BaseUrl = "http://localhost:8000";
 
     public static string AuthRegisterPath = "/auth/register";
     public static string AuthLoginPath = "/auth/login";

@@ -1,7 +1,6 @@
 using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.Serialization;
 
 /// <summary>Server-authoritative attacks for unarmed melee, weapon melee, and weapon ranged modes.</summary>
@@ -46,43 +45,38 @@ public class CombatController : NetworkBehaviour{
     public NetworkVariable<bool> IsCombating = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     public NetworkVariable<bool> IsAttacking = new NetworkVariable<bool>(false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private GameInput inputActions;
     private PlayerController playerController;
     private Health health;
     private float nextAttackTime;
 
     private void Awake() {
-        inputActions = new GameInput();
         playerController = GetComponent<PlayerController>();
         health = GetComponent<Health>();
-        KeyBinding.LoadBindingOverrides(inputActions);
         if (originPoint == null) originPoint = transform;
     }
 
-    public override void OnNetworkSpawn() {
-        if (IsOwner) inputActions.Player.Enable();
-    }
-
-    public override void OnNetworkDespawn() {
-        inputActions.Player.Disable();
-    }
-
-    private void Update() {
-        // Uses the Attack Input Action, so OptionsMenu rebinding is respected.
-        if (!IsOwner || !IsClient) return;
-        CharacterController controller = GetComponent<CharacterController>();
-        if (controller != null && !controller.isGrounded) return;
-
-        if (inputActions.Player.Attack.WasPressedThisFrame()) RequestAttack();
-    }
-
     public void EntryCombat() {
-        // if (IsServer)
-        IsCombating.Value = true;
+        SetCombatState(true);
     }
+
     public void ExitCombat() {
-        // if (IsServer) 
-        IsCombating.Value = false;
+        SetCombatState(false);
+    }
+
+    private void SetCombatState(bool isCombating) {
+        if (IsServer) {
+            IsCombating.Value = isCombating;
+            return;
+        }
+
+        if (IsOwner) {
+            SetCombatStateServerRpc(isCombating);
+        }
+    }
+
+    [ServerRpc]
+    private void SetCombatStateServerRpc(bool isCombating) {
+        IsCombating.Value = isCombating;
     }
     public void RequestAttack() {
         if (IsOwner) RequestAttackServerRpc();

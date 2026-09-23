@@ -5,6 +5,11 @@ using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : NetworkBehaviour {
+    private enum NetworkWeapon : byte {
+        None,
+        Axe
+    }
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2.5f;
     [SerializeField] private float runSpeedMultiplier = 1.75f;
@@ -19,6 +24,7 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private CombatController combatController;
     [SerializeField] private AttackData currentAttackData;
     [SerializeField] private AttackData unarmedAttackData;
+    [SerializeField] private AttackData axeAttackData;
 
 
     [Header("Debug Health Display")]
@@ -163,19 +169,12 @@ public class PlayerController : NetworkBehaviour {
         Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
         bool runPressed = inputActions.Player.Run.IsPressed();
         bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
-        bool attackPressed = Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame;
+        bool attackPressed = inputActions.Player.Attack.WasPressedThisFrame();
 
         SubmitMovementServerRpc(moveInput.x, moveInput.y, runPressed, jumpPressed);
 
         if (attackPressed) {
-            if (currentAttackData == null) {
-                Debug.LogWarning("[PlayerController] currentAttackData 未指定。", this);
-                return;
-            }
-            
-            if(combatController.IsCombating.Value){
-                TryAttackServerRpc();
-            }
+            TryAttackServerRpc();
         }
     }
 
@@ -198,6 +197,11 @@ public class PlayerController : NetworkBehaviour {
     [ServerRpc]
     private void TryAttackServerRpc() {
         if (currentHealth.Value <= 0 || Time.time < nextServerAttackTime) {
+            return;
+        }
+
+        if (currentAttackData == null) {
+            Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no supported weapon is equipped.", this);
             return;
         }
 
@@ -236,6 +240,12 @@ public class PlayerController : NetworkBehaviour {
             Debug.Log($"[PlayerController] Client {OwnerClientId} hit enemy {enemy.name} for {currentAttackData.damage}.", this);
             return;
         }
+
+        Debug.Log(
+            $"[Combat] Client {OwnerClientId} {currentAttackData.attackName} attack missed. " +
+            $"Center={attackCenter}, radius={currentAttackData.radius}.",
+            this
+        );
     }
 
     // The inner safe radius is the character's width (diameter), matching CombatController's unarmed ring.
@@ -385,33 +395,60 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void HandleSelectedIndexChange(int slotIndex) {
-    if (!IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) return;
-    if (bagManager == null) return;
-    if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) return;
+        if (!IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) return;
+        if (bagManager == null) return;
+        if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) return;
 
-    BagSlotData slot = bagManager.bagDataList[slotIndex];
-    if (slot == null || slot.IsEmpty || slot.itemData.itemObject == null) {
-        combatController.SetAttackData(unarmedAttackData);
-        return;
+        NetworkWeapon selectedWeapon = NetworkWeapon.None;
+        AttackData localAttackData = null;
+        string selectedItemName = "Empty";
+
+        BagSlotData slot = bagManager.bagDataList[slotIndex];
+        if (slot != null && !slot.IsEmpty && slot.itemData.itemObject != null) {
+            ItemObject item = slot.itemData.itemObject;
+            selectedItemName = item.itemName;
+
+            if (item.IsWeapon &&
+                string.Equals(item.itemName, "Axe", System.StringComparison.OrdinalIgnoreCase) &&
+                item.attackData != null) {
+                selectedWeapon = NetworkWeapon.Axe;
+                localAttackData = item.attackData;
+            }
+        }
+
+        currentAttackData = localAttackData;
+        combatController?.SetAttackData(localAttackData);
+        SetEquippedWeaponServerRpc(selectedWeapon);
+
+        if (selectedWeapon == NetworkWeapon.Axe) {
+            Debug.Log($"[Combat] Requested Axe equip from slot {slotIndex + 1}.", this);
+        }
+        else {
+            Debug.Log($"[Combat] Slot {slotIndex + 1} ({selectedItemName}) has no supported weapon; unequipping.", this);
+        }
     }
 
-    ItemObject item = slot.itemData.itemObject;
-    if (!item.IsWeapon) {
-        combatController.ExitCombat();
-        return;
+    [ServerRpc]
+    private void SetEquippedWeaponServerRpc(NetworkWeapon selectedWeapon) {
+        if (selectedWeapon == NetworkWeapon.Axe && axeAttackData != null) {
+            currentAttackData = axeAttackData;
+            combatController?.SetAttackData(axeAttackData);
+            combatController?.EntryCombat();
+            Debug.Log($"[Combat] Client {OwnerClientId} equipped Axe on server with attackData={axeAttackData.attackName}.", this);
+            return;
+        }
+
+        currentAttackData = null;
+        combatController?.SetAttackData(null);
+        combatController?.ExitCombat();
+
+        if (selectedWeapon == NetworkWeapon.Axe) {
+            Debug.LogWarning($"[Combat] Client {OwnerClientId} requested Axe, but the server Axe AttackData is missing.", this);
+        }
+        else {
+            Debug.Log($"[Combat] Client {OwnerClientId} unequipped its supported weapon on server.", this);
+        }
     }
-
-    // 是武器 -> 切換 AttackData + 進入戰鬥
-    AttackData weaponAttackData = item.attackData;
-    currentAttackData = weaponAttackData;
-
-    if (combatController != null) {
-        combatController.SetAttackData(weaponAttackData);
-        combatController.EntryCombat();
-    }
-
-    Debug.Log($"[Combat] Equipped weapon={item.itemName}, attackData={(weaponAttackData ? weaponAttackData.attackName : "NULL")}", this);
-}
     private void OnDestroy() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         // 1 2 3 testing
@@ -422,6 +459,8 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void OnDrawGizmosSelected() {
+        if (currentAttackData == null) return;
+
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position + currentAttackData.centerOffset, currentAttackData.radius);
     }
