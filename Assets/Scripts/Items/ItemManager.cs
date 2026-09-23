@@ -2,7 +2,18 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public static class ItemManager {
+    // Kept for compatibility with the current bag code, which uses display names.
     public static Dictionary<string, ItemData> items = ItemLoader.LoadAllItemData();
+    public static Dictionary<string, ItemData> itemsById = ItemLoader.LoadAllItemDataById();
+
+    public static bool TryGetItemById(string itemId, out ItemData itemData) {
+        if (string.IsNullOrWhiteSpace(itemId)) {
+            itemData = ItemData.Empty;
+            return false;
+        }
+
+        return itemsById.TryGetValue(itemId, out itemData);
+    }
 
     public static GameObject AddItemInScene(BagSlotData bagSlotData, Vector3 position, Quaternion rotation) {
         if (bagSlotData == null || bagSlotData.IsEmpty || !bagSlotData.itemData.IsValid) {

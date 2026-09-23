@@ -20,6 +20,7 @@ GameObject:
   - component: {fileID: 6334219223960730493}
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
+  - component: {fileID: -3278912345678901234}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -129,7 +130,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 5.75
+  moveSpeed: 14.07
   runSpeedMultiplier: 1.25
   jumpHeight: 2.2
   gravity: -20
@@ -364,6 +365,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCurrency
   ShowTopMostFoldoutHeaderGroup: 1
   startingCoins: 0
+--- !u!114 &-3278912345678901234
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7420dc443dcc47a8a4e0a0a892663b1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0

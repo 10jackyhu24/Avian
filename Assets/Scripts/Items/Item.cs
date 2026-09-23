@@ -19,6 +19,8 @@ public enum AttachmentType {
 
 [CreateAssetMenu(fileName = "NewItemObject", menuName = "Inventory/Item Object")]
 public class ItemObject : ScriptableObject {
+    [Tooltip("Stable identifier used for saves and networking. Do not change after release.")]
+    public string itemId;
     public string itemName;
     public Sprite icon;
     public ItemType itemType;
