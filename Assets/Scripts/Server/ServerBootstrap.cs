@@ -53,6 +53,9 @@ public class ServerBootstrap : MonoBehaviour {
             Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} StartServer={started}", this);
         }
 
+        DroppedItemRegistry.Reset();
+        DroppedItemStreamer.EnsureExists(NetworkManager.Singleton);
+
         NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
         NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;

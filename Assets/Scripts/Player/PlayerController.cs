@@ -943,7 +943,32 @@ public class PlayerController : NetworkBehaviour {
 
         Debug.Log($"[Combat] Client {OwnerClientId} cleared its selected attack.", this);
     }
-    public override void OnDestroy() {
+
+    public void UnequipDroppedWeaponOnServer(string droppedItemId) {
+        if (!IsServer || currentAttackData == null ||
+            !string.Equals(droppedItemId, "axe", System.StringComparison.OrdinalIgnoreCase)) {
+            return;
+        }
+
+        ClearEquippedWeapon();
+        ClearEquippedWeaponClientRpc();
+        Debug.Log($"[Combat] Client {OwnerClientId} dropped its equipped Axe; unequipping.", this);
+    }
+
+    [ClientRpc]
+    private void ClearEquippedWeaponClientRpc() {
+        if (IsOwner) {
+            ClearEquippedWeapon();
+        }
+    }
+
+    private void ClearEquippedWeapon() {
+        currentAttackData = null;
+        combatController?.SetAttackData(null);
+        combatController?.ExitCombat();
+    }
+
+    private void OnDestroy() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         if (gameMenu != null) {
             gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;

@@ -44,6 +44,8 @@ public class PlayerSpawner : NetworkBehaviour {
         }
 
         serverSpawnInitialized = true;
+        DroppedItemRegistry.Reset();
+        DroppedItemStreamer.EnsureExists(NetworkManager.Singleton);
         RegisterPlayerSpawning(NetworkManager.Singleton, playerPrefab, spawnPosition, this);
         SpawnEnemies();
         Debug.Log("[PlayerSpawner] Server spawn callback registered.", this);

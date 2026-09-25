@@ -24,6 +24,46 @@ public class Pickupable : MonoBehaviour {
         count = Mathf.Max(1, value);
     }
 
+    public bool SetNetworkState(InventoryItemState state) {
+        if (!state.IsValid ||
+            !ItemManager.TryGetItemById(state.ItemId.ToString(), out ItemData resolvedItem)) {
+            itemData = ItemData.Empty;
+            attachments = null;
+            return false;
+        }
+
+        itemData = resolvedItem;
+        count = state.Count;
+        attachments = null;
+
+        if (itemData.IsWeapon) {
+            attachments = new List<AttachmentSlotData> {
+                CreateAttachmentSlot(AttachmentType.AttackSpeed, state.AttackSpeedAttachmentId.ToString()),
+                CreateAttachmentSlot(AttachmentType.DamageBonus, state.DamageBonusAttachmentId.ToString()),
+                CreateAttachmentSlot(AttachmentType.CriticalRate, state.CriticalRateAttachmentId.ToString())
+            };
+        }
+
+        return true;
+    }
+
+    private static AttachmentSlotData CreateAttachmentSlot(
+        AttachmentType attachmentType,
+        string attachmentItemId) {
+        ItemData attachmentItem = ItemData.Empty;
+
+        if (!string.IsNullOrWhiteSpace(attachmentItemId) &&
+            ItemManager.TryGetItemById(attachmentItemId, out ItemData resolvedAttachment) &&
+            resolvedAttachment.attachmentType == attachmentType) {
+            attachmentItem = resolvedAttachment;
+        }
+
+        return new AttachmentSlotData {
+            requiredType = attachmentType,
+            attachedItem = attachmentItem
+        };
+    }
+
     public BagSlotData ToBagSlotData() {
         BagSlotData bagSlotData = new BagSlotData {
             itemData = itemData,

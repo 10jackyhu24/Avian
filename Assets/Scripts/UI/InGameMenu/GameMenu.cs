@@ -26,16 +26,10 @@ public class GameMenu : MonoBehaviour {
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
         if (bagManager != null) {
-            bagManager.BagChanged += HandleBagChanged;
+            bagManager.InventoryDisplayChanged += Refresh;
         }
 
-        // The prefab already contains one slot for layout preview. Reuse any existing
-        // slots first, then only create enough objects to reach the configured total.
-        for (int i = 0; i < hotbarParent.transform.childCount && hotbar.Count < HotbarSlotCount; ++i) {
-            hotbar.Add(hotbarParent.transform.GetChild(i).gameObject);
-        }
-
-        while (hotbar.Count < HotbarSlotCount) {
+        for (int i = 0; i < 3; ++i) {
             hotbar.Add(PrefabSpawn.SpawnInit(hotbarPrefab, hotbarParent.transform));
         }
 
@@ -48,18 +42,15 @@ public class GameMenu : MonoBehaviour {
 
     private void OnDestroy() {
         if (bagManager != null) {
-            bagManager.BagChanged -= HandleBagChanged;
-        }
-    }
-
-    private void HandleBagChanged() {
-        Refresh();
-        if (selectedIndex >= 0) {
-            OnSelectedIndexChanged?.Invoke(selectedIndex);
+            bagManager.InventoryDisplayChanged -= Refresh;
         }
     }
 
     public void Refresh() {
+        if (bagManager == null) {
+            return;
+        }
+
         int hotbar_size = hotbar.Count;
         int bag_list_size = bagManager.bagDataList.Count;
         int min_size = Math.Min(hotbar_size, bag_list_size);
