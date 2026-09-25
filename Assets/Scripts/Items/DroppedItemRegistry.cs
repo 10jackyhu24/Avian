@@ -3,7 +3,7 @@ using UnityEngine;
 
 public sealed class DroppedItemRecord {
     public InventoryItemState ItemState { get; }
-    public Vector3 Position { get; }
+    public Vector3 Position { get; private set; }
     public NetworkDroppedItem SpawnedItem { get; private set; }
 
     public DroppedItemRecord(
@@ -17,6 +17,10 @@ public sealed class DroppedItemRecord {
 
     public void SetSpawnedItem(NetworkDroppedItem spawnedItem) {
         SpawnedItem = spawnedItem;
+    }
+
+    public void SetPosition(Vector3 position) {
+        Position = position;
     }
 }
 
@@ -69,6 +73,19 @@ public static class DroppedItemRegistry {
         }
 
         record.SetSpawnedItem(newSpawnedItem);
+        return true;
+    }
+
+    public static bool TryUpdatePosition(
+        ulong instanceId,
+        NetworkDroppedItem expectedSpawnedItem,
+        Vector3 position) {
+        if (!records.TryGetValue(instanceId, out DroppedItemRecord record) ||
+            record.SpawnedItem != expectedSpawnedItem) {
+            return false;
+        }
+
+        record.SetPosition(position);
         return true;
     }
 

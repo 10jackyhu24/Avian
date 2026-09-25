@@ -4,9 +4,13 @@ using UnityEngine;
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkObject))]
 [RequireComponent(typeof(Pickupable))]
+[RequireComponent(typeof(Rigidbody))]
 public class NetworkDroppedItem : NetworkBehaviour {
     [SerializeField] private SpriteRenderer itemRenderer;
     [SerializeField] private Pickupable pickupable;
+
+    private Rigidbody itemRigidbody;
+    private bool hasSettled;
 
     private readonly NetworkVariable<InventoryItemState> itemState =
         new NetworkVariable<InventoryItemState>(
@@ -23,10 +27,33 @@ public class NetworkDroppedItem : NetworkBehaviour {
     public override void OnNetworkSpawn() {
         itemState.OnValueChanged += HandleItemStateChanged;
         ApplyItemState(itemState.Value);
+        hasSettled = false;
     }
 
     public override void OnNetworkDespawn() {
         itemState.OnValueChanged -= HandleItemStateChanged;
+    }
+
+    private void FixedUpdate() {
+        if (!IsServer || hasSettled || itemRigidbody == null ||
+            itemRigidbody.isKinematic || !itemRigidbody.IsSleeping() ||
+            !itemState.Value.IsValid) {
+            return;
+        }
+
+        hasSettled = true;
+        DroppedItemRegistry.TryUpdatePosition(
+            itemState.Value.InstanceId,
+            this,
+            transform.position
+        );
+        itemRigidbody.isKinematic = true;
+
+        Debug.Log(
+            $"[NetworkDroppedItem] Settled {itemState.Value.ItemId} " +
+            $"(instance {itemState.Value.InstanceId}) at {transform.position}.",
+            this
+        );
     }
 
     public void SetItemStateOnServer(InventoryItemState value) {
@@ -61,6 +88,10 @@ public class NetworkDroppedItem : NetworkBehaviour {
 
         if (itemRenderer == null) {
             itemRenderer = GetComponentInChildren<SpriteRenderer>();
+        }
+
+        if (itemRigidbody == null) {
+            itemRigidbody = GetComponent<Rigidbody>();
         }
     }
 

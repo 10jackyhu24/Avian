@@ -47,8 +47,11 @@ public class DroppedItemStreamer : MonoBehaviour {
     private void RefreshDroppedItems() {
         List<DroppedItemRecord> records = DroppedItemRegistry.GetRecordsSnapshot();
         foreach (DroppedItemRecord record in records) {
-            bool shouldBeSpawned = terrainController.IsWorldPositionLoaded(record.Position);
             bool isSpawned = record.SpawnedItem != null && record.SpawnedItem.IsSpawned;
+            Vector3 currentPosition = isSpawned
+                ? record.SpawnedItem.transform.position
+                : record.Position;
+            bool shouldBeSpawned = terrainController.IsWorldPositionLoaded(currentPosition);
 
             if (isSpawned && !shouldBeSpawned) {
                 DespawnWorldObject(record);
@@ -61,6 +64,13 @@ public class DroppedItemStreamer : MonoBehaviour {
 
     private static void DespawnWorldObject(DroppedItemRecord record) {
         NetworkDroppedItem spawnedItem = record.SpawnedItem;
+        if (!DroppedItemRegistry.TryUpdatePosition(
+                record.ItemState.InstanceId,
+                spawnedItem,
+                spawnedItem.transform.position)) {
+            return;
+        }
+
         if (!DroppedItemRegistry.TrySetSpawnedItem(
                 record.ItemState.InstanceId,
                 spawnedItem,
