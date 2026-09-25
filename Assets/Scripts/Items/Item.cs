@@ -6,7 +6,8 @@ public enum ItemType {
     Weapon,
     AttackSpeed,
     DamageBonus,
-    CriticalRate
+    CriticalRate,
+    Ammo
 }
 
 // Types of attachment slots for weapons
@@ -97,6 +98,8 @@ public class AttachmentSlotData {
 
 [System.Serializable]
 public class BagSlotData {
+    // Zero for legacy/local-only data; nonzero when this slot represents a server inventory item.
+    public ulong instanceId;
     public ItemData itemData;
     public int count;
     public List<AttachmentSlotData> attachments = new List<AttachmentSlotData>();

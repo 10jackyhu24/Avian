@@ -23,13 +23,27 @@ public class GameMenu : MonoBehaviour {
 
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
+        if (bagManager != null) {
+            bagManager.InventoryDisplayChanged += Refresh;
+        }
+
         for (int i = 0; i < 3; ++i) {
             hotbar.Add(PrefabSpawn.SpawnInit(hotbarPrefab, hotbarParent.transform));
         }
         SetSelectedIndex(0);
     }
 
+    private void OnDestroy() {
+        if (bagManager != null) {
+            bagManager.InventoryDisplayChanged -= Refresh;
+        }
+    }
+
     public void Refresh() {
+        if (bagManager == null) {
+            return;
+        }
+
         int hotbar_size = hotbar.Count;
         int bag_list_size = bagManager.bagDataList.Count;
         int min_size = Math.Min(hotbar_size, bag_list_size);

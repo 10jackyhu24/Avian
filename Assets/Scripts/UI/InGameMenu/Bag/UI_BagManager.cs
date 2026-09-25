@@ -1,9 +1,9 @@
+using System;
+using System.Collections;
 using System.Collections.Generic;
-using UnityEngine;
 using TMPro;
-using System.Net.Mail;
-using System.Runtime.CompilerServices;
-using UnityEngine.Rendering;
+using Unity.Netcode;
+using UnityEngine;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
@@ -21,8 +21,13 @@ public class UI_BagManager : MonoBehaviour {
     [SerializeField] private Transform pickupableContentRoot;
     [SerializeField] private UI_BagItemSlot itemSlotPrefab;
 
-    // Data source for the inventory
+    // Display cache rebuilt from the local player's server-owned inventory.
     public List<BagSlotData> bagDataList = new List<BagSlotData>();
+
+    private PlayerInventory playerInventory;
+    private Coroutine pendingInventoryRefresh;
+
+    public event Action InventoryDisplayChanged;
 
     private static readonly AttachmentType[] DefaultWeaponAttachmentTypes = {
         AttachmentType.AttackSpeed,
@@ -30,26 +35,125 @@ public class UI_BagManager : MonoBehaviour {
         AttachmentType.CriticalRate
     };
 
-    private void Awake() {
-        Dictionary<string, ItemData> items = ItemManager.items;
-        AddItem(items["Arrow"], 3);
-        AddItem(items["Axe"]);
-        AddItem(items["Sickle"]);
-        SetAttachmentItem(1, AttachmentType.AttackSpeed, items["AttackSpeed"]);
-        AddItem(items["Sword"]);
-        // SetAttachmentItem(1, AttachmentType.AttackSpeed, items["Gun3"]);
+    private IEnumerator Start() {
+        while (!TryBindLocalInventory()) {
+            yield return null;
+        }
+    }
+
+    private void OnDestroy() {
+        if (playerInventory != null) {
+            playerInventory.InventoryChanged -= HandleInventoryChanged;
+        }
+    }
+
+    private bool TryBindLocalInventory() {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        if (networkManager == null || !networkManager.IsClient || networkManager.LocalClient == null) {
+            return false;
+        }
+
+        NetworkObject localPlayer = networkManager.LocalClient.PlayerObject;
+        if (localPlayer == null || !localPlayer.TryGetComponent(out PlayerInventory inventory)) {
+            return false;
+        }
+
+        playerInventory = inventory;
+        playerInventory.InventoryChanged += HandleInventoryChanged;
+        RebuildFromPlayerInventory();
+
+        Debug.Log($"[UI_BagManager] Bound to PlayerInventory for client {playerInventory.OwnerClientId}.", this);
+        return true;
+    }
+
+    private void HandleInventoryChanged() {
+        if (pendingInventoryRefresh == null) {
+            pendingInventoryRefresh = StartCoroutine(RebuildFromPlayerInventoryNextFrame());
+        }
+    }
+
+    private IEnumerator RebuildFromPlayerInventoryNextFrame() {
+        yield return null;
+        pendingInventoryRefresh = null;
+
+        if (playerInventory != null) {
+            RebuildFromPlayerInventory();
+        }
+    }
+
+    private void RebuildFromPlayerInventory() {
+        bagDataList.Clear();
+
+        for (int slotIndex = 0; slotIndex < playerInventory.SlotCount; slotIndex++) {
+            if (!playerInventory.TryGetSlot(slotIndex, out InventorySlotState networkSlot)) {
+                Debug.LogWarning($"[UI_BagManager] Server inventory is missing slot {slotIndex}.", this);
+                continue;
+            }
+
+            if (TryCreateDisplaySlot(networkSlot.Item, out BagSlotData displaySlot)) {
+                bagDataList.Add(displaySlot);
+            }
+        }
+
+        RebuildSlots();
+        InventoryDisplayChanged?.Invoke();
+        Debug.Log($"[UI_BagManager] Rendered {bagDataList.Count} server inventory slot(s).", this);
+    }
+
+    private bool TryCreateDisplaySlot(InventoryItemState networkItem, out BagSlotData displaySlot) {
+        displaySlot = null;
+
+        string itemId = networkItem.ItemId.ToString();
+        if (!networkItem.IsValid || !ItemManager.TryGetItemById(itemId, out ItemData itemData)) {
+            Debug.LogError($"[UI_BagManager] Cannot display unknown or invalid item ID '{itemId}'.", this);
+            return false;
+        }
+
+        displaySlot = new BagSlotData {
+            instanceId = networkItem.InstanceId,
+            itemData = itemData,
+            count = networkItem.Count
+        };
+
+        if (!displaySlot.IsWeapon) {
+            return true;
+        }
+
+        displaySlot.EnsureAttachmentSlots(DefaultWeaponAttachmentTypes);
+        ApplyDisplayAttachment(displaySlot, AttachmentType.AttackSpeed, networkItem.AttackSpeedAttachmentId.ToString());
+        ApplyDisplayAttachment(displaySlot, AttachmentType.DamageBonus, networkItem.DamageBonusAttachmentId.ToString());
+        ApplyDisplayAttachment(displaySlot, AttachmentType.CriticalRate, networkItem.CriticalRateAttachmentId.ToString());
+        return true;
+    }
+
+    private void ApplyDisplayAttachment(BagSlotData displaySlot, AttachmentType attachmentType, string attachmentItemId) {
+        if (string.IsNullOrWhiteSpace(attachmentItemId)) {
+            return;
+        }
+
+        if (!ItemManager.TryGetItemById(attachmentItemId, out ItemData attachmentItem) ||
+            attachmentItem.attachmentType != attachmentType) {
+            Debug.LogError($"[UI_BagManager] Cannot display attachment '{attachmentItemId}' as {attachmentType}.", this);
+            return;
+        }
+
+        foreach (AttachmentSlotData attachmentSlot in displaySlot.attachments) {
+            if (attachmentSlot.requiredType == attachmentType) {
+                attachmentSlot.attachedItem = attachmentItem;
+                return;
+            }
+        }
     }
 
     public void RefreshNearbyPickupables() {
         nearbyPickupables.Clear();
 
-        PlayerController player = FindFirstObjectByType<PlayerController>();
-        if (player == null) {
+        if (playerInventory == null) {
             return;
         }
 
         Collider[] hits = Physics.OverlapSphere(
-            player.transform.position,
+            playerInventory.transform.position,
             pickupScanRadius,
             pickupScanLayerMask,
             QueryTriggerInteraction.Collide
@@ -203,6 +307,55 @@ public class UI_BagManager : MonoBehaviour {
 
         bagDataList.Insert(Mathf.Clamp(toIndex, 0, bagDataList.Count), slot);
         RebuildSlots();
+    }
+
+    public void RequestMoveSlot(int fromIndex, int insertionIndex) {
+        if (playerInventory == null || fromIndex < 0 || fromIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong instanceId = bagDataList[fromIndex].instanceId;
+        if (instanceId == 0) {
+            Debug.LogWarning($"[UI_BagManager] Slot {fromIndex} has no server item instance ID.", this);
+            return;
+        }
+
+        playerInventory.RequestMoveItem(instanceId, insertionIndex);
+    }
+
+    public void RequestInstallAttachment(int attachmentIndex, int weaponIndex, AttachmentType attachmentType) {
+        if (playerInventory == null ||
+            attachmentIndex < 0 || attachmentIndex >= bagDataList.Count ||
+            weaponIndex < 0 || weaponIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong attachmentInstanceId = bagDataList[attachmentIndex].instanceId;
+        ulong weaponInstanceId = bagDataList[weaponIndex].instanceId;
+        if (attachmentInstanceId == 0 || weaponInstanceId == 0) {
+            Debug.LogWarning("[UI_BagManager] Attachment request is missing a server item instance ID.", this);
+            return;
+        }
+
+        playerInventory.RequestInstallAttachment(
+            attachmentInstanceId,
+            weaponInstanceId,
+            attachmentType
+        );
+    }
+
+    public void RequestDetachAttachment(int weaponIndex, AttachmentType attachmentType) {
+        if (playerInventory == null || weaponIndex < 0 || weaponIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong weaponInstanceId = bagDataList[weaponIndex].instanceId;
+        if (weaponInstanceId == 0) {
+            Debug.LogWarning("[UI_BagManager] Detachment request is missing a server weapon instance ID.", this);
+            return;
+        }
+
+        playerInventory.RequestDetachAttachment(weaponInstanceId, attachmentType);
     }
 
     public void RemoveSlot(int index) {
