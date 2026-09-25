@@ -7,12 +7,13 @@ public static class URL {
 
     public static string MatchJoinPath = "/match/join";
     public static string MatchStatusPath = "/match/status";
-    public static string MatchCharacterSelectionPath = "/match/character-selection";
-    public static string MatchCharacterSelectionCancelPath = "/match/character-selection/cancel";
-    public static string MatchCharacterSelectionStatusPath = "/match/character-selection/status";
 
     public static string WorldRoomConfigPath = "/room";
 
     // Optional local fallback. Prefer the matchmaker's world_endpoint for real matches.
     public static string WorldServer = "127.0.0.1:30080";
+
+    public static string MatchCharacterSelectionPath = "/match/character-selection";
+    public static string MatchCharacterSelectionCancelPath = "/match/character-selection/cancel";
+    public static string MatchCharacterSelectionStatusPath = "/match/character-selection/status";
 }

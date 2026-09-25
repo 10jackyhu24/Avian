@@ -22,12 +22,12 @@ public class CombatController : NetworkBehaviour{
     [Header("Unarmed Melee")]
     // 【無武器攻擊圓圈半徑設定】半徑 = 角色寬度 × 此倍率。
     [Tooltip("Unarmed radius = character width x this value.")]
-    [SerializeField] private float unarmedRadiusWidthMultiplier = 1.8f;
+    [SerializeField] private float unarmedRadiusWidthMultiplier = 2.5f;
     // 【無武器安全內圈】半徑 = 角色自身寬度 × 此倍率。此區域不會生成拳頭，也不會造成傷害。
     [Tooltip("Unarmed inner safe radius = character width x this value.")]
-    [SerializeField] private float unarmedInnerRadiusWidthMultiplier = 1f;
+    [SerializeField] private float unarmedInnerRadiusWidthMultiplier = 1.8f;
     // 找不到 CharacterController / CapsuleCollider 時使用的固定半徑。
-    [SerializeField] private float unarmedRadiusFallback = 1.4f;
+    [SerializeField] private float unarmedRadiusFallback = 1.5f;
 
     [Header("Unarmed Melee Visual Test")]
     [SerializeField] private bool visualTestOnly = true;

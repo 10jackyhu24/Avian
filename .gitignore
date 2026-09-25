@@ -107,6 +107,7 @@ InitTestScene*.unity*
 
 # Auto-generated files by Unity when using the "Unity Merge Tool"
 *.orig
+*.orig.meta
 
 # vscode settings
 *.lscache
@@ -119,3 +120,7 @@ __pycache__/
 # backend
 secret.yaml
 .env
+
+# unity
+/Assets/_Recovery/
+_Recovery.meta
