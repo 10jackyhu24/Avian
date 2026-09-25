@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using TMPro;
 
 public class GameMenu : MonoBehaviour {
+    private const int HotbarSlotCount = 3;
     private UI_BagManager bagManager;
     [SerializeField] GameObject hotbarParent;
     [SerializeField] GameObject hotbarPrefab;
@@ -23,9 +24,21 @@ public class GameMenu : MonoBehaviour {
 
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
-        for (int i = 0; i < 3; ++i) {
+
+        // The prefab already contains one slot for layout preview. Reuse any existing
+        // slots first, then only create enough objects to reach the configured total.
+        for (int i = 0; i < hotbarParent.transform.childCount && hotbar.Count < HotbarSlotCount; ++i) {
+            hotbar.Add(hotbarParent.transform.GetChild(i).gameObject);
+        }
+
+        while (hotbar.Count < HotbarSlotCount) {
             hotbar.Add(PrefabSpawn.SpawnInit(hotbarPrefab, hotbarParent.transform));
         }
+
+        for (int i = hotbarParent.transform.childCount - 1; i >= HotbarSlotCount; --i) {
+            Destroy(hotbarParent.transform.GetChild(i).gameObject);
+        }
+
         SetSelectedIndex(0);
     }
 

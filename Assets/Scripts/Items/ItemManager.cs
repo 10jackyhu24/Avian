@@ -15,6 +15,20 @@ public static class ItemManager {
         return itemsById.TryGetValue(itemId, out itemData);
     }
 
+    public static bool TryGetWeaponById(string itemId, out ItemData itemData, out AttackData attackData) {
+        if (!TryGetItemById(itemId, out itemData) ||
+            !itemData.IsWeapon ||
+            itemData.itemObject == null ||
+            itemData.itemObject.attackData == null) {
+            itemData = ItemData.Empty;
+            attackData = null;
+            return false;
+        }
+
+        attackData = itemData.itemObject.attackData;
+        return true;
+    }
+
     public static GameObject AddItemInScene(BagSlotData bagSlotData, Vector3 position, Quaternion rotation) {
         if (bagSlotData == null || bagSlotData.IsEmpty || !bagSlotData.itemData.IsValid) {
             Debug.LogWarning("[ItemManager] AddItemInScene failed because bag slot data is empty.");
