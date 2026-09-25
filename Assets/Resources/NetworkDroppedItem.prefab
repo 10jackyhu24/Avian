@@ -17,6 +17,8 @@ GameObject:
   - component: {fileID: 6124879301122334462}
   - component: {fileID: 6124879301122334463}
   - component: {fileID: 6124879301122334464}
+  - component: {fileID: 6124879301122334465}
+  - component: {fileID: 6124879301122334466}
   m_Layer: 7
   m_Name: NetworkDroppedItem
   m_TagString: Item
@@ -88,7 +90,6 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_AdditionalVertexStreams: {fileID: 0}
   m_Sprite: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_FlipX: 0
@@ -145,7 +146,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 3095128791
+  GlobalObjectIdHash: 4040622183
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 0
@@ -170,6 +171,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3a395f96437d4e8fa6bcfb5c217e973b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::NetworkDroppedItem
+  ShowTopMostFoldoutHeaderGroup: 1
   itemRenderer: {fileID: 6124879301122334457}
   pickupable: {fileID: 6124879301122334458}
 --- !u!54 &6124879301122334462
@@ -209,7 +211,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: e96cb6065543e43c4a752faaa1468eb1, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkTransform
   ShowTopMostFoldoutHeaderGroup: 1
   NetworkTransformExpanded: 0
@@ -255,9 +257,46 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f6c0be61502bb534f922ebb746851216, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.Components.NetworkRigidbody
+  ShowTopMostFoldoutHeaderGroup: 1
   NetworkRigidbodyBaseExpanded: 0
   UseRigidBodyForMotion: 1
   AutoUpdateKinematicState: 1
   AutoSetKinematicOnDespawn: 1
+--- !u!114 &6124879301122334465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6124879301122334455}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6bfc0c1a2d98445c9e6e198f740ab321, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DroppedItemBeacon
+  beaconHeight: 20.76
+  bottomOffset: 0.25
+  baseWidth: 2.24
+  pulseSpeed: 2.5
+  minimumAlpha: 1.24
+  maximumAlpha: 2.87
+  beaconColor: {r: 1, g: 0.82, b: 0.25, a: 1}
+--- !u!114 &6124879301122334466
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6124879301122334455}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e863230777c44d688cc8b565152f729e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::MapMarker
+  markerId: dropped_item
+  markerType: 7
+  displayName: Dropped Item
+  icon: {fileID: 0}
+  discoveryRadius: 30

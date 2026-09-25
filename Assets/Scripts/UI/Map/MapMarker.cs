@@ -6,7 +6,9 @@ public enum MapMarkerType {
     Structure,
     Dungeon,
     Quest,
-    Custom
+    Custom,
+    Enemy,
+    DroppedItem
 }
 
 public class MapMarker : MonoBehaviour {
