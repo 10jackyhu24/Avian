@@ -145,13 +145,12 @@ public class UI_BagManager : MonoBehaviour {
         }
     }
 
-    public void RefreshNearbyPickupables() {
-        nearbyPickupables.Clear();
-
+    public bool RefreshNearbyPickupables() {
         if (playerInventory == null) {
-            return;
+            return false;
         }
 
+        List<Pickupable> foundPickupables = new List<Pickupable>();
         Collider[] hits = Physics.OverlapSphere(
             playerInventory.transform.position,
             pickupScanRadius,
@@ -169,10 +168,28 @@ public class UI_BagManager : MonoBehaviour {
                 continue;
             }
 
-            if (!nearbyPickupables.Contains(pickupable)) {
-                nearbyPickupables.Add(pickupable);
+            if (!foundPickupables.Contains(pickupable)) {
+                foundPickupables.Add(pickupable);
             }
         }
+
+        bool changed = foundPickupables.Count != nearbyPickupables.Count;
+        if (!changed) {
+            for (int i = 0; i < nearbyPickupables.Count; i++) {
+                if (!foundPickupables.Contains(nearbyPickupables[i])) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!changed) {
+            return false;
+        }
+
+        nearbyPickupables.Clear();
+        nearbyPickupables.AddRange(foundPickupables);
+        return true;
     }
 
     public IReadOnlyList<Pickupable> GetNearbyPickupables() {
@@ -358,6 +375,34 @@ public class UI_BagManager : MonoBehaviour {
         playerInventory.RequestDetachAttachment(weaponInstanceId, attachmentType);
     }
 
+    public void RequestDropSlot(int slotIndex) {
+        if (playerInventory == null || slotIndex < 0 || slotIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong instanceId = bagDataList[slotIndex].instanceId;
+        if (instanceId == 0) {
+            Debug.LogWarning($"[UI_BagManager] Slot {slotIndex} has no server item instance ID.", this);
+            return;
+        }
+
+        playerInventory.RequestDropItem(instanceId);
+    }
+
+    public void RequestPickup(Pickupable pickupable) {
+        if (playerInventory == null || pickupable == null || !pickupable.HasItem) {
+            return;
+        }
+
+        NetworkObject droppedObject = pickupable.GetComponentInParent<NetworkObject>();
+        if (droppedObject == null || !droppedObject.IsSpawned) {
+            Debug.LogWarning("[UI_BagManager] Nearby item is not a spawned network object.", this);
+            return;
+        }
+
+        playerInventory.RequestPickupItem(droppedObject);
+    }
+
     public void RemoveSlot(int index) {
         if (bagDataList == null || index < 0 || index >= bagDataList.Count) {
             return;
@@ -467,5 +512,9 @@ public class UI_BagManager : MonoBehaviour {
         }
 
         return ObjectControll.GetIndex(slot);
+    }
+
+    public bool IsPlayerBagSlot(UI_BagItemSlot slot) {
+        return slot != null && bagContentRoot != null && slot.transform.IsChildOf(bagContentRoot);
     }
 }

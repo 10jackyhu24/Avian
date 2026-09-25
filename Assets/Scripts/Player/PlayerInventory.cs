@@ -6,11 +6,14 @@ using UnityEngine;
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkObject))]
 public class PlayerInventory : NetworkBehaviour {
+    private const float PickupRange = 6f;
     private const string ArrowId = "arrow";
     private const string AxeId = "axe";
     private const string SickleId = "sickle";
     private const string SwordId = "sword";
     private const string AttackSpeedId = "attack_speed";
+
+    [SerializeField] private int maxCapacity = 100;
 
     // Match-scoped IDs. Only the server calls AllocateInstanceId.
     private static ulong nextInstanceId = 1;
@@ -89,6 +92,22 @@ public class PlayerInventory : NetworkBehaviour {
         }
 
         RequestDetachAttachmentServerRpc(weaponInstanceId, attachmentType);
+    }
+
+    public void RequestDropItem(ulong instanceId) {
+        if (!IsSpawned || !IsClient || !IsOwner) {
+            return;
+        }
+
+        RequestDropItemServerRpc(instanceId);
+    }
+
+    public void RequestPickupItem(NetworkObject droppedObject) {
+        if (!IsSpawned || !IsClient || !IsOwner || droppedObject == null || !droppedObject.IsSpawned) {
+            return;
+        }
+
+        RequestPickupItemServerRpc(new NetworkObjectReference(droppedObject));
     }
 
     [ServerRpc]
@@ -214,6 +233,61 @@ public class PlayerInventory : NetworkBehaviour {
         Debug.Log($"[PlayerInventory] Client {OwnerClientId} detached {attachmentItemId} from {weaponItem.ItemId}.", this);
     }
 
+    [ServerRpc]
+    private void RequestDropItemServerRpc(ulong instanceId) {
+        int slotIndex = FindItemIndex(instanceId);
+        if (instanceId == 0 || slotIndex < 0) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} cannot drop item instance {instanceId}.", this);
+            return;
+        }
+
+        InventoryItemState item = slots[slotIndex].Item;
+        if (!NetworkDroppedItem.TrySpawnOnServer(item, transform.position)) {
+            Debug.LogWarning($"[PlayerInventory] Failed to spawn dropped item {item.ItemId} for client {OwnerClientId}.", this);
+            return;
+        }
+
+        RemoveSlotOnServer(slotIndex);
+        GetComponent<PlayerController>()?.UnequipDroppedWeaponOnServer(item.ItemId.ToString());
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} dropped {item.ItemId} x{item.Count} (instance {item.InstanceId}).", this);
+    }
+
+    [ServerRpc]
+    private void RequestPickupItemServerRpc(NetworkObjectReference droppedObjectReference) {
+        if (!droppedObjectReference.TryGet(out NetworkObject droppedObject) ||
+            droppedObject == null ||
+            !droppedObject.IsSpawned ||
+            !droppedObject.TryGetComponent(out NetworkDroppedItem droppedItem)) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} requested an unavailable dropped item.", this);
+            return;
+        }
+
+        float distanceSquared = (droppedObject.transform.position - transform.position).sqrMagnitude;
+        if (distanceSquared > PickupRange * PickupRange) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} is too far away to pick up the item.", this);
+            return;
+        }
+
+        InventoryItemState item = droppedItem.ItemState;
+        if (!item.IsValid || FindItemIndex(item.InstanceId) >= 0) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} requested an invalid or duplicate item.", this);
+            return;
+        }
+
+        if (!CanAddItemOnServer(item)) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} does not have enough capacity for {item.ItemId}.", this);
+            return;
+        }
+
+        slots.Add(new InventorySlotState {
+            SlotIndex = slots.Count,
+            Item = item
+        });
+        droppedObject.Despawn(true);
+
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} picked up {item.ItemId} x{item.Count} (instance {item.InstanceId}).", this);
+    }
+
     private int FindItemIndex(ulong instanceId) {
         for (int i = 0; i < slots.Count; i++) {
             if (slots[i].Item.InstanceId == instanceId) {
@@ -255,12 +329,66 @@ public class PlayerInventory : NetworkBehaviour {
             return;
         }
 
+        RemoveSlotOnServer(slotIndex);
+    }
+
+    private void RemoveSlotOnServer(int slotIndex) {
         slots.RemoveAt(slotIndex);
         for (int i = slotIndex; i < slots.Count; i++) {
             InventorySlotState slot = slots[i];
             slot.SlotIndex = i;
             slots[i] = slot;
         }
+    }
+
+    private bool CanAddItemOnServer(InventoryItemState incomingItem) {
+        if (!TryCalculateWeight(incomingItem, out int incomingWeight)) {
+            return false;
+        }
+
+        int currentWeight = 0;
+        for (int i = 0; i < slots.Count; i++) {
+            if (!TryCalculateWeight(slots[i].Item, out int slotWeight)) {
+                return false;
+            }
+
+            currentWeight += slotWeight;
+        }
+
+        return currentWeight + incomingWeight <= maxCapacity;
+    }
+
+    private static bool TryCalculateWeight(InventoryItemState item, out int weight) {
+        weight = 0;
+        if (!item.IsValid ||
+            !ItemManager.TryGetItemById(item.ItemId.ToString(), out ItemData itemData)) {
+            return false;
+        }
+
+        weight = itemData.IsWeapon
+            ? itemData.itemObject.baseWeight
+            : itemData.itemObject.baseWeight * item.Count;
+
+        return TryAddAttachmentWeight(item.AttackSpeedAttachmentId, AttachmentType.AttackSpeed, ref weight) &&
+               TryAddAttachmentWeight(item.DamageBonusAttachmentId, AttachmentType.DamageBonus, ref weight) &&
+               TryAddAttachmentWeight(item.CriticalRateAttachmentId, AttachmentType.CriticalRate, ref weight);
+    }
+
+    private static bool TryAddAttachmentWeight(
+        FixedString64Bytes attachmentItemId,
+        AttachmentType expectedType,
+        ref int weight) {
+        if (attachmentItemId.Length == 0) {
+            return true;
+        }
+
+        if (!ItemManager.TryGetItemById(attachmentItemId.ToString(), out ItemData attachmentData) ||
+            attachmentData.attachmentType != expectedType) {
+            return false;
+        }
+
+        weight += attachmentData.itemObject.baseWeight;
+        return true;
     }
 
     private void InitializeStartingInventory() {
