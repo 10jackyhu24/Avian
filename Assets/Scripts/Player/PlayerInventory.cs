@@ -274,18 +274,45 @@ public class PlayerInventory : NetworkBehaviour {
             return;
         }
 
+        if (!DroppedItemRegistry.TryGet(item.InstanceId, out DroppedItemRecord record) ||
+            record.SpawnedItem != droppedItem) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} requested an unregistered dropped item.", this);
+            return;
+        }
+
+        if (!ItemManager.TryGetItemById(item.ItemId.ToString(), out ItemData itemData) ||
+            item.Count > Mathf.Max(1, itemData.itemObject.maxCount)) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} requested an invalid item stack.", this);
+            return;
+        }
+
         if (!CanAddItemOnServer(item)) {
             Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} does not have enough capacity for {item.ItemId}.", this);
             return;
         }
 
-        slots.Add(new InventorySlotState {
-            SlotIndex = slots.Count,
-            Item = item
-        });
+        if (!DroppedItemRegistry.TryRemove(item.InstanceId, droppedItem, out _)) {
+            Debug.LogWarning($"[PlayerInventory] Dropped item {item.InstanceId} was claimed before client {OwnerClientId}.", this);
+            return;
+        }
+
+        int mergeSlotIndex = FindMergeSlot(item, itemData);
+        if (mergeSlotIndex >= 0) {
+            InventoryItemState existingStack = slots[mergeSlotIndex].Item;
+            existingStack.Count += item.Count;
+            SetSlotItem(mergeSlotIndex, existingStack);
+        }
+        else {
+            slots.Add(new InventorySlotState {
+                SlotIndex = slots.Count,
+                Item = item
+            });
+        }
+
         droppedObject.Despawn(true);
 
-        Debug.Log($"[PlayerInventory] Client {OwnerClientId} picked up {item.ItemId} x{item.Count} (instance {item.InstanceId}).", this);
+        string pickupResult = mergeSlotIndex >= 0 ? $"merged into slot {mergeSlotIndex}" : "added as a new slot";
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} picked up {item.ItemId} x{item.Count}; {pickupResult}.", this);
     }
 
     private int FindItemIndex(ulong instanceId) {
@@ -296,6 +323,30 @@ public class PlayerInventory : NetworkBehaviour {
         }
 
         return -1;
+    }
+
+    private int FindMergeSlot(InventoryItemState incomingItem, ItemData itemData) {
+        if (!itemData.itemObject.IsStackable || HasAttachments(incomingItem)) {
+            return -1;
+        }
+
+        int maxCount = Mathf.Max(1, itemData.itemObject.maxCount);
+        for (int i = 0; i < slots.Count; i++) {
+            InventoryItemState existingItem = slots[i].Item;
+            if (existingItem.ItemId.Equals(incomingItem.ItemId) &&
+                !HasAttachments(existingItem) &&
+                existingItem.Count + incomingItem.Count <= maxCount) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool HasAttachments(InventoryItemState item) {
+        return item.AttackSpeedAttachmentId.Length > 0 ||
+               item.DamageBonusAttachmentId.Length > 0 ||
+               item.CriticalRateAttachmentId.Length > 0;
     }
 
     private void MoveItemOnServer(int sourceIndex, int destinationIndex) {

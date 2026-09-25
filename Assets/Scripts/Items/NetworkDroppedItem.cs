@@ -65,6 +65,44 @@ public class NetworkDroppedItem : NetworkBehaviour {
     }
 
     public static bool TrySpawnOnServer(InventoryItemState state, Vector3 playerPosition) {
+        Vector3 spawnPosition = FindGroundedSpawnPosition(playerPosition);
+        if (!TryCreateOnServer(state, spawnPosition, out NetworkDroppedItem droppedItem)) {
+            return false;
+        }
+
+        if (!DroppedItemRegistry.TryRegister(state, spawnPosition, droppedItem)) {
+            Debug.LogError($"[NetworkDroppedItem] Could not register item instance {state.InstanceId}.");
+            droppedItem.NetworkObject.Despawn(true);
+            return false;
+        }
+
+        Debug.Log($"[NetworkDroppedItem] Spawned {state.ItemId} x{state.Count} at {spawnPosition}.");
+        return true;
+    }
+
+    public static bool TryRespawnOnServer(DroppedItemRecord record) {
+        if (record == null || record.SpawnedItem != null ||
+            !TryCreateOnServer(record.ItemState, record.Position, out NetworkDroppedItem droppedItem)) {
+            return false;
+        }
+
+        if (!DroppedItemRegistry.TrySetSpawnedItem(
+                record.ItemState.InstanceId,
+                expectedCurrentItem: null,
+                newSpawnedItem: droppedItem)) {
+            droppedItem.NetworkObject.Despawn(true);
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryCreateOnServer(
+        InventoryItemState state,
+        Vector3 position,
+        out NetworkDroppedItem droppedItem) {
+        droppedItem = null;
+
         NetworkManager networkManager = NetworkManager.Singleton;
         if (networkManager == null || !networkManager.IsServer || !state.IsValid) {
             return false;
@@ -76,20 +114,17 @@ public class NetworkDroppedItem : NetworkBehaviour {
             return false;
         }
 
-        Vector3 spawnPosition = FindGroundedSpawnPosition(playerPosition);
-        GameObject instance = Instantiate(prefab, spawnPosition, Quaternion.identity);
-
+        GameObject instance = Instantiate(prefab, position, Quaternion.identity);
         if (!instance.TryGetComponent(out NetworkObject networkObject) ||
-            !instance.TryGetComponent(out NetworkDroppedItem droppedItem)) {
+            !instance.TryGetComponent(out droppedItem)) {
             Debug.LogError("[NetworkDroppedItem] Prefab is missing required network components.", instance);
             Destroy(instance);
+            droppedItem = null;
             return false;
         }
 
         networkObject.Spawn(true);
         droppedItem.SetItemStateOnServer(state);
-
-        Debug.Log($"[NetworkDroppedItem] Spawned {state.ItemId} x{state.Count} at {spawnPosition}.");
         return true;
     }
 

@@ -235,6 +235,20 @@ public class TerrainController : MonoBehaviour {
         return new Vector2Int(gridX / updateStride, gridZ / updateStride);
     }
 
+    public bool IsWorldPositionLoaded(Vector3 worldPosition) {
+        if (cubeGrid == null) {
+            return false;
+        }
+
+        int gridX = Mathf.RoundToInt(worldPosition.x) + size / 2;
+        int gridZ = Mathf.RoundToInt(worldPosition.z) + size / 2;
+        if (gridX < 0 || gridX >= size || gridZ < 0 || gridZ >= size) {
+            return false;
+        }
+
+        return inRangePositions.Contains(new Vector2Int(gridX, gridZ));
+    }
+
     private void UpdateDynamicLoading() {
         HashSet<Vector2Int> loadCenters = GetLoadCenters();
         if (loadCenters.Count == 0) {
