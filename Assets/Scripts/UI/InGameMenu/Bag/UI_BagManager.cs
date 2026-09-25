@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
 using TMPro;
 using System.Net.Mail;
@@ -23,6 +24,7 @@ public class UI_BagManager : MonoBehaviour {
 
     // Data source for the inventory
     public List<BagSlotData> bagDataList = new List<BagSlotData>();
+    public event Action BagChanged;
 
     private static readonly AttachmentType[] DefaultWeaponAttachmentTypes = {
         AttachmentType.AttackSpeed,
@@ -129,6 +131,7 @@ public class UI_BagManager : MonoBehaviour {
             bagDataList.Add(slotData);
             UpdateCapacityLabel();
             SpawnSlot(slotData);
+            NotifyBagChanged();
         }
         else {
             bagDataList.Insert(insert_index, slotData);
@@ -242,6 +245,7 @@ public class UI_BagManager : MonoBehaviour {
     public void ClearBag() {
         bagDataList.Clear();
         UpdateCapacityLabel();
+        NotifyBagChanged();
     }
 
     public void RebuildSlots() {
@@ -252,6 +256,11 @@ public class UI_BagManager : MonoBehaviour {
         }
 
         UpdateCapacityLabel();
+        NotifyBagChanged();
+    }
+
+    private void NotifyBagChanged() {
+        BagChanged?.Invoke();
     }
 
     private void UpdateCapacityLabel() {

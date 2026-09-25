@@ -11,6 +11,7 @@ public class GameMenu : MonoBehaviour {
     [SerializeField] GameObject hotbarPrefab;
     private List<GameObject> hotbar = new List<GameObject>();
     private int selectedIndex = -1;
+    public int SelectedIndex => selectedIndex;
     public event Action<int> OnSelectedIndexChanged; // 事件(selectHotbar 改變)
     /*  事件廣播接收
         在Awake()寫 gameMenu.OnSelectedIndexChanged += 功能名; 然後在OnDestroy() 裡面寫gameMenu.OnSelectedIndexChanged += 功能名;
@@ -24,6 +25,9 @@ public class GameMenu : MonoBehaviour {
 
     private void Awake() {
         bagManager = FindFirstObjectByType<UI_BagManager>();
+        if (bagManager != null) {
+            bagManager.BagChanged += HandleBagChanged;
+        }
 
         // The prefab already contains one slot for layout preview. Reuse any existing
         // slots first, then only create enough objects to reach the configured total.
@@ -40,6 +44,19 @@ public class GameMenu : MonoBehaviour {
         }
 
         SetSelectedIndex(0);
+    }
+
+    private void OnDestroy() {
+        if (bagManager != null) {
+            bagManager.BagChanged -= HandleBagChanged;
+        }
+    }
+
+    private void HandleBagChanged() {
+        Refresh();
+        if (selectedIndex >= 0) {
+            OnSelectedIndexChanged?.Invoke(selectedIndex);
+        }
     }
 
     public void Refresh() {

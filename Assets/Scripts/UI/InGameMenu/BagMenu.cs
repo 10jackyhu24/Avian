@@ -3,6 +3,12 @@ using UnityEngine.InputSystem;
 using System.Collections.Generic;
 
 public class BagMenu : MonoBehaviour {
+    private static BagMenu instance;
+    public static bool IsOpen =>
+        instance != null &&
+        instance.bagMenuUI != null &&
+        instance.bagMenuUI.activeInHierarchy;
+
     private GameInput inputActions;
     private MenuManager menuManager;
     [SerializeField] private GameObject bagMenuUI;
@@ -13,6 +19,7 @@ public class BagMenu : MonoBehaviour {
     private bool hasLastPlayerPosition;
 
     private void Awake() {
+        instance = this;
         menuManager = FindFirstObjectByType<MenuManager>();
         bagManager = FindFirstObjectByType<UI_BagManager>();
         player = FindFirstObjectByType<PlayerController>();
@@ -29,6 +36,19 @@ public class BagMenu : MonoBehaviour {
 
     private void HandleBindingOverridesChanged() {
         KeyBinding.LoadBindingOverrides(inputActions);
+    }
+
+    private void OnDestroy() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        if (inputActions != null) {
+            inputActions.Player.Bag.performed -= OnBagPerformed;
+            inputActions.Disable();
+            inputActions.Dispose();
+        }
+
+        if (instance == this) {
+            instance = null;
+        }
     }
 
     public void OnBagPerformed(InputAction.CallbackContext context) {

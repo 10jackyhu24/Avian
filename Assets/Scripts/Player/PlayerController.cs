@@ -122,12 +122,27 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
+        if (gameMenu == null) {
+            gameMenu = FindFirstObjectByType<GameMenu>();
+        }
+        if (bagManager == null) {
+            bagManager = FindFirstObjectByType<UI_BagManager>();
+        }
+        if (gameMenu != null) {
+            gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
+            gameMenu.OnSelectedIndexChanged += HandleSelectedIndexChange;
+        }
+
         CameraController cameraController = FindFirstObjectByType<CameraController>();
         if (cameraController != null) {
             cameraController.SetTarget(transform);
         }
 
         inputActions.Player.Enable();
+
+        if (gameMenu != null && gameMenu.SelectedIndex >= 0) {
+            HandleSelectedIndexChange(gameMenu.SelectedIndex);
+        }
     }
 
     public override void OnNetworkDespawn() {
@@ -135,6 +150,9 @@ public class PlayerController : NetworkBehaviour {
         isMovingVisual.OnValueChanged -= OnIsMovingVisualChanged;
         isFacingLeftVisual.OnValueChanged -= OnIsFacingLeftVisualChanged;
         CancelPreparedAttack();
+        if (gameMenu != null) {
+            gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
+        }
         inputActions.Player.Disable();
     }
 
@@ -192,7 +210,7 @@ public class PlayerController : NetworkBehaviour {
 
         SubmitMovementServerRpc(moveInput.x, moveInput.y, runPressed, jumpPressed);
 
-        if (!GameState.isPlaying || PauseMenu.isOpen || !IsAlive) {
+        if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen || !IsAlive) {
             CancelPreparedAttack();
             return;
         }
@@ -816,9 +834,11 @@ public class PlayerController : NetworkBehaviour {
 
     if (slotIndex < 0) return;
 
-    gameMenu?.SetSelectedIndex(slotIndex);    
-    
-    HandleSelectedIndexChange(slotIndex);
+    if (gameMenu != null) {
+        gameMenu.SetSelectedIndex(slotIndex);
+    } else {
+        HandleSelectedIndexChange(slotIndex);
+    }
 }
 
     private int GetHotbarIndex(InputAction.CallbackContext context) {
@@ -843,8 +863,10 @@ public class PlayerController : NetworkBehaviour {
 
     private void HandleSelectedIndexChange(int slotIndex) {
         if (!IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) return;
-        if (bagManager == null) return;
-        if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) return;
+        if (bagManager == null) {
+            bagManager = FindFirstObjectByType<UI_BagManager>();
+        }
+        if (bagManager == null || slotIndex < 0) return;
 
         CancelPreparedAttack();
 
@@ -853,7 +875,9 @@ public class PlayerController : NetworkBehaviour {
         bool localUsesWeapon = false;
         string selectedItemName = "Empty";
 
-        BagSlotData slot = bagManager.bagDataList[slotIndex];
+        BagSlotData slot = slotIndex < bagManager.bagDataList.Count
+            ? bagManager.bagDataList[slotIndex]
+            : null;
         if (slot != null && !slot.IsEmpty && slot.itemData.itemObject != null) {
             ItemObject item = slot.itemData.itemObject;
             selectedItemName = item.itemName;
@@ -921,6 +945,9 @@ public class PlayerController : NetworkBehaviour {
     }
     public override void OnDestroy() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        if (gameMenu != null) {
+            gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
+        }
         // 1 2 3 testing
         if (inputActions != null) {
             inputActions.Player.Item.performed -= OnItemPerformed;
