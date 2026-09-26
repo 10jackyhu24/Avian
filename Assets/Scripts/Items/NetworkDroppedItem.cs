@@ -77,8 +77,19 @@ public class NetworkDroppedItem : NetworkBehaviour {
             return;
         }
 
-        itemRenderer.sprite = hasValidItem ? pickupable.ItemData.itemObject.icon : null;
+        Sprite itemIcon = hasValidItem ? pickupable.ItemData.itemObject.icon : null;
+        itemRenderer.sprite = itemIcon;
+        itemRenderer.drawMode = SpriteDrawMode.Simple;
+        itemRenderer.color = Color.white;
         itemRenderer.enabled = itemRenderer.sprite != null;
+
+        // A dropped item must only render its configured 2D icon. Disable any
+        // auxiliary mesh/line renderer that may have been left on the prefab.
+        foreach (Renderer childRenderer in GetComponentsInChildren<Renderer>(true)) {
+            if (childRenderer != itemRenderer) {
+                childRenderer.enabled = false;
+            }
+        }
     }
 
     private void ResolveReferences() {
@@ -95,8 +106,8 @@ public class NetworkDroppedItem : NetworkBehaviour {
         }
     }
 
-    public static bool TrySpawnOnServer(InventoryItemState state, Vector3 playerPosition) {
-        Vector3 spawnPosition = FindGroundedSpawnPosition(playerPosition);
+    public static bool TrySpawnOnServer(InventoryItemState state, Vector3 playerFootPosition) {
+        Vector3 spawnPosition = GetFootSpawnPosition(playerFootPosition);
         if (!TryCreateOnServer(state, spawnPosition, out NetworkDroppedItem droppedItem)) {
             return false;
         }
@@ -159,17 +170,9 @@ public class NetworkDroppedItem : NetworkBehaviour {
         return true;
     }
 
-    private static Vector3 FindGroundedSpawnPosition(Vector3 playerPosition) {
-        Vector3 spawnPosition = playerPosition + new Vector3(3f, 0f, 0f);
-        Vector3 rayOrigin = spawnPosition + Vector3.up * 20f;
-
-        if (Physics.Raycast(rayOrigin, Vector3.down, out RaycastHit hit, 200f, ~0, QueryTriggerInteraction.Ignore)) {
-            spawnPosition.y = hit.point.y + 0.55f;
-        } else {
-            // Fallback for the current flat terrain if no collider is found.
-            spawnPosition.y = 0.8f;
-        }
-
-        return spawnPosition;
+    private static Vector3 GetFootSpawnPosition(Vector3 playerFootPosition) {
+        // Keep the same X/Z as the player. The small vertical offset places the
+        // dropped item's collider just above the feet so gravity can settle it.
+        return playerFootPosition + Vector3.up * 0.55f;
     }
 }

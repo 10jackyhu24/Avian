@@ -391,7 +391,7 @@ public class UI_BagManager : MonoBehaviour {
         playerInventory.RequestDropItem(instanceId);
     }
 
-    public void RequestPickup(Pickupable pickupable) {
+    public void RequestPickup(Pickupable pickupable, int insertionIndex) {
         if (playerInventory == null || pickupable == null || !pickupable.HasItem) {
             return;
         }
@@ -402,7 +402,7 @@ public class UI_BagManager : MonoBehaviour {
             return;
         }
 
-        playerInventory.RequestPickupItem(droppedObject);
+        playerInventory.RequestPickupItem(droppedObject, insertionIndex);
     }
 
     public void RemoveSlot(int index) {

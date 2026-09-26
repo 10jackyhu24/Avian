@@ -1,10 +1,12 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 public class UI_DragDropManager : MonoBehaviour {
     private struct DragData {
         public UI_BagItemSlot draggedSlot;
         public UI_BagItemSlot hoveredSlot;
         public bool isAbove;
+        public int insertionIndex;
         public UI_AttachmentSlot draggedAttachment;
         public UI_AttachmentSlot hoverAttachment;
         public bool isMyBagBegin;
@@ -47,6 +49,10 @@ public class UI_DragDropManager : MonoBehaviour {
         dragData.draggedSlot = slot;
         dragData.hoveredSlot = slot;
         dragData.isMyBagBegin = bagManager.IsPlayerBagSlot(slot);
+        dragData.isMyBagEnd = dragData.isMyBagBegin;
+        dragData.insertionIndex = dragData.isMyBagBegin
+            ? Mathf.Max(0, ObjectControll.GetIndex(slot))
+            : bagManager.bagDataList.Count;
     }
 
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
@@ -102,6 +108,7 @@ public class UI_DragDropManager : MonoBehaviour {
         dragData.draggedAttachment = null;
         dragData.hoverAttachment = null;
         dragData.hoveredSlot = null;
+        dragData.insertionIndex = 0;
     }
 
     public void OnBagItemSlotEnter(UI_BagItemSlot hoveredSlot) {
@@ -112,21 +119,36 @@ public class UI_DragDropManager : MonoBehaviour {
         if (dragData.draggedSlot == null || dragData.hoveredSlot == null) return;
         if (!dragData.isMyBagEnd) return;
         if (dragData.hoverAttachment != null) return;
-        RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
+        if (!bagManager.IsPlayerBagSlot(dragData.hoveredSlot)) return;
 
-        // Convert mouse screen position to local position relative to slotRect
+        // Restore the slots to their normal positions before checking which
+        // half is under the pointer. The indicator is then inserted as a real
+        // child of Content at the calculated position.
+        dragIndicator.Hide();
+        if (contentRoot is RectTransform contentRect) {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+        }
+
+        RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 slotRect, 
                 pointerPosition, 
-                null, // If UI Canvas Render Mode is Overlay, use null. If Camera Space, pass target Camera.
+                null,
                 out Vector2 localPoint)) {
-
-            // In RectTransform local space, the vertical center is Y = 0
             dragData.isAbove = localPoint.y > 0;
         }
-        dragIndicator.Hide();
+
         int index = ObjectControll.GetIndex(dragData.hoveredSlot);
-        dragIndicator.Show(dragData.isAbove ? index : index + 1);
+        if (index < 0 || index >= bagManager.bagDataList.Count) {
+            return;
+        }
+
+        dragData.insertionIndex = Mathf.Clamp(
+            dragData.isAbove ? index : index + 1,
+            0,
+            bagManager.bagDataList.Count
+        );
+        dragIndicator.Show(dragData.insertionIndex);
     }
 
     private void HandleDropOutOfBag() {
@@ -142,18 +164,19 @@ public class UI_DragDropManager : MonoBehaviour {
             return;
         }
 
-        bagManager.RequestPickup(bagManager.nearbyPickupables[pickupableIndex]);
+        bagManager.RequestPickup(
+            bagManager.nearbyPickupables[pickupableIndex],
+            dragData.insertionIndex
+        );
     }
 
     private void HandleSlotDropInBag() {
-        if (dragData.draggedSlot == null || dragData.hoveredSlot == null) {
+        if (dragData.draggedSlot == null) {
             return;
         }
 
         int begin = ObjectControll.GetIndex(dragData.draggedSlot);
-        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
-        int insertionIndex = dragData.isAbove ? end : end + 1;
-        bagManager.RequestMoveSlot(begin, insertionIndex);
+        bagManager.RequestMoveSlot(begin, dragData.insertionIndex);
     }
 
     private void HandleAttachmentDropInSlot() {

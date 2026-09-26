@@ -102,12 +102,12 @@ public class PlayerInventory : NetworkBehaviour {
         RequestDropItemServerRpc(instanceId);
     }
 
-    public void RequestPickupItem(NetworkObject droppedObject) {
+    public void RequestPickupItem(NetworkObject droppedObject, int insertionIndex) {
         if (!IsSpawned || !IsClient || !IsOwner || droppedObject == null || !droppedObject.IsSpawned) {
             return;
         }
 
-        RequestPickupItemServerRpc(new NetworkObjectReference(droppedObject));
+        RequestPickupItemServerRpc(new NetworkObjectReference(droppedObject), insertionIndex);
     }
 
     [ServerRpc]
@@ -242,7 +242,13 @@ public class PlayerInventory : NetworkBehaviour {
         }
 
         InventoryItemState item = slots[slotIndex].Item;
-        if (!NetworkDroppedItem.TrySpawnOnServer(item, transform.position)) {
+        Vector3 playerFootPosition = transform.position;
+        CharacterController characterController = GetComponent<CharacterController>();
+        if (characterController != null && characterController.enabled) {
+            playerFootPosition.y = characterController.bounds.min.y;
+        }
+
+        if (!NetworkDroppedItem.TrySpawnOnServer(item, playerFootPosition)) {
             Debug.LogWarning($"[PlayerInventory] Failed to spawn dropped item {item.ItemId} for client {OwnerClientId}.", this);
             return;
         }
@@ -253,7 +259,14 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     [ServerRpc]
-    private void RequestPickupItemServerRpc(NetworkObjectReference droppedObjectReference) {
+    private void RequestPickupItemServerRpc(
+        NetworkObjectReference droppedObjectReference,
+        int insertionIndex) {
+        if (insertionIndex < 0) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} requested an invalid pickup insertion index.", this);
+            return;
+        }
+
         if (!droppedObjectReference.TryGet(out NetworkObject droppedObject) ||
             droppedObject == null ||
             !droppedObject.IsSpawned ||
@@ -296,22 +309,34 @@ public class PlayerInventory : NetworkBehaviour {
             return;
         }
 
+        int requestedInsertionIndex = Mathf.Clamp(insertionIndex, 0, slots.Count);
         int mergeSlotIndex = FindMergeSlot(item, itemData);
+        int finalSlotIndex;
         if (mergeSlotIndex >= 0) {
             InventoryItemState existingStack = slots[mergeSlotIndex].Item;
             existingStack.Count += item.Count;
             SetSlotItem(mergeSlotIndex, existingStack);
+
+            finalSlotIndex = requestedInsertionIndex;
+            if (mergeSlotIndex < finalSlotIndex) {
+                finalSlotIndex--;
+            }
+
+            finalSlotIndex = Mathf.Clamp(finalSlotIndex, 0, slots.Count - 1);
+            if (mergeSlotIndex != finalSlotIndex) {
+                MoveItemOnServer(mergeSlotIndex, finalSlotIndex);
+            }
         }
         else {
-            slots.Add(new InventorySlotState {
-                SlotIndex = slots.Count,
-                Item = item
-            });
+            finalSlotIndex = requestedInsertionIndex;
+            InsertItemOnServer(item, finalSlotIndex);
         }
 
         droppedObject.Despawn(true);
 
-        string pickupResult = mergeSlotIndex >= 0 ? $"merged into slot {mergeSlotIndex}" : "added as a new slot";
+        string pickupResult = mergeSlotIndex >= 0
+            ? $"merged and placed in slot {finalSlotIndex}"
+            : $"inserted into slot {finalSlotIndex}";
         Debug.Log($"[PlayerInventory] Client {OwnerClientId} picked up {item.ItemId} x{item.Count}; {pickupResult}.", this);
     }
 
@@ -364,6 +389,20 @@ public class PlayerInventory : NetworkBehaviour {
         }
 
         SetSlotItem(destinationIndex, movingItem);
+    }
+
+    private void InsertItemOnServer(InventoryItemState item, int insertionIndex) {
+        int destinationIndex = Mathf.Clamp(insertionIndex, 0, slots.Count);
+        slots.Add(new InventorySlotState {
+            SlotIndex = slots.Count,
+            Item = item
+        });
+
+        for (int i = slots.Count - 1; i > destinationIndex; i--) {
+            SetSlotItem(i, slots[i - 1].Item);
+        }
+
+        SetSlotItem(destinationIndex, item);
     }
 
     private void SetSlotItem(int slotIndex, InventoryItemState item) {

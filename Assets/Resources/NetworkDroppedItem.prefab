@@ -17,7 +17,6 @@ GameObject:
   - component: {fileID: 6124879301122334462}
   - component: {fileID: 6124879301122334463}
   - component: {fileID: 6124879301122334464}
-  - component: {fileID: 6124879301122334465}
   - component: {fileID: 6124879301122334466}
   m_Layer: 7
   m_Name: NetworkDroppedItem
@@ -199,7 +198,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
-  m_Constraints: 80
+  m_Constraints: 112
   m_CollisionDetection: 0
 --- !u!114 &6124879301122334463
 MonoBehaviour:
@@ -264,25 +263,6 @@ MonoBehaviour:
   UseRigidBodyForMotion: 1
   AutoUpdateKinematicState: 1
   AutoSetKinematicOnDespawn: 1
---- !u!114 &6124879301122334465
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 6124879301122334455}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6bfc0c1a2d98445c9e6e198f740ab321, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DroppedItemBeacon
-  beaconHeight: 20.76
-  bottomOffset: 0.25
-  baseWidth: 2.24
-  pulseSpeed: 2.5
-  minimumAlpha: 1.24
-  maximumAlpha: 2.87
-  beaconColor: {r: 1, g: 0.82, b: 0.25, a: 1}
 --- !u!114 &6124879301122334466
 MonoBehaviour:
   m_ObjectHideFlags: 0
