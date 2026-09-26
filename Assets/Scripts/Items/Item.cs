@@ -6,7 +6,8 @@ public enum ItemType {
     Weapon,
     AttackSpeed,
     DamageBonus,
-    CriticalRate
+    CriticalRate,
+    Ammo
 }
 
 // Types of attachment slots for weapons
@@ -19,6 +20,8 @@ public enum AttachmentType {
 
 [CreateAssetMenu(fileName = "NewItemObject", menuName = "Inventory/Item Object")]
 public class ItemObject : ScriptableObject {
+    [Tooltip("Stable identifier used for saves and networking. Do not change after release.")]
+    public string itemId;
     public string itemName;
     public Sprite icon;
     public ItemType itemType;
@@ -27,8 +30,10 @@ public class ItemObject : ScriptableObject {
     public bool isWeapon;
     public int maxCount = 1;
     public int baseWeight = 1;
-
+    [Header("Combat")]
+    public AttackData attackData;
     public bool IsWeapon => isWeapon || itemType == ItemType.Weapon;
+    
     public bool IsStackable => maxCount > 1 && !IsWeapon;
 }
 
@@ -93,6 +98,8 @@ public class AttachmentSlotData {
 
 [System.Serializable]
 public class BagSlotData {
+    // Zero for legacy/local-only data; nonzero when this slot represents a server inventory item.
+    public ulong instanceId;
     public ItemData itemData;
     public int count;
     public List<AttachmentSlotData> attachments = new List<AttachmentSlotData>();

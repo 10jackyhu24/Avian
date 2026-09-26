@@ -27,6 +27,8 @@ spec:
           value: "7777"
         - name: MAP_SEED
           value: "100000"
+        - name: ROOM_ID
+          value: "static-room"
 
 ---
 apiVersion: v1

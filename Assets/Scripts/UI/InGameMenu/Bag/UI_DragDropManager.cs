@@ -1,12 +1,12 @@
-using System.Runtime.CompilerServices;
-using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class UI_DragDropManager : MonoBehaviour {
     private struct DragData {
         public UI_BagItemSlot draggedSlot;
         public UI_BagItemSlot hoveredSlot;
         public bool isAbove;
+        public int insertionIndex;
         public UI_AttachmentSlot draggedAttachment;
         public UI_AttachmentSlot hoverAttachment;
         public bool isMyBagBegin;
@@ -48,44 +48,67 @@ public class UI_DragDropManager : MonoBehaviour {
         dragData.hoverAttachment = null;
         dragData.draggedSlot = slot;
         dragData.hoveredSlot = slot;
-        dragData.isMyBagBegin = dragData.isMyBagEnd;
+        dragData.isMyBagBegin = bagManager.IsPlayerBagSlot(slot);
+        dragData.isMyBagEnd = dragData.isMyBagBegin;
+        dragData.insertionIndex = dragData.isMyBagBegin
+            ? Mathf.Max(0, ObjectControll.GetIndex(slot))
+            : bagManager.bagDataList.Count;
     }
 
     public void OnAttachmentSlotBeginDrag(UI_AttachmentSlot slot) {
-        dragData.draggedAttachment = slot;
-        dragData.hoverAttachment = slot;
-        dragData.draggedSlot = null;
-        dragData.hoveredSlot = dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>();
-        dragData.isMyBagBegin = dragData.isMyBagEnd;
+        Debug.Log("[UI_DragDropManager] Attachment changes are not implemented yet.", this);
+    }
+
+    public void OnAttachmentSlotRightClick(UI_AttachmentSlot attachmentSlot) {
+        if (attachmentSlot == null || !attachmentSlot.CurrentAttachment.IsValid) {
+            return;
+        }
+
+        UI_BagItemSlot weaponSlot = attachmentSlot.GetComponentInParent<UI_BagItemSlot>();
+        if (weaponSlot == null) {
+            return;
+        }
+
+        int weaponIndex = ObjectControll.GetIndex(weaponSlot);
+        AttachmentType attachmentType = ItemData.GetAttachmentType(attachmentSlot.GetItemType());
+        bagManager.RequestDetachAttachment(weaponIndex, attachmentType);
     }
 
     public void OnDragEnd() {
         dragIndicator.Hide();
-        if (dragData.isMyBagBegin && !dragData.isMyBagEnd) {
-            HandleDropOutOfBag();
-            bagManager.RefreshNearbyPickupables();
-            bagManager.RefreshNearbyPickupablesUI();
+
+        bool isAttachmentInstall = dragData.isMyBagBegin &&
+                                   dragData.isMyBagEnd &&
+                                   dragData.draggedSlot != null &&
+                                   dragData.hoverAttachment != null;
+
+        bool isBagReorder = dragData.isMyBagBegin &&
+                            dragData.isMyBagEnd &&
+                            dragData.draggedSlot != null &&
+                            dragData.hoverAttachment == null;
+
+        bool isWorldPickup = !dragData.isMyBagBegin &&
+                             dragData.isMyBagEnd &&
+                             dragData.draggedSlot != null;
+
+        if (isAttachmentInstall) {
+            HandleAttachmentDropInSlot();
         }
-        else if (dragData.isMyBagBegin && dragData.isMyBagEnd) {
-            if (dragData.draggedSlot != null) {
-                if (dragData.hoverAttachment != null) {
-                    HandleAttachmentDropInSlot();
-                } else {
-                    HandleSlotDropInBag();
-                }
-            }
-            else {
-                if (dragData.hoverAttachment != null) {
-                    HandleAttachmentDropInAttachment();
-                } else {
-                    HandleAttachmentDropInBag();
-                }
-            }
+        else if (isBagReorder) {
+            HandleSlotDropInBag();
+        }
+        else if (isWorldPickup) {
+            HandlePickupIntoBag();
+        }
+        else if (dragData.isMyBagBegin && !dragData.isMyBagEnd && dragData.draggedSlot != null) {
+            HandleDropOutOfBag();
         }
 
         dragData.draggedSlot = null;
+        dragData.draggedAttachment = null;
         dragData.hoverAttachment = null;
         dragData.hoveredSlot = null;
+        dragData.insertionIndex = 0;
     }
 
     public void OnBagItemSlotEnter(UI_BagItemSlot hoveredSlot) {
@@ -93,73 +116,81 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public void OnBagItemSlotHover(Vector2 pointerPosition) {
+        if (dragData.draggedSlot == null || dragData.hoveredSlot == null) return;
         if (!dragData.isMyBagEnd) return;
         if (dragData.hoverAttachment != null) return;
-        RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
+        if (!bagManager.IsPlayerBagSlot(dragData.hoveredSlot)) return;
 
-        // Convert mouse screen position to local position relative to slotRect
+        // Restore the slots to their normal positions before checking which
+        // half is under the pointer. The indicator is then inserted as a real
+        // child of Content at the calculated position.
+        dragIndicator.Hide();
+        if (contentRoot is RectTransform contentRect) {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
+        }
+
+        RectTransform slotRect = dragData.hoveredSlot.GetComponent<RectTransform>();
         if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                 slotRect, 
                 pointerPosition, 
-                null, // If UI Canvas Render Mode is Overlay, use null. If Camera Space, pass target Camera.
+                null,
                 out Vector2 localPoint)) {
-
-            // In RectTransform local space, the vertical center is Y = 0
             dragData.isAbove = localPoint.y > 0;
         }
-        dragIndicator.Hide();
+
         int index = ObjectControll.GetIndex(dragData.hoveredSlot);
-        dragIndicator.Show(dragData.isAbove ? index : index + 1);
+        if (index < 0 || index >= bagManager.bagDataList.Count) {
+            return;
+        }
+
+        dragData.insertionIndex = Mathf.Clamp(
+            dragData.isAbove ? index : index + 1,
+            0,
+            bagManager.bagDataList.Count
+        );
+        dragIndicator.Show(dragData.insertionIndex);
     }
 
     private void HandleDropOutOfBag() {
-        PlayerController player = FindFirstObjectByType<PlayerController>();
-        Vector3 spawnPosition = player.transform.position;
+        int slotIndex = ObjectControll.GetIndex(dragData.draggedSlot);
+        if (slotIndex >= 0 && slotIndex < bagManager.bagDataList.Count) {
+            bagManager.RequestDropSlot(slotIndex);
+        }
+    }
 
-        if (dragData.draggedSlot != null) {
-            int slotIndex = ObjectControll.GetIndex(dragData.draggedSlot);
-            if (slotIndex >= 0 && slotIndex < bagManager.bagDataList.Count) {
-                ItemManager.AddItemInScene(bagManager.bagDataList[slotIndex], spawnPosition, Quaternion.Euler(90f, 0f, 90f));
-                bagManager.RemoveSlot(slotIndex);
-            }
+    private void HandlePickupIntoBag() {
+        int pickupableIndex = ObjectControll.GetIndex(dragData.draggedSlot);
+        if (pickupableIndex < 0 || pickupableIndex >= bagManager.nearbyPickupables.Count) {
             return;
         }
 
-        if (dragData.draggedAttachment != null) {
-            UI_BagItemSlot parentSlot = dragData.draggedAttachment.GetComponentInParent<UI_BagItemSlot>();
-            if (parentSlot == null) {
-                return;
-            }
-
-            int slotIndex = ObjectControll.GetIndex(parentSlot);
-            if (slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) {
-                return;
-            }
-            BagSlotData slotData = new BagSlotData {
-                itemData = dragData.draggedAttachment.CurrentAttachment,
-                count = 1
-            };
-            ItemManager.AddItemInScene(slotData, spawnPosition, Quaternion.Euler(90f, 0f, 90f));
-            bagManager.ClearAttachmentItem(slotIndex, ItemData.GetAttachmentType(dragData.draggedAttachment.GetItemType()));
-            return;
-        }
+        bagManager.RequestPickup(
+            bagManager.nearbyPickupables[pickupableIndex],
+            dragData.insertionIndex
+        );
     }
 
     private void HandleSlotDropInBag() {
+        if (dragData.draggedSlot == null) {
+            return;
+        }
+
         int begin = ObjectControll.GetIndex(dragData.draggedSlot);
-        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
-        bagManager.MoveSlot(begin, dragData.isAbove ? end : end + 1);
+        bagManager.RequestMoveSlot(begin, dragData.insertionIndex);
     }
 
     private void HandleAttachmentDropInSlot() {
-        int begin = ObjectControll.GetIndex(dragData.draggedSlot);
-        int end = ObjectControll.GetIndex(dragData.hoveredSlot);
-        
-        dragData.hoverAttachment.selectCover.Hide();
-        ItemData itemData = bagManager.bagDataList[begin].itemData;
-        if (bagManager.SetAttachmentItem(end, itemData.attachmentType, itemData)) {
-            bagManager.RemoveSlot(begin);
+        UI_BagItemSlot weaponSlot = dragData.hoverAttachment.GetComponentInParent<UI_BagItemSlot>();
+        if (weaponSlot == null) {
+            return;
         }
+
+        int attachmentIndex = ObjectControll.GetIndex(dragData.draggedSlot);
+        int weaponIndex = ObjectControll.GetIndex(weaponSlot);
+        AttachmentType attachmentType = ItemData.GetAttachmentType(dragData.hoverAttachment.GetItemType());
+
+        dragData.hoverAttachment.selectCover.Hide();
+        bagManager.RequestInstallAttachment(attachmentIndex, weaponIndex, attachmentType);
     }
 
     private void HandleAttachmentDropInAttachment() {
@@ -196,6 +227,7 @@ public class UI_DragDropManager : MonoBehaviour {
     }
 
     public bool IsAttachmentMatch(ItemType itemType) {
+        if (dragData.draggedAttachment != null) return false;
         if (dragData.draggedSlot != null)
             return bagManager.bagDataList[FindSlotIndex(dragData.draggedSlot)].itemData.itemType == itemType;
         if (dragData.hoverAttachment != null)

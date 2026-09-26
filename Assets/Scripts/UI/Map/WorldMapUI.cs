@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,6 +13,7 @@ public class WorldMapUI : MonoBehaviour {
     [SerializeField] private int mapResolution = 192;
     [SerializeField] private float revealRadius = 70f;
     [SerializeField] private float discoveryTickInterval = 0.15f;
+    [SerializeField] private float markerRefreshInterval = 0.2f;
 
     [Header("UI")]
     [SerializeField] private float minimapSize = 180f;
@@ -24,6 +26,7 @@ public class WorldMapUI : MonoBehaviour {
     private RectTransform panelRect;
     private RectTransform mapRect;
     private RectTransform playerMarker;
+    private RectTransform markerLayer;
     private Image panelImage;
     private Texture2D mapTexture;
     private Color32[] biomePixels;
@@ -33,7 +36,9 @@ public class WorldMapUI : MonoBehaviour {
     private InputAction mapAction;
     private int activeSeed = int.MinValue;
     private float nextDiscoveryTickTime;
+    private float nextMarkerRefreshTime;
     private bool isLargeMapOpen;
+    private readonly Dictionary<MapMarker, Image> markerImages = new();
     private bool loggedWaitingForGameState;
     private bool loggedShowing;
     private bool loggedMissingLocalPlayer;
@@ -146,18 +151,21 @@ public class WorldMapUI : MonoBehaviour {
 
         UpdatePlayerMarker(localPlayer.position);
 
-        if (Time.time < nextDiscoveryTickTime) {
-            return;
+        if (Time.time >= nextDiscoveryTickTime) {
+            nextDiscoveryTickTime = Time.time + discoveryTickInterval;
+            if (RevealAround(localPlayer.position)) {
+                RefreshDisplayTexture();
+
+                if (debugLogging && !loggedFirstReveal) {
+                    loggedFirstReveal = true;
+                    Debug.Log($"[WorldMapUI] Revealed map around {localPlayer.position}.", this);
+                }
+            }
         }
 
-        nextDiscoveryTickTime = Time.time + discoveryTickInterval;
-        if (RevealAround(localPlayer.position)) {
-            RefreshDisplayTexture();
-
-            if (debugLogging && !loggedFirstReveal) {
-                loggedFirstReveal = true;
-                Debug.Log($"[WorldMapUI] Revealed map around {localPlayer.position}.", this);
-            }
+        if (Time.time >= nextMarkerRefreshTime) {
+            nextMarkerRefreshTime = Time.time + markerRefreshInterval;
+            RefreshDynamicMarkers(localPlayer.position);
         }
     }
 
@@ -190,6 +198,14 @@ public class WorldMapUI : MonoBehaviour {
         mapRect.pivot = new Vector2(0.5f, 0.5f);
         mapRect.anchoredPosition = Vector2.zero;
         mapRect.sizeDelta = new Vector2(minimapSize - 12f, minimapSize - 12f);
+
+        GameObject markerLayerObject = new GameObject("Dynamic_Markers");
+        markerLayerObject.transform.SetParent(panelObject.transform, false);
+        markerLayer = markerLayerObject.AddComponent<RectTransform>();
+        markerLayer.anchorMin = new Vector2(0.5f, 0.5f);
+        markerLayer.anchorMax = new Vector2(0.5f, 0.5f);
+        markerLayer.pivot = new Vector2(0.5f, 0.5f);
+        markerLayer.anchoredPosition = Vector2.zero;
 
         GameObject markerObject = new GameObject("Player_Marker");
         markerObject.transform.SetParent(panelObject.transform, false);
@@ -252,6 +268,7 @@ public class WorldMapUI : MonoBehaviour {
         panelRect.anchoredPosition = isLargeMapOpen ? Vector2.zero : screenOffset;
         panelRect.sizeDelta = new Vector2(currentSize, currentSize);
         mapRect.sizeDelta = new Vector2(currentSize - 12f, currentSize - 12f);
+        markerLayer.sizeDelta = mapRect.sizeDelta;
         playerMarker.sizeDelta = isLargeMapOpen ? new Vector2(12f, 12f) : new Vector2(8f, 8f);
 
         if (panelImage != null) {
@@ -267,6 +284,7 @@ public class WorldMapUI : MonoBehaviour {
         }
 
         activeSeed = seed;
+        ClearDynamicMarkers();
         mapResolution = Mathf.Max(16, mapResolution);
         int pixelCount = mapResolution * mapResolution;
         biomePixels = new Color32[pixelCount];
@@ -368,6 +386,101 @@ public class WorldMapUI : MonoBehaviour {
             (normalized.x - 0.5f) * size.x,
             (normalized.y - 0.5f) * size.y
         );
+    }
+
+    private void RefreshDynamicMarkers(Vector3 playerPosition) {
+        MapMarker[] worldMarkers = FindObjectsByType<MapMarker>(FindObjectsSortMode.None);
+        HashSet<MapMarker> visibleMarkers = new();
+
+        foreach (MapMarker marker in worldMarkers) {
+            if (!ShouldShowMarker(marker, playerPosition)) {
+                continue;
+            }
+
+            visibleMarkers.Add(marker);
+            if (!markerImages.TryGetValue(marker, out Image markerImage)) {
+                markerImage = CreateMarkerImage(marker);
+                markerImages.Add(marker, markerImage);
+            }
+
+            UpdateMarkerImage(marker, markerImage);
+        }
+
+        List<MapMarker> markersToRemove = new();
+        foreach (KeyValuePair<MapMarker, Image> entry in markerImages) {
+            if (!visibleMarkers.Contains(entry.Key)) {
+                Destroy(entry.Value.gameObject);
+                markersToRemove.Add(entry.Key);
+            }
+        }
+
+        foreach (MapMarker marker in markersToRemove) {
+            markerImages.Remove(marker);
+        }
+    }
+
+    private bool ShouldShowMarker(MapMarker marker, Vector3 playerPosition) {
+        if (marker == null ||
+            (marker.MarkerType != MapMarkerType.Enemy &&
+             marker.MarkerType != MapMarkerType.DroppedItem)) {
+            return false;
+        }
+
+        Vector3 offset = marker.WorldPosition - playerPosition;
+        offset.y = 0f;
+        float visibilityRange = Mathf.Max(0f, marker.DiscoveryRadius);
+        return offset.sqrMagnitude <= visibilityRange * visibilityRange &&
+               IsDiscovered(marker.WorldPosition);
+    }
+
+    private Image CreateMarkerImage(MapMarker marker) {
+        GameObject markerObject = new GameObject($"{marker.MarkerType}_Marker");
+        markerObject.transform.SetParent(markerLayer, false);
+
+        Image markerImage = markerObject.AddComponent<Image>();
+        markerImage.raycastTarget = false;
+        return markerImage;
+    }
+
+    private void UpdateMarkerImage(MapMarker marker, Image markerImage) {
+        Vector2 normalized = WorldToNormalizedMapPosition(marker.WorldPosition);
+        RectTransform markerRect = markerImage.rectTransform;
+        markerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        markerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        markerRect.pivot = new Vector2(0.5f, 0.5f);
+        markerRect.anchoredPosition = new Vector2(
+            (normalized.x - 0.5f) * markerLayer.sizeDelta.x,
+            (normalized.y - 0.5f) * markerLayer.sizeDelta.y
+        );
+
+        bool isEnemy = marker.MarkerType == MapMarkerType.Enemy;
+        float markerSize = isEnemy
+            ? (isLargeMapOpen ? 10f : 7f)
+            : (isLargeMapOpen ? 9f : 6f);
+        markerRect.sizeDelta = new Vector2(markerSize, markerSize);
+        markerImage.color = isEnemy
+            ? new Color(0.9f, 0.15f, 0.12f, 1f)
+            : new Color(1f, 0.78f, 0.15f, 1f);
+        markerImage.sprite = marker.Icon;
+    }
+
+    private bool IsDiscovered(Vector3 worldPosition) {
+        if (discoveredCells == null) {
+            return false;
+        }
+
+        Vector2Int cell = WorldToMapCell(worldPosition);
+        return discoveredCells[ToIndex(cell.x, cell.y)];
+    }
+
+    private void ClearDynamicMarkers() {
+        foreach (Image markerImage in markerImages.Values) {
+            if (markerImage != null) {
+                Destroy(markerImage.gameObject);
+            }
+        }
+
+        markerImages.Clear();
     }
 
     private Vector2Int WorldToMapCell(Vector3 worldPosition) {

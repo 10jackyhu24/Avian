@@ -1,8 +1,16 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Unity.Netcode;
 using System.Collections.Generic;
 
 public class BagMenu : MonoBehaviour {
+    private static BagMenu instance;
+    public static bool IsOpen =>
+        instance != null &&
+        instance.bagMenuUI != null &&
+        instance.bagMenuUI.activeInHierarchy;
+    private const float NearbyRefreshInterval = 0.25f;
+
     private GameInput inputActions;
     private MenuManager menuManager;
     [SerializeField] private GameObject bagMenuUI;
@@ -11,11 +19,13 @@ public class BagMenu : MonoBehaviour {
     private PlayerController player;
     private Vector3 lastPlayerPosition;
     private bool hasLastPlayerPosition;
+    private float nextNearbyRefreshTime;
 
     private void Awake() {
+        instance = this;
         menuManager = FindFirstObjectByType<MenuManager>();
         bagManager = FindFirstObjectByType<UI_BagManager>();
-        player = FindFirstObjectByType<PlayerController>();
+        TryFindLocalPlayer();
         inputActions = new GameInput();
         inputActions.Player.Bag.performed += OnBagPerformed;
         KeyBinding.LoadBindingOverrides(inputActions);
@@ -29,6 +39,19 @@ public class BagMenu : MonoBehaviour {
 
     private void HandleBindingOverridesChanged() {
         KeyBinding.LoadBindingOverrides(inputActions);
+    }
+
+    private void OnDestroy() {
+        OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        if (inputActions != null) {
+            inputActions.Player.Bag.performed -= OnBagPerformed;
+            inputActions.Disable();
+            inputActions.Dispose();
+        }
+
+        if (instance == this) {
+            instance = null;
+        }
     }
 
     public void OnBagPerformed(InputAction.CallbackContext context) {
@@ -51,8 +74,7 @@ public class BagMenu : MonoBehaviour {
         }
 
         if (player == null) {
-            player = FindFirstObjectByType<PlayerController>();
-            if (player == null) {
+            if (!TryFindLocalPlayer()) {
                 return;
             }
         }
@@ -63,13 +85,16 @@ public class BagMenu : MonoBehaviour {
             return;
         }
 
-        if ((player.transform.position - lastPlayerPosition).sqrMagnitude <= 0.0001f) {
+        bool playerMoved = (player.transform.position - lastPlayerPosition).sqrMagnitude > 0.0001f;
+        if (!playerMoved && Time.unscaledTime < nextNearbyRefreshTime) {
             return;
         }
 
         lastPlayerPosition = player.transform.position;
-        bagManager.RefreshNearbyPickupables();
-        bagManager.RefreshNearbyPickupablesUI();
+        nextNearbyRefreshTime = Time.unscaledTime + NearbyRefreshInterval;
+        if (bagManager.RefreshNearbyPickupables()) {
+            bagManager.RefreshNearbyPickupablesUI();
+        }
     }
 
     private void ShowBagMenu() {
@@ -83,11 +108,20 @@ public class BagMenu : MonoBehaviour {
             lastPlayerPosition = player.transform.position;
             hasLastPlayerPosition = true;
         }
+
+        nextNearbyRefreshTime = Time.unscaledTime + NearbyRefreshInterval;
     }
 
     private void CloseBagMenu() {
         menuManager.HideMenu();
         menuManager.ClearHistory();
+    }
+
+    private bool TryFindLocalPlayer() {
+        NetworkManager networkManager = NetworkManager.Singleton;
+        NetworkObject localPlayer = networkManager?.LocalClient?.PlayerObject;
+        player = localPlayer != null ? localPlayer.GetComponent<PlayerController>() : null;
+        return player != null;
     }
 
     private void RefreshBagMenu(int size) {

@@ -20,6 +20,7 @@ GameObject:
   - component: {fileID: 6334219223960730493}
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
+  - component: {fileID: -3278912345678901234}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -129,19 +130,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
   ShowTopMostFoldoutHeaderGroup: 1
-  moveSpeed: 24.21
-  runSpeedMultiplier: 1.75
-  jumpHeight: 3.11
+  moveSpeed: 14.07
+  runSpeedMultiplier: 1.25
+  jumpHeight: 2.2
   gravity: -20
   maxHealth: 100
   respawnDelaySeconds: 2
-  attackDamage: 10
-  attackRadius: 7.06
-  attackCooldownSeconds: 0.6
-  attackCenterOffset: {x: 0, y: 1, z: 0}
-  attackLayerMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
+  combatController: {fileID: 0}
+  unarmedAttackData: {fileID: 11400000, guid: c0a1fd7924d3c164cb97249b6177e0f9, type: 2}
+  weaponGroundHeight: 0.08
+  weaponHandlePivot: {x: 0.15, y: 0.15}
+  weaponFlipX: 1
+  weaponPlanarAngle: 135
   healthLabelOffset: {x: 0, y: 2.2, z: 0}
 --- !u!114 &-2242094449183278105
 MonoBehaviour:
@@ -285,12 +285,13 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   attackMode: 0
   requireCombatState: 0
-  currentAttack: {fileID: 11400000, guid: 74eddd7f6613e9140a9018f2a94a0f82, type: 2}
+  currentAttack: {fileID: 11400000, guid: 78e3dc714cef7944b8e9a47ff2e000cd, type: 2}
   originPoint: {fileID: 8526152859912152380}
   targetLayer:
     serializedVersion: 2
     m_Bits: 8
   unarmedRadiusWidthMultiplier: 2
+  unarmedInnerRadiusWidthMultiplier: 1
   unarmedRadiusFallback: 1.2
   visualTestOnly: 1
   punchEffectPrefab: {fileID: 6274209533740340183, guid: 3a646f48375c8dc4a8ec482516b21fc2,
@@ -366,6 +367,19 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerCurrency
   ShowTopMostFoldoutHeaderGroup: 1
   startingCoins: 0
+--- !u!114 &-3278912345678901234
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7420dc443dcc47a8a4e0a0a892663b1a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
+  ShowTopMostFoldoutHeaderGroup: 1
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0

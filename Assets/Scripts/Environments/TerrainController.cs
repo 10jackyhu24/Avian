@@ -80,6 +80,28 @@ public class TerrainController : MonoBehaviour {
     private readonly Dictionary<string, GameObject> spawnedStructuresByCell = new Dictionary<string, GameObject>();
     private readonly List<Vector3> spawnedStructurePositions = new List<Vector3>();
     private HashSet<string> activeStructureKeys = new HashSet<string>();
+    public static TerrainController Instance { get; private set; }
+
+    private void Awake() {
+        if (Instance != null && Instance != this) {
+            Destroy(this);
+            return;
+        }
+        Instance = this;
+    }
+    /// <summary>
+    /// 【伺服器專用】取得世界正中心的世界座標
+    /// </summary>
+    public Vector3 GetServerWorldCenter() {
+        return new Vector3(0f, flatHeight, 0f);
+    }
+
+    /// <summary>
+    /// 【伺服器專用】取得地圖的總邊長大小
+    /// </summary>
+    public int GetServerWorldSize() {
+        return size;
+    }
 
     private void Start() {
         EnsureCameraReference(false);
@@ -233,6 +255,20 @@ public class TerrainController : MonoBehaviour {
         int gridX = Mathf.RoundToInt(worldPosition.x) + size / 2;
         int gridZ = Mathf.RoundToInt(worldPosition.z) + size / 2 + zBias;
         return new Vector2Int(gridX / updateStride, gridZ / updateStride);
+    }
+
+    public bool IsWorldPositionLoaded(Vector3 worldPosition) {
+        if (cubeGrid == null) {
+            return false;
+        }
+
+        int gridX = Mathf.RoundToInt(worldPosition.x) + size / 2;
+        int gridZ = Mathf.RoundToInt(worldPosition.z) + size / 2;
+        if (gridX < 0 || gridX >= size || gridZ < 0 || gridZ >= size) {
+            return false;
+        }
+
+        return inRangePositions.Contains(new Vector2Int(gridX, gridZ));
     }
 
     private void UpdateDynamicLoading() {

@@ -1,0 +1,140 @@
+[33m0bb77a5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mDrag-Item[m[33m)[m connect combat and selected bar
+[33mce6eb42[m Modify resources items
+[33m72eeea2[m Fixed count in pickupable UI
+[33mbc84a74[m Merge branch 'Add-some-pics' into Drag-Item
+[33mab5c7ca[m Show item in BagUI when item in the scene
+[33mb3ad4df[m Item can drop in scene
+[33mdb28855[m[33m ([m[1;31morigin/Add-some-pics[m[33m)[m Add pic of coin and some weapon for testing
+[33mc918ce9[m Added coin prefab
+[33mfd31109[m Merge pull request #9 from 10jackyhu24/bag-ui-character-selection
+[33m7230f5a[m Tune House spawning position
+[33m36f7574[m Add pixel house blend asset
+[33mec8626f[m Added FBX structures back in
+[33m7940b3b[m Restore terrain structure spawning
+[33md405f1e[m Integrate character selection with Bag UI
+[33m4f51586[m Can drag attachment to bag
+[33m5c2e71c[m Fixed drag empty or cover attachment bug
+[33mc7c033c[m Can drag attachment to other attachment slot
+[33mca0d967[m Fixed if something in attachment then cant drag slot in it
+[33mb435d9e[m Can show icon in attachment when drag slot in the attachment
+[33m711ffe1[m Attachment effect
+[33me718c1a[m Tidy ItemSlot and AttachmentSlot
+[33m87cdd86[m Add item count in hotbar
+[33mcc312d6[m Fixed hotbar null icon bug
+[33ma7a6821[m Hotbar icon
+[33m14f61a7[m Add hotbar
+[33mcd5ed19[m Can drag item in bag ui
+[33m52b86ce[m Add MoveObject Util
+[33m1328b9f[m Can change slot
+[33mfe38ba2[m Test drag and drop func
+[33m199b647[m Icon in bag
+[33m83e737e[m First item in bag
+[33mac8882d[m Merge pull request #8 from 10jackyhu24/Development
+[33m8fa3888[m Fix pass through the floor issue
+[33m27ff45d[m Add run and modify view distance
+[33m88e4423[m Change terrain material
+[33mf7254aa[m Merge branch 'Territory_Material' into Development
+[33m61c4f38[m Add some material for territory.
+[33mc021d34[m Esc to close bag
+[33mdc5d30e[m Empty Bag
+[33mcce912e[m Add Item def
+[33m63592b0[m Tidy Pause Menu Scripts
+[33md077538[m Modify options setting
+[33m0777454[m Merge branch 'Punch_Animation' into Development
+[33m31d0d2a[m Punch Animation
+[33m7288805[m Modify server. Can open menu in game for single and multiplayer mode
+[33m971e96d[m Enter server with same scene
+[33mb5ca92f[m Add KeyBinding Utility
+[33md98ed9e[m Fix menu init
+[33m8aa2adc[m Pause in game
+[33m2ff9510[m Merge Combat
+[33mf9a058b[m[33m ([m[1;31morigin/Combat[m[33m, [m[1;32mmain[m[33m, [m[1;32mCombat[m[33m)[m add Health and Combat .cs
+[33md93d1bf[m Merge ButtonsModify
+[33mb959e92[m Buttons Modify AGAIN
+[33m42995e7[m Setting Options
+[33medb7885[m[33m ([m[1;31morigin/Game-setting-options[m[33m)[m Add compose.py
+[33m8164192[m Merge pull request #7 from 10jackyhu24/Merge-Match-switch-to-dedicated-server-and-main
+[33m132ac6c[m Add Utils
+[33mb167a34[m Fix conflict
+[33ma1caebc[m Single player hide menu
+[33m0a4575b[m Testing health and damage
+[33mac971e6[m Tested connection on different computers with different internet using playit.gg
+[33m78cd8b7[m Uses world_endpoint instead of hardcoding
+[33mf240b12[m Added local k8s connectivity
+[33m267939a[m Testing k8s connection
+[33m62a0614[m Added Linux dedicated server(needs testing)
+[33m720e3f0[m Simplify CharacterController
+[33m8e7bebc[m Change PlayerController handling of movement
+[33mb871984[m TerrainController becomes authoritative
+[33ma3d0f96[m Testing local player movement sync with rpc
+[33m7c164b0[m Testing local player movement and connection
+[33mddedeac[m Tested three instance(two clients one server) connectivity
+[33ma12f1d2[m Merge pull request #4 from 10jackyhu24/Match
+[33m30fb5f6[m Add warning window
+[33m37e6355[m New Background Pic
+[33m9cbdc28[m Update matching UI
+[33m620b99b[m Match success
+[33mb62403e[m Merge route to baseURL
+[33mc5c2735[m Update unity
+[33m35c59bc[m Match judge
+[33mcd694b3[m Match
+[33m807b5c9[m Add Matchmaking UI
+[33m9b4a51a[m Matchmaker
+[33m1347458[m Add Ngrok
+[33m86bf4d6[m Merge pull request #3 from 10jackyhu24/Development
+[33m27ef2bf[m Merge NGO and backend
+[33me0e95ec[m Merge pull request #2 from 10jackyhu24/K8s
+[33m9d77da7[m Merge pull request #1 from 10jackyhu24/feature/auth-ui-docker-local
+[33mbcc8dc3[m Front-end and back-end connections
+[33m4d2c805[m Add auth UI and local Docker auth flow
+[33m7353287[m Login func
+[33m6239e80[m Add docker in k8s
+[33m950e69d[m Meeting minutes init
+[33md6df629[m Create Meeting_Minutes.md
+[33m657a5a0[m Update README.md: **Missing 'Unity.Netcode' Namespace / IDE0005 Reference Error** issue
+[33mc466dd8[m yml to yaml
+[33m4614dcf[m yml to yaml
+[33m9d5577d[m Merge remote-tracking branch 'origin/NGO_version(camera-has-bug)' into Development
+[33ma317d74[m Standalone database
+[33mf70b32a[m Jun 2, 2026 10:58 AM by 0Jacky0
+[33mde9754f[m Add k8s issue in README.md
+[33m5382017[m K8s init
+[33m0836845[m Added Player Sprite and animation
+[33m3edda77[m Fixed Camera not able to find Player
+[33mebb7486[m camera has bug need fix
+[33m19cceba[m First Commit
+[33ma33d511[m Optimize UpdateDynamicLoading
+[33m3a8f571[m Terrain Chunk
+[33m87404b2[m Adjust camera angle
+[33mb547c37[m Merge Development and Development-PlayerCapsule
+[33ma9246b9[m Added test player to scene
+[33m555fc12[m GameState
+[33m3709ff9[m Modify camera transform and UpdateDynamicLoading
+[33mb6ab2a3[m Optimize map generate
+[33me9320a1[m Biome area multiplier
+[33m3447466[m Update README.md
+[33md39ffd9[m Map display optimization
+[33m3f825bb[m Basic camera move
+[33m5c3ba54[m Single player mode generate map
+[33m7eceb33[m Optimize UI code
+[33m5b132ad[m Modify UI array to dict
+[33mace23c8[m UI fixed ratio
+[33m7cc4fe3[m Update README.md
+[33md59a8f7[m Update README.md
+[33ma1a4e9e[m Switch version to 6000.3.15f1
+[33mc3122d0[m MutiPlayersList(Canvas)
+[33m3f5ec95[m Add cancel btn
+[33m7ed1fdf[m Update Design_Specification.md
+[33m28405e6[m Update code format
+[33m034f7f3[m May 12, 2026 11:05 AM by 0Jacky0
+[33ma9f40d9[m Organize files
+[33mef5b2aa[m Organize UI file structure
+[33m3d0aaa8[m Upload README.md
+[33me9eb14a[m Single player UI
+[33m61bc11d[m Merge remote changes and add Design_Specification.md
+[33m0e062d4[m Environment generate 3D test
+[33m09a11ad[m init
+[33m85c2d9f[m Add LFS tracking for large files
+[33mac4eaed[m Apr 24, 2026 6:56 PM by 0Jacky0
+[33m0f8df1b[m Apr 22, 2026 11:23 PM by 0Jacky0
+[33m7c19690[m Create Design_Specification.md

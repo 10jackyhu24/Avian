@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
-public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler {
+public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler {
     [Header("Slot Setup")]
     [SerializeField] private ItemType itemType;
 
@@ -73,6 +73,15 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
         if (CurrentAttachment.itemType == ItemType.Empty) return;
         selectCover.Hide();
         dragDropManager.OnDragEnd();
+    }
+
+    public void OnPointerClick(PointerEventData eventData) {
+        if (eventData.button != PointerEventData.InputButton.Right ||
+            CurrentAttachment.itemType == ItemType.Empty) {
+            return;
+        }
+
+        dragDropManager.OnAttachmentSlotRightClick(this);
     }
 
     public void OnPointerEnter(PointerEventData eventData) {

@@ -13,7 +13,7 @@ public class EnemyHealthDrop : MonoBehaviour {
     [SerializeField] private float dropScatterRadius = 1.25f;
     [SerializeField] private float dropHeightOffset = 0.75f;
 
-    private int currentHealth;
+    private float currentHealth;
     private bool isDead;
 
     public bool IsAlive => !isDead && currentHealth > 0;
@@ -23,11 +23,10 @@ public class EnemyHealthDrop : MonoBehaviour {
         currentHealth = maxHealth;
     }
 
-    public void TakeDamage(int damage, ulong attackerClientId) {
+    public void TakeDamage(float damage, ulong attackerClientId) {
         if (!CanServerTakeDamage() || isDead || damage <= 0) {
             return;
         }
-
         currentHealth = Mathf.Max(0, currentHealth - damage);
         Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={currentHealth}/{maxHealth}", this);
 
