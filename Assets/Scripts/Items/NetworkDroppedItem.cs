@@ -6,6 +6,8 @@ using UnityEngine;
 [RequireComponent(typeof(Pickupable))]
 [RequireComponent(typeof(Rigidbody))]
 public class NetworkDroppedItem : NetworkBehaviour {
+    private static readonly Quaternion GroundRotation = Quaternion.Euler(-90f, 180f, 0f);
+
     [SerializeField] private SpriteRenderer itemRenderer;
     [SerializeField] private Pickupable pickupable;
 
@@ -156,7 +158,7 @@ public class NetworkDroppedItem : NetworkBehaviour {
             return false;
         }
 
-        GameObject instance = Instantiate(prefab, position, Quaternion.identity);
+        GameObject instance = Instantiate(prefab, position, GroundRotation);
         if (!instance.TryGetComponent(out NetworkObject networkObject) ||
             !instance.TryGetComponent(out droppedItem)) {
             Debug.LogError("[NetworkDroppedItem] Prefab is missing required network components.", instance);
