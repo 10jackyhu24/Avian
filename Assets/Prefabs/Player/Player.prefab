@@ -138,6 +138,9 @@ MonoBehaviour:
   respawnDelaySeconds: 2
   combatController: {fileID: 0}
   unarmedAttackData: {fileID: 11400000, guid: c0a1fd7924d3c164cb97249b6177e0f9, type: 2}
+  attackRangeFillColor: {r: 1, g: 0.25, b: 0.05, a: 0.2}
+  attackRangeOutlineColor: {r: 1, g: 0.4, b: 0.05, a: 0.9}
+  attackRangeSegments: 32
   weaponGroundHeight: 0.08
   weaponHandlePivot: {x: 0.15, y: 0.15}
   weaponFlipX: 1
@@ -380,6 +383,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   ShowTopMostFoldoutHeaderGroup: 1
+  maxCapacity: 100
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0
