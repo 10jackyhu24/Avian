@@ -2,9 +2,12 @@ using System;
 using Unity.Netcode;
 using UnityEngine;
 
-public class EnemyHealthDrop : MonoBehaviour {
+public class EnemyHealthDrop : NetworkBehaviour {
     [Header("Health")]
     [SerializeField] private int maxHealth = 30;
+
+    [Header("Health Display")]
+    [SerializeField] private Vector3 healthBarOffset = new Vector3(0f, 1.5f, 0f);
 
     [Header("Coin Drop")]
     [SerializeField] private GameObject coinPickupPrefab;
@@ -13,25 +16,61 @@ public class EnemyHealthDrop : MonoBehaviour {
     [SerializeField] private float dropScatterRadius = 1.25f;
     [SerializeField] private float dropHeightOffset = 0.75f;
 
-    private float currentHealth;
+    private readonly NetworkVariable<float> networkHealth = new NetworkVariable<float>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+    private float localHealth;
     private bool isDead;
 
-    public bool IsAlive => !isDead && currentHealth > 0;
+    private float CurrentHealth => IsSpawned ? networkHealth.Value : localHealth;
+    public bool IsAlive => !isDead && CurrentHealth > 0f;
     public event Action<EnemyHealthDrop> Died;
 
     private void Awake() {
-        currentHealth = maxHealth;
+        localHealth = maxHealth;
+    }
+
+    public override void OnNetworkSpawn() {
+        if (IsServer) {
+            networkHealth.Value = maxHealth;
+        }
+
+        localHealth = networkHealth.Value;
+    }
+
+    private void OnGUI() {
+        if (!IsAlive) {
+            return;
+        }
+
+        WorldHealthBarGUI.Draw(
+            transform.position + healthBarOffset,
+            CurrentHealth,
+            maxHealth,
+            new Color(0.9f, 0.15f, 0.12f),
+            width: 140f,
+            height: 22f
+        );
     }
 
     public void TakeDamage(float damage, ulong attackerClientId) {
         if (!CanServerTakeDamage() || isDead || damage <= 0) {
             return;
         }
-        currentHealth = Mathf.Max(0, currentHealth - damage);
-        Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={currentHealth}/{maxHealth}", this);
+        float newHealth = Mathf.Max(0f, CurrentHealth - damage);
+        SetCurrentHealth(newHealth);
+        Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={newHealth}/{maxHealth}", this);
 
-        if (currentHealth <= 0) {
+        if (newHealth <= 0f) {
             Die(attackerClientId);
+        }
+    }
+
+    private void SetCurrentHealth(float value) {
+        localHealth = value;
+        if (IsSpawned && IsServer) {
+            networkHealth.Value = value;
         }
     }
 

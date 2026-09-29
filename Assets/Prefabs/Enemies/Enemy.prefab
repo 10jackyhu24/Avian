@@ -183,6 +183,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthDrop
   maxHealth: 30
+  healthBarOffset: {x: 0, y: 1.5, z: 0}
   coinPickupPrefab: {fileID: 8479608651360194323, guid: 04708eb1e12619140aa03123d81414c8,
     type: 3}
   minCoinsDropped: 1

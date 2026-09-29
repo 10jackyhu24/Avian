@@ -36,8 +36,8 @@ public class PlayerController : NetworkBehaviour {
     [Range(-180f, 180f)] [SerializeField] private float weaponPlanarAngle = 135f;
 
 
-    [Header("Debug Health Display")]
-    [SerializeField] private Vector3 healthLabelOffset = new Vector3(0f, 2.2f, 0f);
+    [Header("Health Display")]
+    [SerializeField] private Vector3 healthLabelOffset = new Vector3(0f, 1.5f, 0f);
 
     private CharacterController characterController;
     private SpriteRenderer spriteRenderer;
@@ -76,7 +76,6 @@ public class PlayerController : NetworkBehaviour {
     private GameObject activeWeaponVisual;
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
-    private GUIStyle healthLabelStyle;
     private GameInput inputActions;
 
     public bool IsAlive => currentHealth.Value > 0;
@@ -170,36 +169,18 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void OnGUI() {
-        Camera mainCamera = Camera.main;
-        if (mainCamera == null || !IsSpawned) {
+        if (!IsSpawned) {
             return;
         }
 
-        Vector3 screenPosition = mainCamera.WorldToScreenPoint(transform.position + healthLabelOffset);
-        if (screenPosition.z <= 0f) {
-            return;
-        }
-
-        if (healthLabelStyle == null) {
-            healthLabelStyle = new GUIStyle(GUI.skin.label) {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 18,
-                fontStyle = FontStyle.Bold
-            };
-        }
-
-        healthLabelStyle.normal.textColor = currentHealth.Value <= 0 ? Color.red : Color.green;
-
-        const float width = 120f;
-        const float height = 28f;
-        Rect labelRect = new Rect(
-            screenPosition.x - width * 0.5f,
-            Screen.height - screenPosition.y - height * 0.5f,
-            width,
-            height
+        WorldHealthBarGUI.Draw(
+            transform.position + healthLabelOffset,
+            currentHealth.Value,
+            maxHealth,
+            new Color(0.15f, 0.8f, 0.25f),
+            width: 140f,
+            height: 22f
         );
-
-        GUI.Label(labelRect, $"{currentHealth.Value}/{maxHealth}", healthLabelStyle);
     }
 
     private void SendInputToServer() {
@@ -996,5 +977,118 @@ public class PlayerController : NetworkBehaviour {
 
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position + currentAttackData.centerOffset, currentAttackData.radius);
+    }
+}
+
+public static class WorldHealthBarGUI {
+    private const float ReferenceWidth = 1920f;
+    private const float ReferenceHeight = 1080f;
+    private const float BorderSize = 2f;
+    private const int BaseFontSize = 16;
+    private static GUIStyle healthTextStyle;
+    private static GUIStyle healthTextShadowStyle;
+    private static int currentFontSize;
+
+    public static void Draw(
+        Vector3 worldPosition,
+        float currentHealth,
+        float maxHealth,
+        Color fillColor,
+        float width = 100f,
+        float height = 16f) {
+        if (Event.current.type != EventType.Repaint || maxHealth <= 0f) {
+            return;
+        }
+
+        Camera mainCamera = Camera.main;
+        if (mainCamera == null) {
+            return;
+        }
+
+        Vector3 screenPosition = mainCamera.WorldToScreenPoint(worldPosition);
+        if (screenPosition.z <= 0f) {
+            return;
+        }
+
+        screenPosition.y = Screen.height - screenPosition.y;
+        if (screenPosition.x < -width || screenPosition.x > Screen.width + width ||
+            screenPosition.y < -height || screenPosition.y > Screen.height + height) {
+            return;
+        }
+
+        float uiScale = GetUIScale();
+        float scaledWidth = width * uiScale;
+        float scaledHeight = height * uiScale;
+        float scaledBorderSize = BorderSize * uiScale;
+        float healthRatio = Mathf.Clamp01(currentHealth / maxHealth);
+        Rect backgroundRect = new Rect(
+            screenPosition.x - scaledWidth * 0.5f,
+            screenPosition.y - scaledHeight * 0.5f,
+            scaledWidth,
+            scaledHeight
+        );
+        Rect fillRect = new Rect(
+            backgroundRect.x + scaledBorderSize,
+            backgroundRect.y + scaledBorderSize,
+            (backgroundRect.width - scaledBorderSize * 2f) * healthRatio,
+            backgroundRect.height - scaledBorderSize * 2f
+        );
+
+        Color previousColor = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.85f);
+        GUI.DrawTexture(backgroundRect, Texture2D.whiteTexture);
+
+        GUI.color = fillColor;
+        GUI.DrawTexture(fillRect, Texture2D.whiteTexture);
+
+        GUI.color = Color.white;
+        string healthText = $"{Mathf.CeilToInt(Mathf.Max(0f, currentHealth))} / {Mathf.CeilToInt(maxHealth)}";
+        Rect shadowRect = backgroundRect;
+        float shadowOffset = Mathf.Max(1f, uiScale);
+        shadowRect.x += shadowOffset;
+        shadowRect.y += shadowOffset;
+        GUI.Label(shadowRect, healthText, GetHealthTextShadowStyle(uiScale));
+        GUI.Label(
+            backgroundRect,
+            healthText,
+            GetHealthTextStyle(uiScale)
+        );
+        GUI.color = previousColor;
+    }
+
+    private static float GetUIScale() {
+        float widthScale = Screen.width / ReferenceWidth;
+        float heightScale = Screen.height / ReferenceHeight;
+        return Mathf.Max(0.01f, Mathf.Min(widthScale, heightScale));
+    }
+
+    private static GUIStyle GetHealthTextStyle(float uiScale) {
+        EnsureTextStyles(uiScale);
+        return healthTextStyle;
+    }
+
+    private static GUIStyle GetHealthTextShadowStyle(float uiScale) {
+        EnsureTextStyles(uiScale);
+        return healthTextShadowStyle;
+    }
+
+    private static void EnsureTextStyles(float uiScale) {
+        int fontSize = Mathf.Max(10, Mathf.RoundToInt(BaseFontSize * uiScale));
+        if (healthTextStyle == null) {
+            healthTextStyle = new GUIStyle(GUI.skin.label) {
+                alignment = TextAnchor.MiddleCenter,
+                fontStyle = FontStyle.Bold
+            };
+            healthTextStyle.normal.textColor = Color.white;
+
+            healthTextShadowStyle = new GUIStyle(healthTextStyle);
+            healthTextShadowStyle.normal.textColor = Color.black;
+        }
+
+        if (currentFontSize != fontSize) {
+            currentFontSize = fontSize;
+            healthTextStyle.fontSize = fontSize;
+            healthTextShadowStyle.fontSize = fontSize;
+        }
     }
 }
