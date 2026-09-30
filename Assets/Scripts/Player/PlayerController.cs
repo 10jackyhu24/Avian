@@ -2,6 +2,7 @@ using Unity.Netcode;
 using Unity.Collections;
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine.InputSystem;
 
 [RequireComponent(typeof(CharacterController))]
@@ -34,6 +35,8 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private Vector2 weaponHandlePivot = new Vector2(0.15f, 0.15f);
     [SerializeField] private bool weaponFlipX = true;
     [Range(-180f, 180f)] [SerializeField] private float weaponPlanarAngle = 135f;
+    [Min(0.05f)] [SerializeField] private float weaponHitHeight = 0.5f;
+    [Range(1f, 15f)] [SerializeField] private float weaponSweepStepDegrees = 4f;
 
 
     [Header("Health Display")]
@@ -67,6 +70,7 @@ public class PlayerController : NetworkBehaviour {
     private float nextServerAttackTime;
     private float nextLocalAttackTime;
     private bool isPreparingAttack;
+    private float attackMovementLockedUntil;
     private Vector3 preparedAttackDirection = Vector3.right;
     private GameObject attackRangePreview;
     private Mesh attackRangeMesh;
@@ -74,6 +78,7 @@ public class PlayerController : NetworkBehaviour {
     private Material attackRangeOutlineMaterial;
     private Coroutine weaponSwingCoroutine;
     private GameObject activeWeaponVisual;
+    private readonly Collider[] weaponHitBuffer = new Collider[64];
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
     private GameInput inputActions;
@@ -127,6 +132,10 @@ public class PlayerController : NetworkBehaviour {
         if (bagManager == null) {
             bagManager = FindFirstObjectByType<UI_BagManager>();
         }
+        if (bagManager != null) {
+            bagManager.InventoryDisplayChanged -= HandleInventoryDisplayChanged;
+            bagManager.InventoryDisplayChanged += HandleInventoryDisplayChanged;
+        }
         if (gameMenu != null) {
             gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
             gameMenu.OnSelectedIndexChanged += HandleSelectedIndexChange;
@@ -151,6 +160,9 @@ public class PlayerController : NetworkBehaviour {
         CancelPreparedAttack();
         if (gameMenu != null) {
             gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
+        }
+        if (bagManager != null) {
+            bagManager.InventoryDisplayChanged -= HandleInventoryDisplayChanged;
         }
         inputActions.Player.Disable();
     }
@@ -189,9 +201,8 @@ public class PlayerController : NetworkBehaviour {
         bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
         InputAction attackAction = inputActions.Player.Attack;
 
-        SubmitMovementServerRpc(moveInput.x, moveInput.y, runPressed, jumpPressed);
-
         if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen || !IsAlive) {
+            SubmitMovementServerRpc(0f, 0f, false, false);
             CancelPreparedAttack();
             return;
         }
@@ -207,6 +218,14 @@ public class PlayerController : NetworkBehaviour {
         if (attackAction.WasReleasedThisFrame()) {
             ReleasePreparedAttack();
         }
+
+        bool isMovementLocked = Time.time < nextLocalAttackTime;
+        SubmitMovementServerRpc(
+            isMovementLocked ? 0f : moveInput.x,
+            isMovementLocked ? 0f : moveInput.y,
+            !isMovementLocked && runPressed,
+            !isMovementLocked && jumpPressed
+        );
     }
 
     private void BeginPreparingAttack() {
@@ -251,12 +270,11 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void UpdatePreparedAttackDirection() {
-        if (!TryGetMouseAimDirection(out Vector3 direction)) {
-            return;
+        if (TryGetMouseAimDirection(out Vector3 direction)) {
+            preparedAttackDirection = direction;
         }
 
-        preparedAttackDirection = direction;
-        UpdateAttackRangePreviewRotation();
+        UpdateAttackRangePreviewTransform();
     }
 
     private bool TryGetMouseAimDirection(out Vector3 direction) {
@@ -266,13 +284,16 @@ public class PlayerController : NetworkBehaviour {
             return false;
         }
 
+        Vector3 attackOrigin = currentAttackData != null
+            ? GetAttackVisualWorldPosition(currentAttackData)
+            : transform.position;
         Ray mouseRay = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
-        Plane playerGroundPlane = new Plane(Vector3.up, transform.position);
+        Plane playerGroundPlane = new Plane(Vector3.up, attackOrigin);
         if (!playerGroundPlane.Raycast(mouseRay, out float distance)) {
             return false;
         }
 
-        direction = mouseRay.GetPoint(distance) - transform.position;
+        direction = mouseRay.GetPoint(distance) - attackOrigin;
         direction.y = 0f;
         if (direction.sqrMagnitude < 0.0001f) {
             return false;
@@ -282,19 +303,22 @@ public class PlayerController : NetworkBehaviour {
         return true;
     }
 
-    private void UpdateAttackRangePreviewRotation() {
-        if (attackRangePreview == null) {
+    private void UpdateAttackRangePreviewTransform() {
+        if (attackRangePreview == null || currentAttackData == null) {
             return;
         }
 
-        Vector3 localDirection = transform.InverseTransformDirection(preparedAttackDirection);
-        localDirection.y = 0f;
-        if (localDirection.sqrMagnitude < 0.0001f) {
+        Vector3 attackDirection = preparedAttackDirection;
+        attackDirection.y = 0f;
+        if (attackDirection.sqrMagnitude < 0.0001f) {
             return;
         }
 
-        float yaw = -Mathf.Atan2(localDirection.z, localDirection.x) * Mathf.Rad2Deg;
-        attackRangePreview.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+        attackDirection.Normalize();
+        attackRangePreview.transform.position = GetAttackVisualWorldPosition(currentAttackData);
+
+        float yaw = -Mathf.Atan2(attackDirection.z, attackDirection.x) * Mathf.Rad2Deg;
+        attackRangePreview.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
     }
 
     private void ShowAttackRangePreview() {
@@ -303,16 +327,15 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        attackRangePreview = new GameObject("AttackRangePreview");
-        attackRangePreview.transform.SetParent(transform, false);
-        attackRangePreview.transform.localPosition = new Vector3(
-            currentAttackData.centerOffset.x,
-            0.05f,
-            currentAttackData.centerOffset.z
-        );
+        // This is a local world-space object. It has no NetworkObject and is only
+        // created by the owning client, so other players never receive the preview.
+        attackRangePreview = new GameObject("LocalAttackRangePreview") {
+            hideFlags = HideFlags.DontSave
+        };
+        attackRangePreview.transform.localScale = Vector3.one;
 
-        float innerRadius = GetCurrentAttackInnerRadius();
-        float outerRadius = Mathf.Max(innerRadius, currentAttackData.radius);
+        float outerRadius = Mathf.Max(0f, currentAttackData.radius);
+        const float innerRadius = 0f;
         float arcAngle = currentAttackData.attackShape == AttackShape.Sector
             ? Mathf.Clamp(currentAttackData.sectorAngle, 1f, 360f)
             : 360f;
@@ -379,29 +402,10 @@ public class PlayerController : NetworkBehaviour {
         outline.sharedMaterial = attackRangeOutlineMaterial;
 
         if (currentAttackData.attackShape == AttackShape.Radial) {
-            // Draw the two circles separately. Combining them into one loop creates
-            // a visible line where the 0-degree and 360-degree points meet.
+            // A radial preview is a filled disc with only its outer edge outlined.
             outline.positionCount = segmentCount;
             for (int i = 0; i < segmentCount; i++) {
                 outline.SetPosition(i, vertices[i * 2 + 1] + Vector3.up * 0.01f);
-            }
-
-            if (innerRadius > 0f) {
-                GameObject innerOutlineObject = new GameObject("InnerOutline");
-                innerOutlineObject.transform.SetParent(attackRangePreview.transform, false);
-                LineRenderer innerOutline = innerOutlineObject.AddComponent<LineRenderer>();
-                innerOutline.useWorldSpace = false;
-                innerOutline.loop = true;
-                innerOutline.widthMultiplier = outline.widthMultiplier;
-                innerOutline.positionCount = segmentCount;
-                innerOutline.startColor = attackRangeOutlineColor;
-                innerOutline.endColor = attackRangeOutlineColor;
-                innerOutline.numCornerVertices = outline.numCornerVertices;
-                innerOutline.sharedMaterial = attackRangeOutlineMaterial;
-
-                for (int i = 0; i < segmentCount; i++) {
-                    innerOutline.SetPosition(i, vertices[i * 2] + Vector3.up * 0.01f);
-                }
             }
         } else {
             outline.positionCount = (segmentCount + 1) * 2;
@@ -414,17 +418,7 @@ public class PlayerController : NetworkBehaviour {
             }
         }
 
-        UpdateAttackRangePreviewRotation();
-    }
-
-    private float GetCurrentAttackInnerRadius() {
-        // A sector starts at the player so its point and its hit area match.
-        // Radial attacks keep their existing safe area around the character.
-        if (currentAttackData != null && currentAttackData.attackShape == AttackShape.Sector) {
-            return 0f;
-        }
-
-        return characterController != null ? characterController.radius * 2f : 0f;
+        UpdateAttackRangePreviewTransform();
     }
 
     private void HideAttackRangePreview() {
@@ -451,11 +445,8 @@ public class PlayerController : NetworkBehaviour {
 
     [ServerRpc]
     private void SubmitMovementServerRpc(float horizontal, float vertical, bool runPressed, bool jumpPressed) {
-        if (currentHealth.Value <= 0) {
-            moveInputX = 0f;
-            moveInputZ = 0f;
-            runRequested = false;
-            jumpRequested = false;
+        if (currentHealth.Value <= 0 || IsAttackMovementLockedOnServer()) {
+            StopMovementOnServer();
             return;
         }
 
@@ -494,51 +485,116 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        nextServerAttackTime = Time.time + currentAttackData.cooldown;
+        AttackData attackData = currentAttackData;
+        bool usesWeapon = currentAttackUsesWeapon;
+        FixedString64Bytes attackItemId = selectedItemId;
+        float attackDuration = Mathf.Max(0f, attackData.cooldown);
+        nextServerAttackTime = Time.time + attackDuration;
+        attackMovementLockedUntil = nextServerAttackTime;
+        StopMovementOnServer();
 
         Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        Vector3 attackCenter = transform.position + currentAttackData.centerOffset;
-        Collider[] hits = Physics.OverlapSphere(
-            attackCenter,
-            currentAttackData.radius,
-            currentAttackData.targetLayer,
-            QueryTriggerInteraction.Ignore
-        );
+        PlayAttackVisualClientRpc(attackItemId, attackDirection, usesWeapon);
 
-        foreach (Collider hit in hits) {
-            if (!IsInsideAttackArea(hit, attackCenter, attackDirection)) {
-                continue;
+        if (usesWeapon) {
+            if (ItemManager.TryGetWeaponById(
+                    attackItemId.ToString(),
+                    out ItemData weaponItem,
+                    out AttackData weaponAttackData) &&
+                weaponItem.itemObject != null &&
+                weaponItem.itemObject.icon != null) {
+                StartCoroutine(WeaponDamageSweepRoutine(
+                    weaponItem.itemObject,
+                    weaponAttackData,
+                    attackDirection
+                ));
             }
-
-            PlayerController target = hit.GetComponentInParent<PlayerController>();
-            if (target != null) {
-                if (target == this || !target.IsSpawned) {
-                    continue;
-                }
-
-                target.TakeDamage(currentAttackData.damage, OwnerClientId);
-                PlayAttackVisualClientRpc(selectedItemId, attackDirection, currentAttackUsesWeapon);
-                Debug.Log($"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {currentAttackData.damage}.", this);
-                return;
+            else {
+                Debug.LogWarning(
+                    $"[Combat] Server could not start the weapon sweep for item '{attackItemId}'.",
+                    this
+                );
             }
-
-            EnemyHealthDrop enemy = hit.GetComponentInParent<EnemyHealthDrop>();
-            if (enemy == null || !enemy.IsAlive) {
-                continue;
-            }
-
-            enemy.TakeDamage(currentAttackData.damage, OwnerClientId);
-            PlayAttackVisualClientRpc(selectedItemId, attackDirection, currentAttackUsesWeapon);
-            Debug.Log($"[PlayerController] Client {OwnerClientId} hit enemy {enemy.name} for {currentAttackData.damage}.", this);
             return;
         }
 
-        PlayAttackVisualClientRpc(selectedItemId, attackDirection, currentAttackUsesWeapon);
+        ApplyAreaAttackDamage(attackData, attackDirection);
+    }
+
+    private void ApplyAreaAttackDamage(AttackData attackData, Vector3 attackDirection) {
+        Vector3 attackCenter = transform.position + attackData.centerOffset;
+        Collider[] hits = Physics.OverlapSphere(
+            attackCenter,
+            attackData.radius,
+            attackData.targetLayer,
+            QueryTriggerInteraction.Ignore
+        );
+
+        HashSet<PlayerController> playerTargets = new HashSet<PlayerController>();
+        HashSet<EnemyHealthDrop> enemyTargets = new HashSet<EnemyHealthDrop>();
+        int damagedTargetCount = 0;
+
+        foreach (Collider hit in hits) {
+            if (hit == null ||
+                !IsInsideAttackArea(hit, attackCenter, attackDirection, attackData)) {
+                continue;
+            }
+
+            damagedTargetCount += TryDamageTarget(
+                hit,
+                attackData,
+                playerTargets,
+                enemyTargets
+            ) ? 1 : 0;
+        }
+
+        if (damagedTargetCount == 0) {
+            Debug.Log(
+                $"[Combat] Client {OwnerClientId} {attackData.attackName} attack missed. " +
+                $"Center={attackCenter}, radius={attackData.radius}.",
+                this
+            );
+        } else {
+            Debug.Log(
+                $"[Combat] Client {OwnerClientId} {attackData.attackName} hit {damagedTargetCount} target(s).",
+                this
+            );
+        }
+    }
+
+    private bool TryDamageTarget(
+        Collider hit,
+        AttackData attackData,
+        HashSet<PlayerController> damagedPlayers,
+        HashSet<EnemyHealthDrop> damagedEnemies
+    ) {
+        PlayerController target = hit.GetComponentInParent<PlayerController>();
+        if (target != null) {
+            if (target == this || !target.IsSpawned || !target.IsAlive ||
+                !damagedPlayers.Add(target)) {
+                return false;
+            }
+
+            target.TakeDamage(attackData.damage, OwnerClientId);
+            Debug.Log(
+                $"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {attackData.damage}.",
+                this
+            );
+            return true;
+        }
+
+        EnemyHealthDrop enemy = hit.GetComponentInParent<EnemyHealthDrop>();
+        if (enemy == null || !enemy.IsAlive || !damagedEnemies.Add(enemy)) {
+            return false;
+        }
+
+        string enemyName = enemy.name;
+        enemy.TakeDamage(attackData.damage, OwnerClientId);
         Debug.Log(
-            $"[Combat] Client {OwnerClientId} {currentAttackData.attackName} attack missed. " +
-            $"Center={attackCenter}, radius={currentAttackData.radius}.",
+            $"[PlayerController] Client {OwnerClientId} hit enemy {enemyName} for {attackData.damage}.",
             this
         );
+        return true;
     }
 
     private Vector3 GetValidatedAttackDirection(float aimDirectionX, float aimDirectionZ) {
@@ -608,14 +664,13 @@ public class PlayerController : NetworkBehaviour {
     private IEnumerator WeaponSwingRoutine(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection) {
         activeWeaponVisual = new GameObject($"{weaponItem.itemName}_AttackVisual");
         activeWeaponVisual.transform.SetParent(transform, false);
-        float characterBottom = characterController != null
-            ? characterController.center.y - characterController.height * 0.5f
-            : 0f;
-        activeWeaponVisual.transform.localPosition = new Vector3(
-            attackData.centerOffset.x,
-            characterBottom + weaponGroundHeight,
-            attackData.centerOffset.z
+        Vector3 playerScale = transform.lossyScale;
+        activeWeaponVisual.transform.localScale = new Vector3(
+            GetSafeInverseScale(playerScale.x),
+            GetSafeInverseScale(playerScale.y),
+            GetSafeInverseScale(playerScale.z)
         );
+        activeWeaponVisual.transform.position = GetAttackVisualWorldPosition(attackData);
 
         GameObject weaponObject = new GameObject("Weapon");
         weaponObject.transform.SetParent(activeWeaponVisual.transform, false);
@@ -626,56 +681,34 @@ public class PlayerController : NetworkBehaviour {
         weaponRenderer.sortingLayerID = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
         weaponRenderer.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 1 : 10;
 
-        Quaternion skyFacingRotation =
-            Quaternion.AngleAxis(-90f, Vector3.right) *
-            Quaternion.AngleAxis(weaponPlanarAngle, Vector3.forward);
+        GetWeaponGeometry(
+            weaponItem,
+            attackData,
+            out _,
+            out _,
+            out Quaternion skyFacingRotation,
+            out Vector3 handlePoint,
+            out float scale
+        );
         weaponObject.transform.localRotation = skyFacingRotation;
-
-        // Every weapon texture uses the same handle-to-blade layout, so every weapon
-        // shares one mirrored handle pivot and one blade-forward orientation.
-        Bounds spriteBounds = weaponItem.icon.bounds;
-        Vector2 renderedHandlePivot = new Vector2(
-            weaponFlipX
-                ? 1f - Mathf.Clamp01(weaponHandlePivot.x)
-                : Mathf.Clamp01(weaponHandlePivot.x),
-            Mathf.Clamp01(weaponHandlePivot.y)
-        );
-        Vector3 handlePoint = new Vector3(
-            Mathf.Lerp(spriteBounds.min.x, spriteBounds.max.x, renderedHandlePivot.x),
-            Mathf.Lerp(spriteBounds.min.y, spriteBounds.max.y, renderedHandlePivot.y),
-            0f
-        );
-        float scale = Mathf.Max(0.1f, attackData.weaponVisualScale);
-        if (attackData.attackShape == AttackShape.Sector) {
-            Vector3 bladePoint = new Vector3(
-                weaponFlipX ? spriteBounds.min.x : spriteBounds.max.x,
-                spriteBounds.max.y,
-                0f
-            );
-            float spriteLength = Vector3.Distance(handlePoint, bladePoint);
-            float targetLength = Mathf.Max(0.1f, attackData.radius);
-            scale = targetLength / Mathf.Max(0.01f, spriteLength);
-        }
-
         weaponObject.transform.localScale = Vector3.one * scale;
         weaponObject.transform.localPosition = -(skyFacingRotation * (handlePoint * scale));
 
-        float centerAngle = Mathf.Atan2(attackDirection.x, attackDirection.z) * Mathf.Rad2Deg;
-        float halfSwingAngle = Mathf.Clamp(attackData.sectorAngle, 1f, 360f) * 0.5f;
-        float startAngle = centerAngle - halfSwingAngle;
-        float endAngle = centerAngle + halfSwingAngle;
         float duration = Mathf.Max(0.01f, attackData.cooldown);
-        float elapsed = 0f;
+        float startedAt = Time.time;
 
-        while (elapsed < duration && activeWeaponVisual != null) {
-            elapsed += Time.deltaTime;
-            float normalizedTime = Mathf.Clamp01(elapsed / duration);
-            float easedTime = normalizedTime * normalizedTime * (3f - 2f * normalizedTime);
-            float angle = Mathf.Lerp(startAngle, endAngle, easedTime);
+        while (activeWeaponVisual != null) {
+            float normalizedTime = Mathf.Clamp01((Time.time - startedAt) / duration);
+            float angle = GetWeaponSwingAngle(attackData, attackDirection, normalizedTime);
 
-            // The attack pivot only rotates around Y. The child keeps its fixed
-            // sky-facing tilt while its position follows the pivot around the player.
-            activeWeaponVisual.transform.localRotation = Quaternion.Euler(0f, angle, 0f);
+            // Keep the pivot at the attack center in world space so player scale
+            // cannot change either the weapon length or its swing radius.
+            activeWeaponVisual.transform.position = GetAttackVisualWorldPosition(attackData);
+            activeWeaponVisual.transform.rotation = Quaternion.Euler(0f, angle, 0f);
+
+            if (normalizedTime >= 1f) {
+                break;
+            }
             yield return null;
         }
 
@@ -686,26 +719,351 @@ public class PlayerController : NetworkBehaviour {
         weaponSwingCoroutine = null;
     }
 
-    private bool IsInsideAttackArea(Collider hit, Vector3 attackCenter, Vector3 attackDirection) {
-        float innerRadius = GetCurrentAttackInnerRadius();
-        Vector3 horizontalOffset = hit.ClosestPoint(attackCenter) - attackCenter;
-        horizontalOffset.y = 0f;
-        float distanceSquared = horizontalOffset.sqrMagnitude;
-        if (distanceSquared < innerRadius * innerRadius ||
-            distanceSquared > currentAttackData.radius * currentAttackData.radius) {
+    private IEnumerator WeaponDamageSweepRoutine(
+        ItemObject weaponItem,
+        AttackData attackData,
+        Vector3 attackDirection
+    ) {
+        GetWeaponGeometry(
+            weaponItem,
+            attackData,
+            out Vector2[] weaponVertices,
+            out ushort[] weaponTriangles,
+            out Quaternion skyFacingRotation,
+            out Vector3 handlePoint,
+            out float scale
+        );
+        Vector2[] worldWeaponVertices = new Vector2[weaponVertices.Length];
+
+        HashSet<PlayerController> damagedPlayers = new HashSet<PlayerController>();
+        HashSet<EnemyHealthDrop> damagedEnemies = new HashSet<EnemyHealthDrop>();
+        float duration = Mathf.Max(0.01f, attackData.cooldown);
+        float startedAt = Time.time;
+        float previousAngle = GetWeaponSwingAngle(attackData, attackDirection, 0f);
+        int damagedTargetCount = DamageTargetsAtWeaponAngle(
+            weaponVertices,
+            weaponTriangles,
+            worldWeaponVertices,
+            skyFacingRotation,
+            handlePoint,
+            scale,
+            attackData,
+            previousAngle,
+            damagedPlayers,
+            damagedEnemies
+        );
+
+        while (IsServer && currentHealth.Value > 0f) {
+            yield return null;
+
+            float normalizedTime = Mathf.Clamp01((Time.time - startedAt) / duration);
+            float currentAngle = GetWeaponSwingAngle(attackData, attackDirection, normalizedTime);
+            int sweepSteps = Mathf.Max(
+                1,
+                Mathf.CeilToInt(
+                    Mathf.Abs(currentAngle - previousAngle) /
+                    Mathf.Max(1f, weaponSweepStepDegrees)
+                )
+            );
+
+            for (int step = 1; step <= sweepSteps; step++) {
+                float angle = Mathf.Lerp(previousAngle, currentAngle, step / (float)sweepSteps);
+                damagedTargetCount += DamageTargetsAtWeaponAngle(
+                    weaponVertices,
+                    weaponTriangles,
+                    worldWeaponVertices,
+                    skyFacingRotation,
+                    handlePoint,
+                    scale,
+                    attackData,
+                    angle,
+                    damagedPlayers,
+                    damagedEnemies
+                );
+            }
+
+            previousAngle = currentAngle;
+            if (normalizedTime >= 1f) {
+                break;
+            }
+        }
+
+        if (damagedTargetCount == 0) {
+            Debug.Log(
+                $"[Combat] Client {OwnerClientId} {attackData.attackName} weapon sweep missed.",
+                this
+            );
+        } else {
+            Debug.Log(
+                $"[Combat] Client {OwnerClientId} {attackData.attackName} weapon sweep hit " +
+                $"{damagedTargetCount} target(s).",
+                this
+            );
+        }
+    }
+
+    private int DamageTargetsAtWeaponAngle(
+        Vector2[] weaponVertices,
+        ushort[] weaponTriangles,
+        Vector2[] worldWeaponVertices,
+        Quaternion skyFacingRotation,
+        Vector3 handlePoint,
+        float scale,
+        AttackData attackData,
+        float angle,
+        HashSet<PlayerController> damagedPlayers,
+        HashSet<EnemyHealthDrop> damagedEnemies
+    ) {
+        Quaternion pivotRotation = Quaternion.Euler(0f, angle, 0f);
+        Vector3 pivotPosition = GetAttackVisualWorldPosition(attackData);
+        for (int i = 0; i < weaponVertices.Length; i++) {
+            Vector2 vertex = weaponVertices[i];
+            Vector3 localFromHandle = new Vector3(
+                vertex.x - handlePoint.x,
+                vertex.y - handlePoint.y,
+                0f
+            ) * scale;
+            Vector3 worldVertex =
+                pivotPosition + pivotRotation * (skyFacingRotation * localFromHandle);
+            worldWeaponVertices[i] = new Vector2(worldVertex.x, worldVertex.z);
+        }
+
+        float halfHitHeight = Mathf.Max(0.025f, weaponHitHeight * 0.5f);
+        Vector3 queryCenter = pivotPosition;
+        Vector3 queryHalfExtents = new Vector3(
+            attackData.radius,
+            halfHitHeight,
+            attackData.radius
+        );
+
+        int hitCount = Physics.OverlapBoxNonAlloc(
+            queryCenter,
+            queryHalfExtents,
+            weaponHitBuffer,
+            Quaternion.identity,
+            attackData.targetLayer,
+            QueryTriggerInteraction.Ignore
+        );
+
+        int damagedTargetCount = 0;
+        for (int i = 0; i < hitCount; i++) {
+            Collider hit = weaponHitBuffer[i];
+            if (hit == null) {
+                continue;
+            }
+
+            Bounds targetBounds = hit.bounds;
+            if (targetBounds.max.y < pivotPosition.y - halfHitHeight ||
+                targetBounds.min.y > pivotPosition.y + halfHitHeight ||
+                !DoesWeaponMeshOverlapTarget(
+                    worldWeaponVertices,
+                    weaponTriangles,
+                    targetBounds
+                )) {
+                continue;
+            }
+
+            damagedTargetCount += TryDamageTarget(
+                hit,
+                attackData,
+                damagedPlayers,
+                damagedEnemies
+            ) ? 1 : 0;
+        }
+
+        return damagedTargetCount;
+    }
+
+    private static bool DoesWeaponMeshOverlapTarget(
+        Vector2[] weaponVertices,
+        ushort[] weaponTriangles,
+        Bounds targetBounds
+    ) {
+        if (weaponVertices == null || weaponTriangles == null) {
             return false;
         }
 
-        if (currentAttackData.attackShape != AttackShape.Sector) {
+        Vector2 targetCenter = new Vector2(targetBounds.center.x, targetBounds.center.z);
+        Vector2 targetExtents = new Vector2(targetBounds.extents.x, targetBounds.extents.z);
+        for (int i = 0; i + 2 < weaponTriangles.Length; i += 3) {
+            int indexA = weaponTriangles[i];
+            int indexB = weaponTriangles[i + 1];
+            int indexC = weaponTriangles[i + 2];
+            if (indexA >= weaponVertices.Length ||
+                indexB >= weaponVertices.Length ||
+                indexC >= weaponVertices.Length) {
+                continue;
+            }
+
+            if (TriangleOverlapsRectangle(
+                    weaponVertices[indexA] - targetCenter,
+                    weaponVertices[indexB] - targetCenter,
+                    weaponVertices[indexC] - targetCenter,
+                    targetExtents)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TriangleOverlapsRectangle(
+        Vector2 a,
+        Vector2 b,
+        Vector2 c,
+        Vector2 rectangleExtents
+    ) {
+        float minX = Mathf.Min(a.x, Mathf.Min(b.x, c.x));
+        float maxX = Mathf.Max(a.x, Mathf.Max(b.x, c.x));
+        if (minX > rectangleExtents.x || maxX < -rectangleExtents.x) {
+            return false;
+        }
+
+        float minY = Mathf.Min(a.y, Mathf.Min(b.y, c.y));
+        float maxY = Mathf.Max(a.y, Mathf.Max(b.y, c.y));
+        if (minY > rectangleExtents.y || maxY < -rectangleExtents.y) {
+            return false;
+        }
+
+        return !IsSeparatedByTriangleEdge(a, b, c, b - a, rectangleExtents) &&
+               !IsSeparatedByTriangleEdge(a, b, c, c - b, rectangleExtents) &&
+               !IsSeparatedByTriangleEdge(a, b, c, a - c, rectangleExtents);
+    }
+
+    private static bool IsSeparatedByTriangleEdge(
+        Vector2 a,
+        Vector2 b,
+        Vector2 c,
+        Vector2 edge,
+        Vector2 rectangleExtents
+    ) {
+        Vector2 axis = new Vector2(-edge.y, edge.x);
+        if (axis.sqrMagnitude < 0.000001f) {
+            return false;
+        }
+
+        float projectionA = Vector2.Dot(a, axis);
+        float projectionB = Vector2.Dot(b, axis);
+        float projectionC = Vector2.Dot(c, axis);
+        float triangleMin = Mathf.Min(projectionA, Mathf.Min(projectionB, projectionC));
+        float triangleMax = Mathf.Max(projectionA, Mathf.Max(projectionB, projectionC));
+        float rectangleRadius =
+            rectangleExtents.x * Mathf.Abs(axis.x) +
+            rectangleExtents.y * Mathf.Abs(axis.y);
+
+        return triangleMin > rectangleRadius || triangleMax < -rectangleRadius;
+    }
+
+    private void GetWeaponGeometry(
+        ItemObject weaponItem,
+        AttackData attackData,
+        out Vector2[] renderedVertices,
+        out ushort[] triangles,
+        out Quaternion skyFacingRotation,
+        out Vector3 handlePoint,
+        out float scale
+    ) {
+        skyFacingRotation =
+            Quaternion.AngleAxis(-90f, Vector3.right) *
+            Quaternion.AngleAxis(weaponPlanarAngle, Vector3.forward);
+
+        // Every weapon texture uses the same handle-to-blade layout, so the visual
+        // and the server hit box can share exactly the same geometry.
+        Bounds spriteBounds = weaponItem.icon.bounds;
+        Vector2 renderedHandlePivot = new Vector2(
+            weaponFlipX
+                ? 1f - Mathf.Clamp01(weaponHandlePivot.x)
+                : Mathf.Clamp01(weaponHandlePivot.x),
+            Mathf.Clamp01(weaponHandlePivot.y)
+        );
+        handlePoint = new Vector3(
+            Mathf.Lerp(spriteBounds.min.x, spriteBounds.max.x, renderedHandlePivot.x),
+            Mathf.Lerp(spriteBounds.min.y, spriteBounds.max.y, renderedHandlePivot.y),
+            0f
+        );
+
+        Vector2[] spriteVertices = weaponItem.icon.vertices;
+        renderedVertices = new Vector2[spriteVertices.Length];
+        float spriteLength = 0f;
+        for (int i = 0; i < spriteVertices.Length; i++) {
+            Vector2 vertex = spriteVertices[i];
+            if (weaponFlipX) {
+                vertex.x = spriteBounds.center.x * 2f - vertex.x;
+            }
+
+            renderedVertices[i] = vertex;
+            spriteLength = Mathf.Max(
+                spriteLength,
+                Vector2.Distance(vertex, new Vector2(handlePoint.x, handlePoint.y))
+            );
+        }
+
+        triangles = weaponItem.icon.triangles;
+        scale = Mathf.Max(0.1f, attackData.radius) / Mathf.Max(0.01f, spriteLength);
+    }
+
+    private static float GetWeaponSwingAngle(
+        AttackData attackData,
+        Vector3 attackDirection,
+        float normalizedTime
+    ) {
+        float centerAngle = Mathf.Atan2(attackDirection.x, attackDirection.z) * Mathf.Rad2Deg;
+        float halfSwingAngle = Mathf.Clamp(attackData.sectorAngle, 1f, 360f) * 0.5f;
+        float easedTime = Mathf.Clamp01(normalizedTime);
+        easedTime = easedTime * easedTime * (3f - 2f * easedTime);
+        return Mathf.Lerp(
+            centerAngle - halfSwingAngle,
+            centerAngle + halfSwingAngle,
+            easedTime
+        );
+    }
+
+    private Vector3 GetAttackVisualWorldPosition(AttackData attackData) {
+        Vector3 attackCenter = transform.position + attackData.centerOffset;
+        float characterFeetY = spriteRenderer != null && spriteRenderer.sprite != null
+            ? spriteRenderer.bounds.min.y
+            : characterController != null
+                ? characterController.bounds.min.y
+                : transform.position.y;
+
+        return new Vector3(
+            attackCenter.x,
+            characterFeetY + weaponGroundHeight,
+            attackCenter.z
+        );
+    }
+
+    private static float GetSafeInverseScale(float scale) {
+        return Mathf.Abs(scale) > 0.0001f ? 1f / scale : 1f;
+    }
+
+    private bool IsInsideAttackArea(
+        Collider hit,
+        Vector3 attackCenter,
+        Vector3 attackDirection,
+        AttackData attackData
+    ) {
+        Vector3 horizontalOffset = hit.ClosestPoint(attackCenter) - attackCenter;
+        horizontalOffset.y = 0f;
+        float distanceSquared = horizontalOffset.sqrMagnitude;
+        if (distanceSquared > attackData.radius * attackData.radius) {
+            return false;
+        }
+
+        if (attackData.attackShape != AttackShape.Sector) {
             return true;
         }
 
-        return Vector3.Angle(attackDirection, horizontalOffset) <= currentAttackData.sectorAngle * 0.5f;
+        return Vector3.Angle(attackDirection, horizontalOffset) <= attackData.sectorAngle * 0.5f;
     }
 
     private void MovePlayer() {
         if (currentHealth.Value <= 0) {
             return;
+        }
+
+        if (IsAttackMovementLockedOnServer()) {
+            StopMovementOnServer();
         }
 
         if (characterController.isGrounded && verticalVelocity < 0f) {
@@ -738,6 +1096,21 @@ public class PlayerController : NetworkBehaviour {
         Vector3 velocity = moveDirection * currentMoveSpeed;
         velocity.y = verticalVelocity;
         characterController.Move(velocity * Time.deltaTime);
+    }
+
+    private bool IsAttackMovementLockedOnServer() {
+        return Time.time < attackMovementLockedUntil;
+    }
+
+    private void StopMovementOnServer() {
+        moveInputX = 0f;
+        moveInputZ = 0f;
+        runRequested = false;
+        jumpRequested = false;
+
+        if (IsServer) {
+            isMovingVisual.Value = false;
+        }
     }
 
     private void TakeDamage(float amount, ulong attackerClientId) {
@@ -802,6 +1175,14 @@ public class PlayerController : NetworkBehaviour {
         KeyBinding.LoadBindingOverrides(inputActions);
     }
 
+    private void HandleInventoryDisplayChanged() {
+        if (!IsOwner || !IsClient || gameMenu == null || gameMenu.SelectedIndex < 0) {
+            return;
+        }
+
+        HandleSelectedIndexChange(gameMenu.SelectedIndex);
+    }
+
     // 選取物品欄
     private void OnItemPerformed(InputAction.CallbackContext context) {
     Debug.Log($"[Item] performed={context.performed}, control={context.control?.path}, action={context.action?.name}", this);
@@ -843,7 +1224,9 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void HandleSelectedIndexChange(int slotIndex) {
-        if (!IsOwner || !IsClient || !GameState.isPlaying || PauseMenu.isOpen) return;
+        // Selection state must also initialize while the scene or inventory is still
+        // loading. Input is gated elsewhere, so syncing it here is safe while paused.
+        if (!IsOwner || !IsClient) return;
         if (bagManager == null) {
             bagManager = FindFirstObjectByType<UI_BagManager>();
         }
@@ -953,6 +1336,9 @@ public class PlayerController : NetworkBehaviour {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
         if (gameMenu != null) {
             gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
+        }
+        if (bagManager != null) {
+            bagManager.InventoryDisplayChanged -= HandleInventoryDisplayChanged;
         }
         // 1 2 3 testing
         if (inputActions != null) {
