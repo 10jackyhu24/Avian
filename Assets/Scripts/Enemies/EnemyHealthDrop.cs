@@ -39,12 +39,14 @@ public class EnemyHealthDrop : NetworkBehaviour {
         localHealth = networkHealth.Value;
     }
 
-    private void OnGUI() {
+    private void LateUpdate() {
         if (!IsAlive) {
+            WorldHealthBarGUI.Remove(this);
             return;
         }
 
         WorldHealthBarGUI.Draw(
+            this,
             transform.position + healthBarOffset,
             CurrentHealth,
             maxHealth,
@@ -52,6 +54,10 @@ public class EnemyHealthDrop : NetworkBehaviour {
             width: 140f,
             height: 22f
         );
+    }
+
+    private void OnDisable() {
+        WorldHealthBarGUI.Remove(this);
     }
 
     public void TakeDamage(float damage, ulong attackerClientId) {

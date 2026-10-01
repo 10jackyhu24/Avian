@@ -4,6 +4,7 @@ using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 [RequireComponent(typeof(CharacterController))]
 public class PlayerController : NetworkBehaviour {
@@ -109,6 +110,7 @@ public class PlayerController : NetworkBehaviour {
 
     private void OnDisable() {
         OptionsMenu.BindingOverridesChanged -= HandleBindingOverridesChanged;
+        WorldHealthBarGUI.Remove(this);
     }
 
     public override void OnNetworkSpawn() {
@@ -158,6 +160,7 @@ public class PlayerController : NetworkBehaviour {
         isMovingVisual.OnValueChanged -= OnIsMovingVisualChanged;
         isFacingLeftVisual.OnValueChanged -= OnIsFacingLeftVisualChanged;
         CancelPreparedAttack();
+        WorldHealthBarGUI.Remove(this);
         if (gameMenu != null) {
             gameMenu.OnSelectedIndexChanged -= HandleSelectedIndexChange;
         }
@@ -180,12 +183,14 @@ public class PlayerController : NetworkBehaviour {
         jumpRequested = false;
     }
 
-    private void OnGUI() {
+    private void LateUpdate() {
         if (!IsSpawned) {
+            WorldHealthBarGUI.Remove(this);
             return;
         }
 
         WorldHealthBarGUI.Draw(
+            this,
             transform.position + healthLabelOffset,
             currentHealth.Value,
             maxHealth,
@@ -464,8 +469,7 @@ public class PlayerController : NetworkBehaviour {
         }
 
         Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        Vector3 attackCenter = transform.position + currentAttackData.centerOffset;
-        Vector3 effectPosition = GetMissAttackEffectPosition(attackCenter, attackDirection);
+        Vector3 effectPosition = GetUnarmedAttackEffectPosition(currentAttackData, attackDirection);
         PlayPreparedUnarmedAttackClientRpc(effectPosition, attackDirection.x < 0f);
     }
 
@@ -609,8 +613,17 @@ public class PlayerController : NetworkBehaviour {
         return attackDirection;
     }
 
-    private Vector3 GetMissAttackEffectPosition(Vector3 attackCenter, Vector3 attackDirection) {
-        return attackCenter + attackDirection * currentAttackData.effectForwardOffset;
+    private Vector3 GetUnarmedAttackEffectPosition(
+        AttackData attackData,
+        Vector3 attackDirection
+    ) {
+        Vector3 previewCenter = GetAttackVisualWorldPosition(attackData);
+        float forwardOffset = Mathf.Clamp(
+            attackData.effectForwardOffset,
+            0f,
+            Mathf.Max(0f, attackData.radius)
+        );
+        return previewCenter + attackDirection * forwardOffset;
     }
 
     [ClientRpc]
@@ -1367,114 +1380,195 @@ public class PlayerController : NetworkBehaviour {
 }
 
 public static class WorldHealthBarGUI {
-    private const float ReferenceWidth = 1920f;
-    private const float ReferenceHeight = 1080f;
     private const float BorderSize = 2f;
     private const int BaseFontSize = 16;
-    private static GUIStyle healthTextStyle;
-    private static GUIStyle healthTextShadowStyle;
-    private static int currentFontSize;
+    private const int HealthBarSortingOrder = -100;
+    private static readonly Vector2 ReferenceResolution = new Vector2(1920f, 1080f);
+    private static readonly Dictionary<int, HealthBarEntry> Entries =
+        new Dictionary<int, HealthBarEntry>();
+    private static RectTransform canvasRect;
+    private static Font healthBarFont;
+
+    private sealed class HealthBarEntry {
+        public RectTransform Root;
+        public RectTransform Fill;
+        public Image FillImage;
+        public Text Label;
+    }
 
     public static void Draw(
+        UnityEngine.Object owner,
         Vector3 worldPosition,
         float currentHealth,
         float maxHealth,
         Color fillColor,
         float width = 100f,
         float height = 16f) {
-        if (Event.current.type != EventType.Repaint || maxHealth <= 0f) {
+        if (owner == null || maxHealth <= 0f) {
             return;
         }
 
+        EnsureCanvas();
+        HealthBarEntry entry = GetOrCreateEntry(owner);
         Camera mainCamera = Camera.main;
         if (mainCamera == null) {
+            entry.Root.gameObject.SetActive(false);
             return;
         }
 
         Vector3 screenPosition = mainCamera.WorldToScreenPoint(worldPosition);
-        if (screenPosition.z <= 0f) {
+        bool isVisible = screenPosition.z > 0f &&
+                         screenPosition.x >= -width &&
+                         screenPosition.x <= Screen.width + width &&
+                         screenPosition.y >= -height &&
+                         screenPosition.y <= Screen.height + height;
+        entry.Root.gameObject.SetActive(isVisible);
+        if (!isVisible) {
             return;
         }
 
-        screenPosition.y = Screen.height - screenPosition.y;
-        if (screenPosition.x < -width || screenPosition.x > Screen.width + width ||
-            screenPosition.y < -height || screenPosition.y > Screen.height + height) {
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                canvasRect,
+                screenPosition,
+                null,
+                out Vector2 canvasPosition)) {
+            entry.Root.gameObject.SetActive(false);
             return;
         }
 
-        float uiScale = GetUIScale();
-        float scaledWidth = width * uiScale;
-        float scaledHeight = height * uiScale;
-        float scaledBorderSize = BorderSize * uiScale;
         float healthRatio = Mathf.Clamp01(currentHealth / maxHealth);
-        Rect backgroundRect = new Rect(
-            screenPosition.x - scaledWidth * 0.5f,
-            screenPosition.y - scaledHeight * 0.5f,
-            scaledWidth,
-            scaledHeight
+        entry.Root.anchoredPosition = canvasPosition;
+        entry.Root.sizeDelta = new Vector2(width, height);
+        entry.Fill.sizeDelta = new Vector2(
+            Mathf.Max(0f, width - BorderSize * 2f) * healthRatio,
+            -BorderSize * 2f
         );
-        Rect fillRect = new Rect(
-            backgroundRect.x + scaledBorderSize,
-            backgroundRect.y + scaledBorderSize,
-            (backgroundRect.width - scaledBorderSize * 2f) * healthRatio,
-            backgroundRect.height - scaledBorderSize * 2f
-        );
-
-        Color previousColor = GUI.color;
-        GUI.color = new Color(0f, 0f, 0f, 0.85f);
-        GUI.DrawTexture(backgroundRect, Texture2D.whiteTexture);
-
-        GUI.color = fillColor;
-        GUI.DrawTexture(fillRect, Texture2D.whiteTexture);
-
-        GUI.color = Color.white;
-        string healthText = $"{Mathf.CeilToInt(Mathf.Max(0f, currentHealth))} / {Mathf.CeilToInt(maxHealth)}";
-        Rect shadowRect = backgroundRect;
-        float shadowOffset = Mathf.Max(1f, uiScale);
-        shadowRect.x += shadowOffset;
-        shadowRect.y += shadowOffset;
-        GUI.Label(shadowRect, healthText, GetHealthTextShadowStyle(uiScale));
-        GUI.Label(
-            backgroundRect,
-            healthText,
-            GetHealthTextStyle(uiScale)
-        );
-        GUI.color = previousColor;
+        entry.FillImage.color = fillColor;
+        entry.Label.fontSize = BaseFontSize;
+        entry.Label.text =
+            $"{Mathf.CeilToInt(Mathf.Max(0f, currentHealth))} / {Mathf.CeilToInt(maxHealth)}";
     }
 
-    private static float GetUIScale() {
-        float widthScale = Screen.width / ReferenceWidth;
-        float heightScale = Screen.height / ReferenceHeight;
-        return Mathf.Max(0.01f, Mathf.Min(widthScale, heightScale));
-    }
-
-    private static GUIStyle GetHealthTextStyle(float uiScale) {
-        EnsureTextStyles(uiScale);
-        return healthTextStyle;
-    }
-
-    private static GUIStyle GetHealthTextShadowStyle(float uiScale) {
-        EnsureTextStyles(uiScale);
-        return healthTextShadowStyle;
-    }
-
-    private static void EnsureTextStyles(float uiScale) {
-        int fontSize = Mathf.Max(10, Mathf.RoundToInt(BaseFontSize * uiScale));
-        if (healthTextStyle == null) {
-            healthTextStyle = new GUIStyle(GUI.skin.label) {
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold
-            };
-            healthTextStyle.normal.textColor = Color.white;
-
-            healthTextShadowStyle = new GUIStyle(healthTextStyle);
-            healthTextShadowStyle.normal.textColor = Color.black;
+    public static void Remove(UnityEngine.Object owner) {
+        if (owner == null) {
+            return;
         }
 
-        if (currentFontSize != fontSize) {
-            currentFontSize = fontSize;
-            healthTextStyle.fontSize = fontSize;
-            healthTextShadowStyle.fontSize = fontSize;
+        int ownerId = owner.GetInstanceID();
+        if (!Entries.TryGetValue(ownerId, out HealthBarEntry entry)) {
+            return;
         }
+
+        Entries.Remove(ownerId);
+        if (entry?.Root != null) {
+            UnityEngine.Object.Destroy(entry.Root.gameObject);
+        }
+    }
+
+    private static void EnsureCanvas() {
+        if (canvasRect != null) {
+            return;
+        }
+
+        Entries.Clear();
+        GameObject canvasObject = new GameObject(
+            "World Health Bars Canvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler)
+        );
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.overrideSorting = true;
+        canvas.sortingOrder = HealthBarSortingOrder;
+
+        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = ReferenceResolution;
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0.5f;
+
+        canvasRect = canvasObject.GetComponent<RectTransform>();
+    }
+
+    private static HealthBarEntry GetOrCreateEntry(UnityEngine.Object owner) {
+        int ownerId = owner.GetInstanceID();
+        if (Entries.TryGetValue(ownerId, out HealthBarEntry existing) &&
+            existing?.Root != null) {
+            return existing;
+        }
+
+        GameObject rootObject = new GameObject(
+            $"Health Bar - {owner.name}",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        RectTransform root = rootObject.GetComponent<RectTransform>();
+        root.SetParent(canvasRect, false);
+        root.anchorMin = new Vector2(0.5f, 0.5f);
+        root.anchorMax = new Vector2(0.5f, 0.5f);
+        root.pivot = new Vector2(0.5f, 0.5f);
+
+        Image background = rootObject.GetComponent<Image>();
+        background.color = new Color(0f, 0f, 0f, 0.85f);
+        background.raycastTarget = false;
+
+        GameObject fillObject = new GameObject(
+            "Fill",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        RectTransform fill = fillObject.GetComponent<RectTransform>();
+        fill.SetParent(root, false);
+        fill.anchorMin = new Vector2(0f, 0f);
+        fill.anchorMax = new Vector2(0f, 1f);
+        fill.pivot = new Vector2(0f, 0.5f);
+        fill.anchoredPosition = new Vector2(BorderSize, 0f);
+
+        Image fillImage = fillObject.GetComponent<Image>();
+        fillImage.raycastTarget = false;
+
+        GameObject labelObject = new GameObject(
+            "Health Text",
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Text),
+            typeof(Shadow)
+        );
+        RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+        labelRect.SetParent(root, false);
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+
+        if (healthBarFont == null) {
+            healthBarFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+
+        Text label = labelObject.GetComponent<Text>();
+        label.font = healthBarFont;
+        label.fontStyle = FontStyle.Bold;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.color = Color.white;
+        label.raycastTarget = false;
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        label.verticalOverflow = VerticalWrapMode.Overflow;
+
+        Shadow shadow = labelObject.GetComponent<Shadow>();
+        shadow.effectColor = Color.black;
+        shadow.effectDistance = new Vector2(1f, -1f);
+        shadow.useGraphicAlpha = true;
+
+        HealthBarEntry entry = new HealthBarEntry {
+            Root = root,
+            Fill = fill,
+            FillImage = fillImage,
+            Label = label
+        };
+        Entries[ownerId] = entry;
+        return entry;
     }
 }
