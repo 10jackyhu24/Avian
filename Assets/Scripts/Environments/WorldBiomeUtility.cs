@@ -1,6 +1,10 @@
 using UnityEngine;
 
 public static class WorldBiomeUtility {
+    private const float DesertThreshold = 0.38f;
+    private const float GrasslandThreshold = 0.64f;
+    private const float RainforestMoistureThreshold = 0.55f;
+
     public static bool IsWorldPositionInBounds(Vector3 worldPosition, int worldSize) {
         int gridX = Mathf.RoundToInt(worldPosition.x) + worldSize / 2;
         int gridZ = Mathf.RoundToInt(worldPosition.z) + worldSize / 2;
@@ -29,11 +33,9 @@ public static class WorldBiomeUtility {
     }
 
     private static int GetBiomeIndex(float h, float m) {
-        if (h < 0.18f) return 0;
-        if (h < 0.30f) return 1;
-        if (h < 0.48f) return 2;
-        if (h < 0.66f) return 3;
-        if (m < 0.55f) return 4;
+        if (h < DesertThreshold) return 2;
+        if (h < GrasslandThreshold) return 3;
+        if (m >= RainforestMoistureThreshold) return 4;
         return 5;
     }
 

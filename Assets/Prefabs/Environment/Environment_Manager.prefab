@@ -48,7 +48,7 @@ MonoBehaviour:
     type: 3}
   size: 1000
   flatHeight: 0
-  biomeScale: 0.03
+  biomeScale: 0.006
   updateStride: 4
   generationBiasZ: 40
   viewDistance: 50
@@ -82,9 +82,23 @@ MonoBehaviour:
     originClearRadius: 20
     minimumSpacing: 20
     allowedBiomes: -1
-  deepOceanTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
-  shallowWaterTexture: {fileID: 2800000, guid: 0056241734ecf6f49a72d716ecdeb5fc, type: 3}
   desertTexture: {fileID: 2800000, guid: 9dd88807792ab164da5354486b08ab22, type: 3}
+  desertTextureVariants: []
   grasslandTexture: {fileID: 2800000, guid: ffde7a320ae9700438f37016ecfbd42e, type: 3}
-  rainforestTexture: {fileID: 2800000, guid: ffde7a320ae9700438f37016ecfbd42e, type: 3}
-  mountainTexture: {fileID: 2800000, guid: af5f0bc60c6d9a340a1f5524a773efde, type: 3}
+  grasslandTextureVariants: []
+  rainforestTexture: {fileID: 2800000, guid: b8fe29cf19524fc9bee7a43615f7dc8c, type: 3}
+  rainforestTextureVariants:
+  - {fileID: 2800000, guid: ffde7a320ae9700438f37016ecfbd42e, type: 3}
+  mountainTexture: {fileID: 2800000, guid: 29feb32f067d4805bff009bdc47928b8, type: 3}
+  mountainTextureVariants:
+  - {fileID: 2800000, guid: af5f0bc60c6d9a340a1f5524a773efde, type: 3}
+  materialVariationPatchSize: 3
+  rotateTerrainTiles: 1
+  spawnRockCovers: 1
+  rockSpawnCellSize: 4
+  mountainRockSpawnChance: 0.7
+  grasslandRockSpawnChance: 0.12
+  desertRockSpawnChance: 0.12
+  rockOriginClearRadius: 8
+  rockSize: {x: 1, y: 0.5, z: 1}
+  rockHeightOffset: 0

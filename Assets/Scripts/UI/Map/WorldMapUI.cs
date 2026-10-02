@@ -7,7 +7,7 @@ using UnityEngine.UI;
 public class WorldMapUI : MonoBehaviour {
     [Header("World")]
     [SerializeField] private int worldSize = 1000;
-    [SerializeField] private float biomeScale = 0.03f;
+    [SerializeField] private float biomeScale = 0.006f;
 
     [Header("Map")]
     [SerializeField] private int mapResolution = 192;

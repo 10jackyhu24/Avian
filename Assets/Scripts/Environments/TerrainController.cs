@@ -12,6 +12,14 @@ public enum TerrainBiomeMask {
 }
 
 public class TerrainController : MonoBehaviour {
+    private const int DesertBiomeIndex = 2;
+    private const int GrasslandBiomeIndex = 3;
+    private const int RainforestBiomeIndex = 4;
+    private const int MountainBiomeIndex = 5;
+    private const float DesertThreshold = 0.38f;
+    private const float GrasslandThreshold = 0.64f;
+    private const float RainforestMoistureThreshold = 0.55f;
+
     [System.Serializable]
     private class StructureSpawnOption {
         public string structureName = "Village";
@@ -33,7 +41,7 @@ public class TerrainController : MonoBehaviour {
     [SerializeField] private GameObject cubePrefab;
     [SerializeField] private int size = 1000;
     [SerializeField] private float flatHeight = 0f;
-    [SerializeField] private float biomeScale = 0.03f;
+    [SerializeField] private float biomeScale = 0.006f;
     [SerializeField] private int updateStride = 4;
     [SerializeField] private int generationBiasZ = 40;
     
@@ -56,19 +64,41 @@ public class TerrainController : MonoBehaviour {
 
     // Replace Color fields with Texture2D fields exposed to the Inspector
     [Header("Biome Textures")]
-    [SerializeField] private Texture2D deepOceanTexture;
-    [SerializeField] private Texture2D shallowWaterTexture;
     [SerializeField] private Texture2D desertTexture;
+    [SerializeField] private Texture2D[] desertTextureVariants;
     [SerializeField] private Texture2D grasslandTexture;
+    [SerializeField] private Texture2D[] grasslandTextureVariants;
     [SerializeField] private Texture2D rainforestTexture;
+    [SerializeField] private Texture2D[] rainforestTextureVariants;
     [SerializeField] private Texture2D mountainTexture;
+    [SerializeField] private Texture2D[] mountainTextureVariants;
+
+    [Header("Biome Material Variation")]
+    [Min(1)]
+    [SerializeField] private int materialVariationPatchSize = 3;
+    [SerializeField] private bool rotateTerrainTiles = true;
+
+    [Header("Rock Covers")]
+    [SerializeField] private bool spawnRockCovers = true;
+    [Min(1)]
+    [SerializeField] private int rockSpawnCellSize = 4;
+    [Range(0f, 1f)]
+    [SerializeField] private float mountainRockSpawnChance = 0.7f;
+    [Range(0f, 1f)]
+    [SerializeField] private float grasslandRockSpawnChance = 0.12f;
+    [Range(0f, 1f)]
+    [SerializeField] private float desertRockSpawnChance = 0.12f;
+    [Min(0)]
+    [SerializeField] private int rockOriginClearRadius = 8;
+    [SerializeField] private Vector3 rockSize = new Vector3(1f, 0.5f, 1f);
+    [SerializeField] private float rockHeightOffset;
 
     private Camera mainCamera;
     private Transform mainCameraTransform;
     private GameObject[,] cubeGrid;
     private GameObject terrainParent;
     private GameObject structureParent;
-    private Material[] biomeMaterials;
+    private Material[][] biomeMaterials;
 
     // Record the camera state last time to avoid repeated calculations
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
@@ -87,6 +117,7 @@ public class TerrainController : MonoBehaviour {
             Destroy(this);
             return;
         }
+
         Instance = this;
     }
     /// <summary>
@@ -145,17 +176,45 @@ public class TerrainController : MonoBehaviour {
 
         Material baseMaterial = prefabRenderer.sharedMaterial;
 
-        biomeMaterials = new Material[6];
-        biomeMaterials[0] = CreateBiomeMaterial(baseMaterial, deepOceanTexture);
-        biomeMaterials[1] = CreateBiomeMaterial(baseMaterial, shallowWaterTexture);
-        biomeMaterials[2] = CreateBiomeMaterial(baseMaterial, desertTexture);
-        biomeMaterials[3] = CreateBiomeMaterial(baseMaterial, grasslandTexture);
-        biomeMaterials[4] = CreateBiomeMaterial(baseMaterial, rainforestTexture);
-        biomeMaterials[5] = CreateBiomeMaterial(baseMaterial, mountainTexture);
+        biomeMaterials = new Material[6][];
+        biomeMaterials[DesertBiomeIndex] = CreateBiomeMaterials(baseMaterial, desertTexture, desertTextureVariants);
+        biomeMaterials[GrasslandBiomeIndex] = CreateBiomeMaterials(baseMaterial, grasslandTexture, grasslandTextureVariants);
+        biomeMaterials[RainforestBiomeIndex] = CreateBiomeMaterials(baseMaterial, rainforestTexture, rainforestTextureVariants);
+        biomeMaterials[MountainBiomeIndex] = CreateBiomeMaterials(baseMaterial, mountainTexture, mountainTextureVariants);
+    }
+
+    private Material[] CreateBiomeMaterials(Material baseMaterial, Texture2D primaryTexture, Texture2D[] textureVariants) {
+        List<Texture2D> textures = new List<Texture2D>();
+        AddUniqueTexture(textures, primaryTexture);
+
+        if (textureVariants != null) {
+            foreach (Texture2D texture in textureVariants) {
+                AddUniqueTexture(textures, texture);
+            }
+        }
+
+        if (textures.Count == 0) {
+            Debug.LogWarning("[TerrainController] A biome has no assigned textures; the prefab material will be used.", this);
+            return new[] { CreateBiomeMaterial(baseMaterial, null) };
+        }
+
+        Material[] materials = new Material[textures.Count];
+        for (int i = 0; i < textures.Count; i++) {
+            materials[i] = CreateBiomeMaterial(baseMaterial, textures[i]);
+        }
+
+        return materials;
+    }
+
+    private void AddUniqueTexture(List<Texture2D> textures, Texture2D texture) {
+        if (texture != null && !textures.Contains(texture)) {
+            textures.Add(texture);
+        }
     }
 
     private Material CreateBiomeMaterial(Material baseMaterial, Texture2D texture) {
         Material material = new Material(baseMaterial);
+        material.name = texture != null ? $"Terrain_{texture.name}" : "Terrain_Default";
 
         // Standard Built-in Pipeline property
         if (texture != null) {
@@ -165,8 +224,6 @@ public class TerrainController : MonoBehaviour {
             if (material.HasProperty("_BaseMap")) {
                 material.SetTexture("_BaseMap", texture);
             }
-        } else {
-            Debug.LogWarning("[TerrainController] A biome texture is null!", this);
         }
 
         return material;
@@ -332,26 +389,121 @@ public class TerrainController : MonoBehaviour {
         );
 
         Vector3 position = new Vector3(x - (size / 2), flatHeight, z - (size / 2));
-        GameObject newCube = Instantiate(cubePrefab, position, Quaternion.identity);
+        Quaternion rotation = Quaternion.identity;
+        if (rotateTerrainTiles) {
+            int quarterTurns = DeterministicTerrainRange(x, z, 4001, 4);
+            rotation = Quaternion.Euler(0f, quarterTurns * 90f, 0f);
+        }
+
+        GameObject newCube = Instantiate(cubePrefab, position, rotation);
         
         newCube.transform.parent = terrainParent.transform;
         Renderer renderer = newCube.GetComponent<Renderer>();
-        renderer.sharedMaterial = GetBiomeMaterial(biomeNoise, moistureNoise);
+        int biomeIndex = GetBiomeIndex(biomeNoise, moistureNoise);
+        renderer.sharedMaterial = GetBiomeMaterial(biomeIndex, x, z);
+        TryCreateRockCover(newCube, renderer, biomeIndex, x, z);
 
         cubeGrid[x, z] = newCube;
     }
 
-    private Material GetBiomeMaterial(float h, float m) {
-        return biomeMaterials[GetBiomeIndex(h, m)];
+    private Material GetBiomeMaterial(int biomeIndex, int x, int z) {
+        Material[] variants = biomeMaterials[biomeIndex];
+
+        if (variants.Length == 1) {
+            return variants[0];
+        }
+
+        int patchSize = Mathf.Max(1, materialVariationPatchSize);
+        int patchX = x / patchSize;
+        int patchZ = z / patchSize;
+        int variantIndex = DeterministicTerrainRange(
+            patchX,
+            patchZ,
+            3001 + biomeIndex * 101,
+            variants.Length
+        );
+        return variants[variantIndex];
+    }
+
+    private void TryCreateRockCover(GameObject terrainBlock, Renderer terrainRenderer, int biomeIndex, int x, int z) {
+        if (!ShouldSpawnRockCover(biomeIndex, x, z)) {
+            return;
+        }
+
+        Vector3 safeRockSize = new Vector3(
+            Mathf.Clamp(rockSize.x, 0.1f, 1f),
+            Mathf.Max(0.1f, rockSize.y),
+            Mathf.Clamp(rockSize.z, 0.1f, 1f)
+        );
+        Vector3 terrainPosition = GridToWorldPosition(x, z);
+        float rockBottom = terrainRenderer.bounds.max.y + rockHeightOffset;
+
+        GameObject rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        rock.name = $"RockCover_{x}_{z}";
+        rock.layer = terrainBlock.layer;
+        rock.transform.position = new Vector3(
+            terrainPosition.x,
+            rockBottom + safeRockSize.y * 0.5f,
+            terrainPosition.z
+        );
+        rock.transform.rotation = Quaternion.Euler(
+            0f,
+            DeterministicTerrainRange(x, z, 5209, 4) * 90f,
+            0f
+        );
+        rock.transform.localScale = safeRockSize;
+
+        Renderer rockRenderer = rock.GetComponent<Renderer>();
+        rockRenderer.sharedMaterial = GetBiomeMaterial(MountainBiomeIndex, x, z);
+
+        // Keep the rock's world-space size while making it follow terrain streaming.
+        rock.transform.SetParent(terrainBlock.transform, true);
+    }
+
+    private bool ShouldSpawnRockCover(int biomeIndex, int x, int z) {
+        float spawnChance = GetRockSpawnChance(biomeIndex);
+        if (!spawnRockCovers || spawnChance <= 0f) {
+            return false;
+        }
+
+        Vector3 worldPosition = GridToWorldPosition(x, z);
+        if (Mathf.Abs(worldPosition.x) < rockOriginClearRadius &&
+            Mathf.Abs(worldPosition.z) < rockOriginClearRadius) {
+            return false;
+        }
+
+        int cellSize = Mathf.Max(1, rockSpawnCellSize);
+        int cellX = x / cellSize;
+        int cellZ = z / cellSize;
+        int biomeSalt = biomeIndex * 101;
+        int chanceRoll = DeterministicTerrainRange(cellX, cellZ, 5003 + biomeSalt, 10000);
+        if (chanceRoll >= Mathf.RoundToInt(spawnChance * 10000f)) {
+            return false;
+        }
+
+        int margin = cellSize >= 3 ? 1 : 0;
+        int candidateRange = Mathf.Max(1, cellSize - margin * 2);
+        int candidateX = cellX * cellSize + margin +
+            DeterministicTerrainRange(cellX, cellZ, 5011 + biomeSalt, candidateRange);
+        int candidateZ = cellZ * cellSize + margin +
+            DeterministicTerrainRange(cellX, cellZ, 5021 + biomeSalt, candidateRange);
+        return x == candidateX && z == candidateZ;
+    }
+
+    private float GetRockSpawnChance(int biomeIndex) {
+        return biomeIndex switch {
+            DesertBiomeIndex => desertRockSpawnChance,
+            GrasslandBiomeIndex => grasslandRockSpawnChance,
+            MountainBiomeIndex => mountainRockSpawnChance,
+            _ => 0f
+        };
     }
 
     private int GetBiomeIndex(float h, float m) {
-        if (h < 0.18f) return 0;
-        if (h < 0.30f) return 1;
-        if (h < 0.48f) return 2;
-        if (h < 0.66f) return 3;
-        if (m < 0.55f) return 4;
-        return 5;
+        if (h < DesertThreshold) return DesertBiomeIndex;
+        if (h < GrasslandThreshold) return GrasslandBiomeIndex;
+        if (m >= RainforestMoistureThreshold) return RainforestBiomeIndex;
+        return MountainBiomeIndex;
     }
 
     private void UpdateStructureLoading(HashSet<Vector2Int> loadedTerrainPositions) {
@@ -561,6 +713,42 @@ public class TerrainController : MonoBehaviour {
             hash = (hash ^ (uint)z) * 16777619u;
             hash = (hash ^ (uint)salt) * 16777619u;
             return hash;
+        }
+    }
+
+    private int DeterministicTerrainRange(int x, int z, int salt, int maxExclusive) {
+        if (maxExclusive <= 1) {
+            return 0;
+        }
+
+        unchecked {
+            uint hash = DeterministicHash(x, z, salt);
+            hash ^= hash >> 16;
+            hash *= 0x7FEB352Du;
+            hash ^= hash >> 15;
+            hash *= 0x846CA68Bu;
+            hash ^= hash >> 16;
+            return (int)(hash % (uint)maxExclusive);
+        }
+    }
+
+    private void OnDestroy() {
+        if (biomeMaterials != null) {
+            foreach (Material[] variants in biomeMaterials) {
+                if (variants == null) {
+                    continue;
+                }
+
+                foreach (Material material in variants) {
+                    if (material != null) {
+                        Destroy(material);
+                    }
+                }
+            }
+        }
+
+        if (Instance == this) {
+            Instance = null;
         }
     }
 

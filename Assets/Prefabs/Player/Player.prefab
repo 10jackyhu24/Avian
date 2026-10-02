@@ -9,7 +9,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3116012522193200846}
-  - component: {fileID: 1657285989965971243}
   - component: {fileID: 8588243383838930314}
   - component: {fileID: 393711709446370195}
   - component: {fileID: 5965986747885414584}
@@ -44,29 +43,6 @@ Transform:
   - {fileID: 8526152859912152380}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!136 &1657285989965971243
-CapsuleCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 386513580500606536}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.29
-  m_Height: 0
-  m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!143 &8588243383838930314
 CharacterController:
   m_ObjectHideFlags: 0
@@ -85,8 +61,8 @@ CharacterController:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Height: 0.63
-  m_Radius: 0.24
+  m_Height: 0.42
+  m_Radius: 0.11
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
