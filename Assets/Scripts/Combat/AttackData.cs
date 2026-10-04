@@ -25,6 +25,14 @@ public class AttackData : ScriptableObject
     [Header("Weapon Swing Visual")]
     [Min(0.1f)] public float weaponVisualScale = 2f;
 
+    [Header("Ranged Projectile")]
+    [Min(0.1f)] public float projectileSpeed = 18f;
+    [Min(0.1f)] public float projectileMaxDistance = 14f;
+    [Min(0.01f)] public float projectileRadius = 0.12f;
+    [Min(0.1f)] public float projectileVisualLength = 1.6f;
+    [Min(0.01f)] public float projectileTrailWidth = 0.1f;
+    [Min(0.01f)] public float projectileTrailDuration = 0.12f;
+
     [Header("Attack Mode")]
     public AttackMode attackmode = AttackMode.UnarmedMelee;
 }

@@ -7,7 +7,13 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 [RequireComponent(typeof(CharacterController))]
+[DefaultExecutionOrder(100)]
 public class PlayerController : NetworkBehaviour {
+    private const string ArrowProjectileItemId = "arrow";
+    private const float ServerAttackCooldownGrace = 0.075f;
+    private const double ClientAttackCooldownTolerance = 0.02d;
+    private static PlayerController activeAttackPreviewOwner;
+
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2.5f;
     [SerializeField] private float runSpeedMultiplier = 1.75f;
@@ -23,12 +29,13 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private AttackData unarmedAttackData;
     private AttackData currentAttackData;
     private FixedString64Bytes selectedItemId;
+    private ulong selectedItemInstanceId;
     private bool currentAttackUsesWeapon;
 
     [Header("Attack Range Preview")]
     [SerializeField] private Color attackRangeFillColor = new Color(1f, 0.25f, 0.05f, 0.2f);
-    [SerializeField] private Color attackRangeOutlineColor = new Color(1f, 0.4f, 0.05f, 0.9f);
     [Range(8, 64)] [SerializeField] private int attackRangeSegments = 32;
+    [Min(0.01f)] [SerializeField] private float attackPreviewHeight = 0.12f;
 
     [Header("Shared Weapon Swing Visual")]
     [Min(0f)] [SerializeField] private float weaponGroundHeight = 0.08f;
@@ -39,6 +46,14 @@ public class PlayerController : NetworkBehaviour {
     [Min(0.05f)] [SerializeField] private float weaponHitHeight = 0.5f;
     [Range(1f, 15f)] [SerializeField] private float weaponSweepStepDegrees = 4f;
 
+    [Header("Ranged Weapon Visual")]
+    [Min(0f)] [SerializeField] private float bowSideOffset = 0.55f;
+    [Min(0f)] [SerializeField] private float bowForwardOffset = 0.25f;
+    [SerializeField] private float bowHeightOffset;
+    [Range(-180f, 180f)] [SerializeField] private float bowPlanarAngle = -135f;
+    [SerializeField] private Color arrowTrailColor = new Color(1f, 0.75f, 0.15f, 0.95f);
+    [Min(0.01f)] [SerializeField] private float minimumArrowVisibleDuration = 0.2f;
+
 
     [Header("Health Display")]
     [SerializeField] private Vector3 healthLabelOffset = new Vector3(0f, 1.5f, 0f);
@@ -46,6 +61,7 @@ public class PlayerController : NetworkBehaviour {
     private CharacterController characterController;
     private SpriteRenderer spriteRenderer;
     private Animator animator;
+    private PlayerInventory playerInventory;
     private GameMenu gameMenu;
     private UI_BagManager bagManager;
     private readonly NetworkVariable<float> currentHealth = new NetworkVariable<float>(
@@ -70,16 +86,28 @@ public class PlayerController : NetworkBehaviour {
     private bool jumpRequested;
     private float nextServerAttackTime;
     private float nextLocalAttackTime;
+    private double nextAcceptedClientRangedAttackTime = double.NegativeInfinity;
     private bool isPreparingAttack;
     private float attackMovementLockedUntil;
     private Vector3 preparedAttackDirection = Vector3.right;
+    private float preparedAttackPreviewYOffset;
+    private float preparedRangedAimYOffset;
     private GameObject attackRangePreview;
     private Mesh attackRangeMesh;
     private Material attackRangeFillMaterial;
-    private Material attackRangeOutlineMaterial;
+    private Material arrowProjectileMaterial;
+    private Material arrowTrailMaterial;
     private Coroutine weaponSwingCoroutine;
     private GameObject activeWeaponVisual;
     private readonly Collider[] weaponHitBuffer = new Collider[64];
+    private readonly RaycastHit[] projectileHitBuffer = new RaycastHit[32];
+    private readonly Dictionary<ulong, GameObject> activeProjectileVisuals =
+        new Dictionary<ulong, GameObject>();
+    private readonly Dictionary<ulong, Coroutine> projectileVisualCoroutines =
+        new Dictionary<ulong, Coroutine>();
+    private readonly Dictionary<ulong, float> projectileVisualSpawnTimes =
+        new Dictionary<ulong, float>();
+    private ulong nextLocalProjectileId;
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
     private GameInput inputActions;
@@ -90,6 +118,7 @@ public class PlayerController : NetworkBehaviour {
         characterController = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
+        playerInventory = GetComponent<PlayerInventory>();
         inputActions = new GameInput();
         KeyBinding.LoadBindingOverrides(inputActions);
 
@@ -167,6 +196,7 @@ public class PlayerController : NetworkBehaviour {
         if (bagManager != null) {
             bagManager.InventoryDisplayChanged -= HandleInventoryDisplayChanged;
         }
+        ClearProjectileVisuals();
         inputActions.Player.Disable();
     }
 
@@ -184,6 +214,13 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void LateUpdate() {
+        // CameraController also follows in LateUpdate. This component has a later
+        // execution order, so aiming is calculated from the camera that will render
+        // the current frame instead of alternating with the previous camera pose.
+        if (IsOwner && IsClient && isPreparingAttack) {
+            UpdatePreparedAttackDirection();
+        }
+
         if (!IsSpawned) {
             WorldHealthBarGUI.Remove(this);
             return;
@@ -216,10 +253,6 @@ public class PlayerController : NetworkBehaviour {
             BeginPreparingAttack();
         }
 
-        if (isPreparingAttack) {
-            UpdatePreparedAttackDirection();
-        }
-
         if (attackAction.WasReleasedThisFrame()) {
             ReleasePreparedAttack();
         }
@@ -237,8 +270,15 @@ public class PlayerController : NetworkBehaviour {
         if (currentAttackData == null || Time.time < nextLocalAttackTime) {
             return;
         }
+        if (IsCurrentAttackRanged() && !HasArrowAmmo()) {
+            Debug.Log("[Combat] Bow attack ignored because there are no arrows in the inventory.", this);
+            return;
+        }
 
         isPreparingAttack = true;
+        preparedAttackPreviewYOffset =
+            GetAttackPreviewWorldPosition(currentAttackData).y - transform.position.y;
+        preparedRangedAimYOffset = GetRangedAimOrigin().y - transform.position.y;
         preparedAttackDirection = isFacingLeftVisual.Value ? Vector3.left : Vector3.right;
         UpdatePreparedAttackDirection();
         ShowAttackRangePreview();
@@ -253,6 +293,9 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
+        // Release happens in Update, before the LateUpdate aiming pass. Sample the
+        // pointer once here so the released shot uses the newest available position.
+        UpdatePreparedAttackDirection();
         Vector3 attackDirection = preparedAttackDirection;
         isPreparingAttack = false;
         HideAttackRangePreview();
@@ -260,9 +303,43 @@ public class PlayerController : NetworkBehaviour {
         if (currentAttackData == null) {
             return;
         }
+        if (IsCurrentAttackRanged() && !HasArrowAmmo()) {
+            return;
+        }
+
+        ExecuteCurrentAttack(attackDirection);
+    }
+
+    private void ExecuteCurrentAttack(Vector3 attackDirection) {
+        if (currentAttackData == null || (IsCurrentAttackRanged() && !HasArrowAmmo())) {
+            return;
+        }
 
         nextLocalAttackTime = Time.time + Mathf.Max(0f, currentAttackData.cooldown);
-        TryAttackServerRpc(attackDirection.x, attackDirection.z);
+        if (IsCurrentAttackRanged() &&
+            ItemManager.TryGetWeaponById(
+                selectedItemId.ToString(),
+                out ItemData rangedWeapon,
+                out AttackData rangedAttackData)) {
+            // Start the owner's bow immediately so its lifetime uses exactly the
+            // same clock as nextLocalAttackTime. The server RPC only starts this
+            // visual for observing clients.
+            StartWeaponSwingVisual(
+                rangedWeapon.itemObject,
+                rangedAttackData,
+                attackDirection
+            );
+        }
+
+        ulong predictedProjectileId = IsCurrentAttackRanged()
+            ? SpawnPredictedArrowProjectile(currentAttackData, attackDirection)
+            : 0;
+        TryAttackServerRpc(
+            attackDirection.x,
+            attackDirection.z,
+            predictedProjectileId,
+            (double)Time.time
+        );
     }
 
     private void CancelPreparedAttack() {
@@ -289,9 +366,15 @@ public class PlayerController : NetworkBehaviour {
             return false;
         }
 
-        Vector3 attackOrigin = currentAttackData != null
-            ? GetAttackVisualWorldPosition(currentAttackData)
-            : transform.position;
+        Vector3 attackOrigin = IsCurrentAttackRanged()
+            ? new Vector3(
+                transform.position.x,
+                transform.position.y + preparedRangedAimYOffset,
+                transform.position.z
+            )
+            : currentAttackData != null
+                ? GetAttackVisualWorldPosition(currentAttackData)
+                : transform.position;
         Ray mouseRay = mainCamera.ScreenPointToRay(Mouse.current.position.ReadValue());
         Plane playerGroundPlane = new Plane(Vector3.up, attackOrigin);
         if (!playerGroundPlane.Raycast(mouseRay, out float distance)) {
@@ -320,7 +403,9 @@ public class PlayerController : NetworkBehaviour {
         }
 
         attackDirection.Normalize();
-        attackRangePreview.transform.position = GetAttackVisualWorldPosition(currentAttackData);
+        Vector3 previewPosition = transform.position + currentAttackData.centerOffset;
+        previewPosition.y = transform.position.y + preparedAttackPreviewYOffset;
+        attackRangePreview.transform.position = previewPosition;
 
         float yaw = -Mathf.Atan2(attackDirection.z, attackDirection.x) * Mathf.Rad2Deg;
         attackRangePreview.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -328,7 +413,12 @@ public class PlayerController : NetworkBehaviour {
 
     private void ShowAttackRangePreview() {
         HideAttackRangePreview();
+        if (activeAttackPreviewOwner != null && activeAttackPreviewOwner != this) {
+            activeAttackPreviewOwner.CancelPreparedAttack();
+        }
+        activeAttackPreviewOwner = this;
         if (currentAttackData == null) {
+            activeAttackPreviewOwner = null;
             return;
         }
 
@@ -339,89 +429,85 @@ public class PlayerController : NetworkBehaviour {
         };
         attackRangePreview.transform.localScale = Vector3.one;
 
-        float outerRadius = Mathf.Max(0f, currentAttackData.radius);
-        const float innerRadius = 0f;
-        float arcAngle = currentAttackData.attackShape == AttackShape.Sector
-            ? Mathf.Clamp(currentAttackData.sectorAngle, 1f, 360f)
-            : 360f;
-        const float centerAngle = 0f;
-        int segmentCount = Mathf.Max(2, Mathf.CeilToInt(attackRangeSegments * arcAngle / 360f));
+        Vector3[] vertices;
+        int[] triangles;
+        if (currentAttackData.attackmode == AttackMode.WeaponRanged) {
+            // A projectile has a fixed collision width. A sector would incorrectly
+            // become wider the farther it travels, so ranged attacks use a corridor.
+            float range = Mathf.Max(0.1f, currentAttackData.projectileMaxDistance);
+            float halfWidth = Mathf.Max(0.08f, currentAttackData.projectileRadius);
+            vertices = new[] {
+                new Vector3(0f, 0f, -halfWidth),
+                new Vector3(0f, 0f, halfWidth),
+                new Vector3(range, 0f, -halfWidth),
+                new Vector3(range, 0f, halfWidth)
+            };
+            triangles = new[] {
+                0, 1, 3,
+                0, 3, 2
+            };
+        }
+        else {
+            float outerRadius = Mathf.Max(0f, currentAttackData.radius);
+            float arcAngle = currentAttackData.attackShape == AttackShape.Sector
+                ? Mathf.Clamp(currentAttackData.sectorAngle, 1f, 360f)
+                : 360f;
+            const float centerAngle = 0f;
+            int segmentCount = Mathf.Max(
+                2,
+                Mathf.CeilToInt(attackRangeSegments * arcAngle / 360f)
+            );
 
-        Vector3[] vertices = new Vector3[(segmentCount + 1) * 2];
-        int[] triangles = new int[segmentCount * 6];
-        for (int i = 0; i <= segmentCount; i++) {
-            float angle = centerAngle - arcAngle * 0.5f + arcAngle * i / segmentCount;
-            float radians = angle * Mathf.Deg2Rad;
-            Vector3 direction = new Vector3(Mathf.Cos(radians), 0f, Mathf.Sin(radians));
-            vertices[i * 2] = direction * innerRadius;
-            vertices[i * 2 + 1] = direction * outerRadius;
+            vertices = new Vector3[segmentCount + 2];
+            triangles = new int[segmentCount * 3];
+            vertices[0] = Vector3.zero;
+            for (int i = 0; i <= segmentCount; i++) {
+                float angle = centerAngle - arcAngle * 0.5f + arcAngle * i / segmentCount;
+                float radians = angle * Mathf.Deg2Rad;
+                Vector3 direction = new Vector3(Mathf.Cos(radians), 0f, Mathf.Sin(radians));
+                vertices[i + 1] = direction * outerRadius;
 
-            if (i == segmentCount) {
-                continue;
+                if (i == segmentCount) {
+                    continue;
+                }
+
+                int triangleIndex = i * 3;
+                // Wind triangles upward so the ground preview is visible from the gameplay camera.
+                triangles[triangleIndex] = 0;
+                triangles[triangleIndex + 1] = i + 2;
+                triangles[triangleIndex + 2] = i + 1;
             }
-
-            int triangleIndex = i * 6;
-            int vertexIndex = i * 2;
-            // Wind triangles upward so the ground preview is visible from the gameplay camera.
-            triangles[triangleIndex] = vertexIndex;
-            triangles[triangleIndex + 1] = vertexIndex + 3;
-            triangles[triangleIndex + 2] = vertexIndex + 1;
-            triangles[triangleIndex + 3] = vertexIndex;
-            triangles[triangleIndex + 4] = vertexIndex + 2;
-            triangles[triangleIndex + 5] = vertexIndex + 3;
         }
 
         attackRangeMesh = new Mesh { name = "Attack Range Preview Mesh" };
         attackRangeMesh.vertices = vertices;
         attackRangeMesh.triangles = triangles;
+        Color[] vertexColors = new Color[vertices.Length];
+        for (int i = 0; i < vertexColors.Length; i++) {
+            vertexColors[i] = Color.white;
+        }
+        attackRangeMesh.colors = vertexColors;
         attackRangeMesh.RecalculateBounds();
 
         MeshFilter meshFilter = attackRangePreview.AddComponent<MeshFilter>();
         meshFilter.sharedMesh = attackRangeMesh;
         MeshRenderer meshRenderer = attackRangePreview.AddComponent<MeshRenderer>();
+        meshRenderer.sortingLayerID = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
+        meshRenderer.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder - 1 : 9;
 
-        Shader previewShader = Shader.Find("Sprites/Default");
+        Shader previewShader = Resources.Load<Shader>("AttackPreview");
+        if (previewShader == null) {
+            previewShader = Shader.Find("Avian/AttackPreview");
+        }
+        if (previewShader == null) {
+            previewShader = Shader.Find("Sprites/Default");
+        }
         attackRangeFillMaterial = new Material(previewShader) {
             color = attackRangeFillColor,
             renderQueue = 3000
         };
         attackRangeFillMaterial.mainTexture = Texture2D.whiteTexture;
         meshRenderer.sharedMaterial = attackRangeFillMaterial;
-
-        GameObject outlineObject = new GameObject("Outline");
-        outlineObject.transform.SetParent(attackRangePreview.transform, false);
-        LineRenderer outline = outlineObject.AddComponent<LineRenderer>();
-        outline.useWorldSpace = false;
-        outline.loop = true;
-        outline.widthMultiplier = 0.05f;
-        outline.positionCount = (segmentCount + 1) * 2;
-        outline.startColor = attackRangeOutlineColor;
-        outline.endColor = attackRangeOutlineColor;
-        outline.numCornerVertices = 2;
-
-        attackRangeOutlineMaterial = new Material(previewShader) {
-            color = Color.white,
-            renderQueue = 3001
-        };
-        attackRangeOutlineMaterial.mainTexture = Texture2D.whiteTexture;
-        outline.sharedMaterial = attackRangeOutlineMaterial;
-
-        if (currentAttackData.attackShape == AttackShape.Radial) {
-            // A radial preview is a filled disc with only its outer edge outlined.
-            outline.positionCount = segmentCount;
-            for (int i = 0; i < segmentCount; i++) {
-                outline.SetPosition(i, vertices[i * 2 + 1] + Vector3.up * 0.01f);
-            }
-        } else {
-            outline.positionCount = (segmentCount + 1) * 2;
-            int outlineIndex = 0;
-            for (int i = 0; i <= segmentCount; i++) {
-                outline.SetPosition(outlineIndex++, vertices[i * 2 + 1] + Vector3.up * 0.01f);
-            }
-            for (int i = segmentCount; i >= 0; i--) {
-                outline.SetPosition(outlineIndex++, vertices[i * 2] + Vector3.up * 0.01f);
-            }
-        }
 
         UpdateAttackRangePreviewTransform();
     }
@@ -442,10 +528,10 @@ public class PlayerController : NetworkBehaviour {
             attackRangeFillMaterial = null;
         }
 
-        if (attackRangeOutlineMaterial != null) {
-            Destroy(attackRangeOutlineMaterial);
-            attackRangeOutlineMaterial = null;
+        if (activeAttackPreviewOwner == this) {
+            activeAttackPreviewOwner = null;
         }
+
     }
 
     [ServerRpc]
@@ -479,20 +565,76 @@ public class PlayerController : NetworkBehaviour {
     }
 
     [ServerRpc]
-    private void TryAttackServerRpc(float aimDirectionX, float aimDirectionZ) {
-        if (currentHealth.Value <= 0 || Time.time < nextServerAttackTime) {
+    private void TryAttackServerRpc(
+        float aimDirectionX,
+        float aimDirectionZ,
+        ulong predictedProjectileId,
+        double clientAttackTime
+    ) {
+        if (currentHealth.Value <= 0) {
+            RejectAttackClientRpc(predictedProjectileId);
             return;
         }
 
         if (currentAttackData == null) {
             Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no supported weapon is equipped.", this);
+            RejectAttackClientRpc(predictedProjectileId);
             return;
         }
 
         AttackData attackData = currentAttackData;
         bool usesWeapon = currentAttackUsesWeapon;
         FixedString64Bytes attackItemId = selectedItemId;
+        ItemData weaponItem = ItemData.Empty;
+        AttackData weaponAttackData = null;
+        if (usesWeapon &&
+            !ItemManager.TryGetWeaponById(
+                attackItemId.ToString(),
+                out weaponItem,
+                out weaponAttackData)) {
+            Debug.LogWarning(
+                $"[Combat] Server could not resolve equipped weapon '{attackItemId}'.",
+                this
+            );
+            RejectAttackClientRpc(predictedProjectileId);
+            return;
+        }
+        if (usesWeapon) {
+            attackData = weaponAttackData;
+        }
+
+        bool isRangedAttack = usesWeapon && attackData.attackmode == AttackMode.WeaponRanged;
+        if (isRangedAttack) {
+            // Server RPCs can arrive closer together than the actual client shots
+            // because of network jitter. Validate the owner's release timestamps so
+            // a legitimate arrow is not intermittently rejected and removed.
+            if (!double.IsFinite(clientAttackTime) ||
+                clientAttackTime + ClientAttackCooldownTolerance <
+                nextAcceptedClientRangedAttackTime) {
+                RejectAttackClientRpc(predictedProjectileId);
+                return;
+            }
+        }
+        else if (Time.time + ServerAttackCooldownGrace < nextServerAttackTime) {
+            RejectAttackClientRpc(predictedProjectileId);
+            return;
+        }
+
+        if (usesWeapon && attackData.attackmode == AttackMode.WeaponRanged &&
+            (playerInventory == null ||
+             !playerInventory.TryConsumeItemOnServer(ArrowProjectileItemId, 1))) {
+            Debug.Log(
+                $"[Combat] Server rejected bow attack from client {OwnerClientId}: no arrows available.",
+                this
+            );
+            RejectAttackClientRpc(predictedProjectileId);
+            return;
+        }
+
         float attackDuration = Mathf.Max(0f, attackData.cooldown);
+        if (isRangedAttack) {
+            nextAcceptedClientRangedAttackTime = clientAttackTime + attackDuration;
+        }
         nextServerAttackTime = Time.time + attackDuration;
         attackMovementLockedUntil = nextServerAttackTime;
         StopMovementOnServer();
@@ -501,12 +643,14 @@ public class PlayerController : NetworkBehaviour {
         PlayAttackVisualClientRpc(attackItemId, attackDirection, usesWeapon);
 
         if (usesWeapon) {
-            if (ItemManager.TryGetWeaponById(
-                    attackItemId.ToString(),
-                    out ItemData weaponItem,
-                    out AttackData weaponAttackData) &&
-                weaponItem.itemObject != null &&
-                weaponItem.itemObject.icon != null) {
+            if (weaponAttackData.attackmode == AttackMode.WeaponRanged) {
+                StartCoroutine(RangedProjectileRoutine(
+                    weaponAttackData,
+                    attackDirection,
+                    predictedProjectileId
+                ));
+            }
+            else if (weaponItem.itemObject.icon != null) {
                 StartCoroutine(WeaponDamageSweepRoutine(
                     weaponItem.itemObject,
                     weaponAttackData,
@@ -515,7 +659,7 @@ public class PlayerController : NetworkBehaviour {
             }
             else {
                 Debug.LogWarning(
-                    $"[Combat] Server could not start the weapon sweep for item '{attackItemId}'.",
+                    $"[Combat] Weapon '{attackItemId}' has no icon for its melee sweep.",
                     this
                 );
             }
@@ -523,6 +667,27 @@ public class PlayerController : NetworkBehaviour {
         }
 
         ApplyAreaAttackDamage(attackData, attackDirection);
+    }
+
+    [ClientRpc]
+    private void RejectAttackClientRpc(ulong predictedProjectileId) {
+        if (IsOwner) {
+            nextLocalAttackTime = Time.time;
+            if (predictedProjectileId != 0) {
+                RemoveProjectileVisual(predictedProjectileId, stopCoroutine: true);
+                StopActiveWeaponVisual();
+            }
+        }
+    }
+
+    private bool IsCurrentAttackRanged() {
+        return currentAttackUsesWeapon &&
+            currentAttackData != null &&
+            currentAttackData.attackmode == AttackMode.WeaponRanged;
+    }
+
+    private bool HasArrowAmmo() {
+        return playerInventory != null && playerInventory.HasItem(ArrowProjectileItemId, 1);
     }
 
     private void ApplyAreaAttackDamage(AttackData attackData, Vector3 attackDirection) {
@@ -639,6 +804,9 @@ public class PlayerController : NetworkBehaviour {
         }
 
         if (ItemManager.TryGetWeaponById(itemId.ToString(), out ItemData weaponItem, out AttackData attackData)) {
+            if (IsOwner && attackData.attackmode == AttackMode.WeaponRanged) {
+                return;
+            }
             StartWeaponSwingVisual(weaponItem.itemObject, attackData, attackDirection);
         }
     }
@@ -660,18 +828,39 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void StartWeaponSwingVisual(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection) {
-        if (weaponItem == null || weaponItem.icon == null || attackData == null) {
+        if (weaponItem == null || attackData == null) {
             return;
         }
 
-        if (weaponSwingCoroutine != null) {
-            StopCoroutine(weaponSwingCoroutine);
+        StopActiveWeaponVisual();
+
+        if (attackData.attackmode == AttackMode.WeaponRanged) {
+            if (weaponItem.icon != null) {
+                weaponSwingCoroutine = StartCoroutine(BowVisualRoutine(
+                    weaponItem,
+                    attackData,
+                    attackDirection
+                ));
+            }
+            return;
         }
-        if (activeWeaponVisual != null) {
-            Destroy(activeWeaponVisual);
+
+        if (weaponItem.icon == null) {
+            return;
         }
 
         weaponSwingCoroutine = StartCoroutine(WeaponSwingRoutine(weaponItem, attackData, attackDirection));
+    }
+
+    private void StopActiveWeaponVisual() {
+        if (weaponSwingCoroutine != null) {
+            StopCoroutine(weaponSwingCoroutine);
+            weaponSwingCoroutine = null;
+        }
+        if (activeWeaponVisual != null) {
+            Destroy(activeWeaponVisual);
+            activeWeaponVisual = null;
+        }
     }
 
     private IEnumerator WeaponSwingRoutine(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection) {
@@ -730,6 +919,494 @@ public class PlayerController : NetworkBehaviour {
             activeWeaponVisual = null;
         }
         weaponSwingCoroutine = null;
+    }
+
+    private IEnumerator BowVisualRoutine(
+        ItemObject bowItem,
+        AttackData attackData,
+        Vector3 attackDirection
+    ) {
+        activeWeaponVisual = new GameObject("Bow_AttackVisual") {
+            hideFlags = HideFlags.DontSave
+        };
+        activeWeaponVisual.transform.SetParent(transform, false);
+        Vector3 playerScale = transform.lossyScale;
+        activeWeaponVisual.transform.localScale = new Vector3(
+            GetSafeInverseScale(playerScale.x),
+            GetSafeInverseScale(playerScale.y),
+            GetSafeInverseScale(playerScale.z)
+        );
+
+        GameObject bowObject = new GameObject("Bow");
+        bowObject.transform.SetParent(activeWeaponVisual.transform, false);
+        bowObject.transform.localRotation =
+            Quaternion.AngleAxis(-90f, Vector3.right) *
+            Quaternion.AngleAxis(bowPlanarAngle, Vector3.forward);
+
+        SpriteRenderer bowRenderer = bowObject.AddComponent<SpriteRenderer>();
+        bowRenderer.sprite = bowItem.icon;
+        bowRenderer.sortingLayerID = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
+        bowRenderer.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 2 : 11;
+
+        Vector2 bowSize = bowItem.icon.bounds.size;
+        float longestSide = Mathf.Max(0.01f, Mathf.Max(bowSize.x, bowSize.y));
+        bowObject.transform.localScale = Vector3.one *
+            (Mathf.Max(0.1f, attackData.weaponVisualScale) / longestSide);
+
+        float duration = Mathf.Max(0.01f, attackData.cooldown);
+        float startedAt = Time.time;
+        while (activeWeaponVisual != null && Time.time - startedAt < duration) {
+            activeWeaponVisual.transform.position = GetBowWorldPosition(attackDirection);
+            activeWeaponVisual.transform.rotation = Quaternion.LookRotation(attackDirection, Vector3.up);
+            yield return null;
+        }
+
+        if (activeWeaponVisual != null) {
+            Destroy(activeWeaponVisual);
+            activeWeaponVisual = null;
+        }
+        weaponSwingCoroutine = null;
+    }
+
+    private Vector3 GetBowWorldPosition(Vector3 attackDirection) {
+        Vector3 direction = attackDirection;
+        direction.y = 0f;
+        direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
+        Vector3 right = Vector3.Cross(Vector3.up, direction).normalized;
+        Vector3 position = GetRangedAimOrigin();
+        position += right * bowSideOffset + direction * bowForwardOffset;
+        return position;
+    }
+
+    private Vector3 GetRangedAimOrigin() {
+        return new Vector3(
+            transform.position.x,
+            GetConfiguredCharacterCenterY() + bowHeightOffset,
+            transform.position.z
+        );
+    }
+
+    private ulong SpawnPredictedArrowProjectile(
+        AttackData attackData,
+        Vector3 attackDirection
+    ) {
+        ulong projectileId = ++nextLocalProjectileId;
+        if (projectileId == 0) {
+            projectileId = ++nextLocalProjectileId;
+        }
+
+        Vector3 direction = attackDirection;
+        direction.y = 0f;
+        direction = direction.sqrMagnitude > 0.0001f
+            ? direction.normalized
+            : Vector3.forward;
+        Vector3 startPosition = GetRangedAimOrigin() +
+            direction * Mathf.Max(0f, attackData.effectForwardOffset);
+
+        CreateArrowProjectileVisual(
+            projectileId,
+            startPosition,
+            direction,
+            Mathf.Max(0.1f, attackData.projectileSpeed),
+            Mathf.Max(0.1f, attackData.projectileMaxDistance),
+            Mathf.Max(0.1f, attackData.projectileVisualLength),
+            Mathf.Max(0.01f, attackData.projectileTrailWidth),
+            Mathf.Max(0.01f, attackData.projectileTrailDuration)
+        );
+        return projectileId;
+    }
+
+    private IEnumerator RangedProjectileRoutine(
+        AttackData attackData,
+        Vector3 attackDirection,
+        ulong predictedProjectileId
+    ) {
+        Vector3 direction = attackDirection;
+        direction.y = 0f;
+        direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : Vector3.forward;
+
+        float speed = Mathf.Max(0.1f, attackData.projectileSpeed);
+        float maxDistance = Mathf.Max(0.1f, attackData.projectileMaxDistance);
+        float radius = Mathf.Max(0.01f, attackData.projectileRadius);
+        // Keep the projectile on the same center-to-cursor line used for aiming.
+        // The bow may remain beside the player, but it must not offset the shot path.
+        Vector3 position = GetRangedAimOrigin() +
+            direction * Mathf.Max(0f, attackData.effectForwardOffset);
+        ulong projectileId = predictedProjectileId;
+        if (projectileId == 0) {
+            projectileId = ++nextLocalProjectileId;
+            if (projectileId == 0) {
+                projectileId = ++nextLocalProjectileId;
+            }
+        }
+
+        SpawnArrowProjectileClientRpc(
+            projectileId,
+            position,
+            direction,
+            speed,
+            maxDistance,
+            Mathf.Max(0.1f, attackData.projectileVisualLength),
+            Mathf.Max(0.01f, attackData.projectileTrailWidth),
+            Mathf.Max(0.01f, attackData.projectileTrailDuration)
+        );
+
+        float distanceTravelled = 0f;
+        while (IsServer && distanceTravelled < maxDistance) {
+            yield return new WaitForFixedUpdate();
+
+            float stepDistance = Mathf.Min(
+                speed * Time.fixedDeltaTime,
+                maxDistance - distanceTravelled
+            );
+            if (TryGetClosestProjectileHit(
+                    position,
+                    radius,
+                    direction,
+                    stepDistance,
+                    out RaycastHit closestHit)) {
+                bool hitDamageTarget = IsProjectileDamageTarget(closestHit.collider) &&
+                    IsLayerInMask(closestHit.collider.gameObject.layer, attackData.targetLayer);
+                if (hitDamageTarget) {
+                    HashSet<PlayerController> damagedPlayers = new HashSet<PlayerController>();
+                    HashSet<EnemyHealthDrop> damagedEnemies = new HashSet<EnemyHealthDrop>();
+                    TryDamageTarget(
+                        closestHit.collider,
+                        attackData,
+                        damagedPlayers,
+                        damagedEnemies
+                    );
+                }
+
+                Vector3 hitPosition = position + direction * closestHit.distance;
+                FinishArrowProjectileClientRpc(
+                    projectileId,
+                    hitPosition,
+                    ensureMinimumVisibleTime: true
+                );
+                yield break;
+            }
+
+            position += direction * stepDistance;
+            distanceTravelled += stepDistance;
+        }
+
+        FinishArrowProjectileClientRpc(
+            projectileId,
+            position,
+            ensureMinimumVisibleTime: false
+        );
+    }
+
+    private bool IsProjectileDamageTarget(Collider hit) {
+        PlayerController targetPlayer = hit.GetComponentInParent<PlayerController>();
+        if (targetPlayer != null) {
+            return targetPlayer != this && targetPlayer.IsSpawned && targetPlayer.IsAlive;
+        }
+
+        EnemyHealthDrop targetEnemy = hit.GetComponentInParent<EnemyHealthDrop>();
+        return targetEnemy != null && targetEnemy.IsAlive;
+    }
+
+    private bool TryGetClosestProjectileHit(
+        Vector3 position,
+        float radius,
+        Vector3 direction,
+        float distance,
+        out RaycastHit closestHit
+    ) {
+        int hitCount = Physics.SphereCastNonAlloc(
+            position,
+            radius,
+            direction,
+            projectileHitBuffer,
+            distance,
+            Physics.AllLayers,
+            QueryTriggerInteraction.Ignore
+        );
+
+        bool foundHit = false;
+        closestHit = default;
+        for (int i = 0; i < hitCount; i++) {
+            Collider hitCollider = projectileHitBuffer[i].collider;
+            if (hitCollider == null ||
+                hitCollider.GetComponentInParent<PlayerController>() == this) {
+                continue;
+            }
+
+            if (!foundHit || projectileHitBuffer[i].distance < closestHit.distance) {
+                foundHit = true;
+                closestHit = projectileHitBuffer[i];
+            }
+        }
+
+        return foundHit;
+    }
+
+    private static bool IsLayerInMask(int layer, LayerMask mask) {
+        return (mask.value & (1 << layer)) != 0;
+    }
+
+    [ClientRpc]
+    private void SpawnArrowProjectileClientRpc(
+        ulong projectileId,
+        Vector3 startPosition,
+        Vector3 direction,
+        float speed,
+        float maxDistance,
+        float visualLength,
+        float trailWidth,
+        float trailDuration
+    ) {
+        // Keep the owner's still-visible predicted arrow; restore it if it is
+        // missing. Other clients create their visual from this server message.
+        if (IsOwner && activeProjectileVisuals.TryGetValue(projectileId, out GameObject existingVisual) &&
+            existingVisual != null) {
+            return;
+        }
+
+        CreateArrowProjectileVisual(
+            projectileId,
+            startPosition,
+            direction,
+            speed,
+            maxDistance,
+            visualLength,
+            trailWidth,
+            trailDuration
+        );
+    }
+
+    private void CreateArrowProjectileVisual(
+        ulong projectileId,
+        Vector3 startPosition,
+        Vector3 direction,
+        float speed,
+        float maxDistance,
+        float visualLength,
+        float trailWidth,
+        float trailDuration
+    ) {
+        RemoveProjectileVisual(projectileId, stopCoroutine: true);
+
+        ItemObject arrowObject = null;
+        if (ItemManager.TryGetItemById(ArrowProjectileItemId, out ItemData arrowItem)) {
+            arrowObject = arrowItem.itemObject;
+        }
+        if (arrowObject == null) {
+            // This also covers the first shot during scene startup, before the item
+            // registry has finished building on a client.
+            arrowObject = Resources.Load<ItemObject>("Items/Arrow");
+        }
+        if (arrowObject == null || arrowObject.icon == null) {
+            Debug.LogWarning("[Combat] Arrow visual could not be created because its sprite is unavailable.", this);
+            return;
+        }
+
+        GameObject projectileVisual = new GameObject($"Arrow_Projectile_{projectileId}") {
+            hideFlags = HideFlags.DontSave
+        };
+        projectileVisual.transform.position = startPosition;
+        projectileVisual.transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
+
+        GameObject spriteObject = new GameObject("Sprite");
+        spriteObject.transform.SetParent(projectileVisual.transform, false);
+        spriteObject.transform.localRotation =
+            Quaternion.AngleAxis(-90f, Vector3.right) *
+            Quaternion.AngleAxis(-135f, Vector3.forward);
+
+        SpriteRenderer arrowRenderer = spriteObject.AddComponent<SpriteRenderer>();
+        arrowRenderer.sprite = arrowObject.icon;
+        arrowRenderer.sortingLayerID = spriteRenderer != null ? spriteRenderer.sortingLayerID : 0;
+        arrowRenderer.sortingOrder = spriteRenderer != null ? spriteRenderer.sortingOrder + 3 : 11;
+        Material projectileMaterial = GetArrowProjectileMaterial(arrowObject.icon.texture);
+        if (projectileMaterial != null) {
+            arrowRenderer.sharedMaterial = projectileMaterial;
+        }
+
+        Vector2 spriteSize = arrowObject.icon.bounds.size;
+        float spriteLongestSide = Mathf.Max(0.01f, Mathf.Max(spriteSize.x, spriteSize.y));
+        spriteObject.transform.localScale = Vector3.one * (visualLength / spriteLongestSide);
+
+        TrailRenderer trail = projectileVisual.AddComponent<TrailRenderer>();
+        trail.time = trailDuration;
+        trail.startWidth = trailWidth;
+        trail.endWidth = 0f;
+        trail.startColor = arrowTrailColor;
+        trail.endColor = new Color(
+            arrowTrailColor.r,
+            arrowTrailColor.g,
+            arrowTrailColor.b,
+            0f
+        );
+        trail.minVertexDistance = Mathf.Max(0.01f, trailWidth * 0.25f);
+        trail.textureMode = LineTextureMode.Stretch;
+        trail.alignment = LineAlignment.View;
+        trail.sortingLayerID = arrowRenderer.sortingLayerID;
+        trail.sortingOrder = arrowRenderer.sortingOrder - 1;
+        Material trailMaterial = GetArrowTrailMaterial();
+        trail.sharedMaterial = trailMaterial != null
+            ? trailMaterial
+            : arrowRenderer.sharedMaterial;
+
+        activeProjectileVisuals[projectileId] = projectileVisual;
+        projectileVisualSpawnTimes[projectileId] = Time.time;
+        Coroutine routine = StartCoroutine(ArrowProjectileVisualRoutine(
+            projectileId,
+            projectileVisual,
+            direction.normalized,
+            speed,
+            maxDistance
+        ));
+        projectileVisualCoroutines[projectileId] = routine;
+    }
+
+    private IEnumerator ArrowProjectileVisualRoutine(
+        ulong projectileId,
+        GameObject projectileVisual,
+        Vector3 direction,
+        float speed,
+        float maxDistance
+    ) {
+        float distanceTravelled = 0f;
+        while (projectileVisual != null && distanceTravelled < maxDistance) {
+            float stepDistance = Mathf.Min(
+                Mathf.Max(0f, speed) * Time.deltaTime,
+                maxDistance - distanceTravelled
+            );
+            projectileVisual.transform.position += direction * stepDistance;
+            distanceTravelled += stepDistance;
+            yield return null;
+        }
+
+        // The server alone decides when the arrow hits a target or obstacle.
+        // Wait for its finish message even after the visual reaches max distance;
+        // a client-side collision or timer can otherwise hide a successful shot.
+        float timeout = Time.time + 2f;
+        while (projectileVisual != null && Time.time < timeout) {
+            yield return null;
+        }
+
+        RemoveProjectileVisual(projectileId, stopCoroutine: false);
+    }
+
+    private Material GetArrowProjectileMaterial(Texture arrowTexture) {
+        if (arrowProjectileMaterial != null) {
+            if (arrowProjectileMaterial.mainTexture != arrowTexture) {
+                arrowProjectileMaterial.mainTexture = arrowTexture;
+            }
+            return arrowProjectileMaterial;
+        }
+
+        Shader shader = Resources.Load<Shader>("AttackPreview");
+        if (shader == null) {
+            shader = Shader.Find("Avian/AttackPreview");
+        }
+        if (shader == null) {
+            return null;
+        }
+
+        arrowProjectileMaterial = new Material(shader) {
+            color = Color.white,
+            mainTexture = arrowTexture,
+            renderQueue = 3100
+        };
+        return arrowProjectileMaterial;
+    }
+
+    private Material GetArrowTrailMaterial() {
+        if (arrowTrailMaterial != null) {
+            return arrowTrailMaterial;
+        }
+
+        Shader shader = Resources.Load<Shader>("AttackPreview");
+        if (shader == null) {
+            shader = Shader.Find("Avian/AttackPreview");
+        }
+        if (shader == null) {
+            return null;
+        }
+
+        arrowTrailMaterial = new Material(shader) {
+            color = Color.white,
+            mainTexture = Texture2D.whiteTexture,
+            renderQueue = 3099
+        };
+        return arrowTrailMaterial;
+    }
+
+    [ClientRpc]
+    private void FinishArrowProjectileClientRpc(
+        ulong projectileId,
+        Vector3 finalPosition,
+        bool ensureMinimumVisibleTime
+    ) {
+        if (!activeProjectileVisuals.TryGetValue(projectileId, out GameObject visual) ||
+            visual == null) {
+            RemoveProjectileVisual(projectileId, stopCoroutine: true);
+            return;
+        }
+
+        if (projectileVisualCoroutines.TryGetValue(projectileId, out Coroutine movementRoutine) &&
+            movementRoutine != null) {
+            StopCoroutine(movementRoutine);
+        }
+        visual.transform.position = finalPosition;
+
+        float remainingVisibleTime = 0f;
+        if (ensureMinimumVisibleTime &&
+            projectileVisualSpawnTimes.TryGetValue(projectileId, out float spawnedAt)) {
+            remainingVisibleTime = Mathf.Max(
+                0f,
+                minimumArrowVisibleDuration - (Time.time - spawnedAt)
+            );
+        }
+
+        if (remainingVisibleTime <= 0f) {
+            RemoveProjectileVisual(projectileId, stopCoroutine: false);
+            return;
+        }
+
+        projectileVisualCoroutines[projectileId] = StartCoroutine(
+            RemoveProjectileVisualAfterDelay(projectileId, remainingVisibleTime)
+        );
+    }
+
+    private IEnumerator RemoveProjectileVisualAfterDelay(ulong projectileId, float delay) {
+        yield return new WaitForSeconds(delay);
+        RemoveProjectileVisual(projectileId, stopCoroutine: false);
+    }
+
+    private void RemoveProjectileVisual(ulong projectileId, bool stopCoroutine) {
+        if (stopCoroutine &&
+            projectileVisualCoroutines.TryGetValue(projectileId, out Coroutine routine) &&
+            routine != null) {
+            StopCoroutine(routine);
+        }
+
+        if (activeProjectileVisuals.TryGetValue(projectileId, out GameObject visual) &&
+            visual != null) {
+            Destroy(visual);
+        }
+        activeProjectileVisuals.Remove(projectileId);
+        projectileVisualCoroutines.Remove(projectileId);
+        projectileVisualSpawnTimes.Remove(projectileId);
+    }
+
+    private void ClearProjectileVisuals() {
+        foreach (Coroutine routine in projectileVisualCoroutines.Values) {
+            if (routine != null) {
+                StopCoroutine(routine);
+            }
+        }
+        foreach (GameObject visual in activeProjectileVisuals.Values) {
+            if (visual != null) {
+                Destroy(visual);
+            }
+        }
+        projectileVisualCoroutines.Clear();
+        activeProjectileVisuals.Clear();
+        projectileVisualSpawnTimes.Clear();
     }
 
     private IEnumerator WeaponDamageSweepRoutine(
@@ -1033,17 +1710,40 @@ public class PlayerController : NetworkBehaviour {
 
     private Vector3 GetAttackVisualWorldPosition(AttackData attackData) {
         Vector3 attackCenter = transform.position + attackData.centerOffset;
-        float characterFeetY = spriteRenderer != null && spriteRenderer.sprite != null
-            ? spriteRenderer.bounds.min.y
-            : characterController != null
-                ? characterController.bounds.min.y
-                : transform.position.y;
 
         return new Vector3(
             attackCenter.x,
-            characterFeetY + weaponGroundHeight,
+            GetConfiguredCharacterFeetY() + weaponGroundHeight,
             attackCenter.z
         );
+    }
+
+    private float GetConfiguredCharacterCenterY() {
+        if (characterController == null) {
+            return transform.position.y;
+        }
+
+        float scaleY = Mathf.Abs(transform.lossyScale.y);
+        return transform.position.y + characterController.center.y * scaleY;
+    }
+
+    private float GetConfiguredCharacterFeetY() {
+        if (characterController == null) {
+            return transform.position.y;
+        }
+
+        float scaleY = Mathf.Abs(transform.lossyScale.y);
+        float configuredHeight = Mathf.Max(
+            characterController.height,
+            characterController.radius * 2f
+        ) * scaleY;
+        return GetConfiguredCharacterCenterY() - configuredHeight * 0.5f;
+    }
+
+    private Vector3 GetAttackPreviewWorldPosition(AttackData attackData) {
+        // Keep the preview slightly above both the floor and weapon sweep plane so
+        // its transparent mesh does not flicker from depth fighting with either one.
+        return GetAttackVisualWorldPosition(attackData) + Vector3.up * attackPreviewHeight;
     }
 
     private static float GetSafeInverseScale(float scale) {
@@ -1193,7 +1893,35 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
+        // Arrow consumption refreshes the bag after every shot. Re-selecting the
+        // unchanged bow would call CancelPreparedAttack and could cancel the next
+        // shot depending on when the inventory update arrived.
+        if (IsSelectedInventorySlotUnchanged(gameMenu.SelectedIndex)) {
+            return;
+        }
+
         HandleSelectedIndexChange(gameMenu.SelectedIndex);
+    }
+
+    private bool IsSelectedInventorySlotUnchanged(int slotIndex) {
+        if (bagManager == null || slotIndex < 0 || slotIndex >= bagManager.bagDataList.Count) {
+            return selectedItemInstanceId == 0 && selectedItemId.Length == 0;
+        }
+
+        BagSlotData slot = bagManager.bagDataList[slotIndex];
+        if (slot == null || slot.IsEmpty || slot.itemData.itemObject == null) {
+            return selectedItemInstanceId == 0 && selectedItemId.Length == 0;
+        }
+
+        if (slot.instanceId != 0 || selectedItemInstanceId != 0) {
+            return slot.instanceId == selectedItemInstanceId;
+        }
+
+        return string.Equals(
+            slot.itemData.itemObject.itemId,
+            selectedItemId.ToString(),
+            System.StringComparison.Ordinal
+        );
     }
 
     // 選取物品欄
@@ -1248,6 +1976,7 @@ public class PlayerController : NetworkBehaviour {
         CancelPreparedAttack();
 
         FixedString64Bytes newSelectedItemId = default;
+        ulong newSelectedItemInstanceId = 0;
         AttackData localAttackData = null;
         bool localUsesWeapon = false;
         string selectedItemName = "Empty";
@@ -1257,6 +1986,7 @@ public class PlayerController : NetworkBehaviour {
             : null;
         if (slot != null && !slot.IsEmpty && slot.itemData.itemObject != null) {
             ItemObject item = slot.itemData.itemObject;
+            newSelectedItemInstanceId = slot.instanceId;
             selectedItemName = item.itemName;
 
             if (!string.IsNullOrWhiteSpace(item.itemId)) {
@@ -1273,6 +2003,7 @@ public class PlayerController : NetworkBehaviour {
         }
 
         selectedItemId = newSelectedItemId;
+        selectedItemInstanceId = newSelectedItemInstanceId;
         currentAttackData = localAttackData;
         currentAttackUsesWeapon = localUsesWeapon;
         combatController?.SetAttackData(localAttackData);
@@ -1340,6 +2071,9 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void ClearEquippedWeapon() {
+        selectedItemId = default;
+        selectedItemInstanceId = 0;
+        currentAttackUsesWeapon = false;
         currentAttackData = null;
         combatController?.SetAttackData(null);
         combatController?.ExitCombat();
@@ -1359,6 +2093,7 @@ public class PlayerController : NetworkBehaviour {
             inputActions.Disable();
             inputActions.Dispose();
         }
+        ClearProjectileVisuals();
         HideAttackRangePreview();
         if (weaponSwingCoroutine != null) {
             StopCoroutine(weaponSwingCoroutine);
@@ -1367,6 +2102,14 @@ public class PlayerController : NetworkBehaviour {
         if (activeWeaponVisual != null) {
             Destroy(activeWeaponVisual);
             activeWeaponVisual = null;
+        }
+        if (arrowProjectileMaterial != null) {
+            Destroy(arrowProjectileMaterial);
+            arrowProjectileMaterial = null;
+        }
+        if (arrowTrailMaterial != null) {
+            Destroy(arrowTrailMaterial);
+            arrowTrailMaterial = null;
         }
         base.OnDestroy();
     }

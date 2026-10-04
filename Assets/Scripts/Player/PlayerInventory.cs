@@ -8,6 +8,7 @@ using UnityEngine;
 public class PlayerInventory : NetworkBehaviour {
     private const float PickupRange = 6f;
     private const string ArrowId = "arrow";
+    private const string BowId = "bow";
     private const string AxeId = "axe";
     private const string SickleId = "sickle";
     private const string SwordId = "sword";
@@ -26,6 +27,56 @@ public class PlayerInventory : NetworkBehaviour {
     public event Action InventoryChanged;
 
     public int SlotCount => slots.Count;
+
+    public int GetItemCount(string itemId) {
+        if (string.IsNullOrWhiteSpace(itemId)) {
+            return 0;
+        }
+
+        int totalCount = 0;
+        for (int i = 0; i < slots.Count; i++) {
+            InventoryItemState item = slots[i].Item;
+            if (item.IsValid &&
+                string.Equals(item.ItemId.ToString(), itemId, StringComparison.Ordinal)) {
+                totalCount += Mathf.Max(0, item.Count);
+            }
+        }
+        return totalCount;
+    }
+
+    public bool HasItem(string itemId, int requiredCount = 1) {
+        return requiredCount > 0 && GetItemCount(itemId) >= requiredCount;
+    }
+
+    public bool TryConsumeItemOnServer(string itemId, int amount = 1) {
+        if (!IsServer || string.IsNullOrWhiteSpace(itemId) || amount <= 0 ||
+            GetItemCount(itemId) < amount) {
+            return false;
+        }
+
+        int remaining = amount;
+        for (int i = 0; i < slots.Count && remaining > 0;) {
+            InventoryItemState item = slots[i].Item;
+            if (!item.IsValid ||
+                !string.Equals(item.ItemId.ToString(), itemId, StringComparison.Ordinal)) {
+                i++;
+                continue;
+            }
+
+            int consumed = Mathf.Min(item.Count, remaining);
+            item.Count -= consumed;
+            remaining -= consumed;
+            if (item.Count > 0) {
+                SetSlotItem(i, item);
+                i++;
+            }
+            else {
+                RemoveSlotOnServer(i);
+            }
+        }
+
+        return remaining == 0;
+    }
 
     public override void OnNetworkSpawn() {
         slots.OnListChanged += HandleSlotsChanged;
@@ -482,11 +533,12 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     private void InitializeStartingInventory() {
-        AddStartingItem(slotIndex: 0, itemId: ArrowId, count: 3);
+        AddStartingItem(slotIndex: 0, itemId: BowId, count: 1);
         AddStartingItem(slotIndex: 1, itemId: AxeId, count: 1, attackSpeedAttachmentId: AttackSpeedId);
         AddStartingItem(slotIndex: 2, itemId: SickleId, count: 1);
         AddStartingItem(slotIndex: 3, itemId: SwordId, count: 1);
-        AddStartingItem(slotIndex: 4, itemId: AttackSpeedId, count: 1);
+        AddStartingItem(slotIndex: 4, itemId: ArrowId, count: 10);
+        AddStartingItem(slotIndex: 5, itemId: AttackSpeedId, count: 1);
 
         Debug.Log($"[PlayerInventory] Server initialized client {OwnerClientId}: {BuildInventorySummary()}", this);
     }
