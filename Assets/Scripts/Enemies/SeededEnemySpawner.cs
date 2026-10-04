@@ -25,7 +25,7 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     [Header("World Query")]
     [SerializeField] private int worldSize = 1000;
-    [SerializeField] private float biomeScale = 0.03f;
+    [SerializeField] private float biomeScale = 0.006f;
     [SerializeField] private Vector3 spawnCenter = new Vector3(0f, 5f, 10f);
     [SerializeField] private float minimumDistanceFromSpawnCenter = 15f;
     [SerializeField] private int attemptsPerEnemy = 256;

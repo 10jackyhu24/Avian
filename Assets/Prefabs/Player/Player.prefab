@@ -9,8 +9,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 3116012522193200846}
-  - component: {fileID: 1657285989965971243}
   - component: {fileID: 8588243383838930314}
+  - component: {fileID: -6213498123746500012}
   - component: {fileID: 393711709446370195}
   - component: {fileID: 5965986747885414584}
   - component: {fileID: -2242094449183278105}
@@ -21,6 +21,7 @@ GameObject:
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
   - component: {fileID: -3278912345678901234}
+  - component: {fileID: 3385117832603171593}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -44,29 +45,6 @@ Transform:
   - {fileID: 8526152859912152380}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!136 &1657285989965971243
-CapsuleCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 386513580500606536}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.29
-  m_Height: 0
-  m_Direction: 1
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!143 &8588243383838930314
 CharacterController:
   m_ObjectHideFlags: 0
@@ -85,12 +63,33 @@ CharacterController:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Height: 0.63
-  m_Radius: 0.24
+  m_Height: 0.42
+  m_Radius: 0.11
   m_SlopeLimit: 45
   m_StepOffset: 0.3
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!65 &-6213498123746500012
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 1
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.22, y: 0.42, z: 0.22}
   m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &393711709446370195
 MonoBehaviour:
@@ -104,7 +103,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 971165633
+  GlobalObjectIdHash: 1140519983
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -138,11 +137,16 @@ MonoBehaviour:
   respawnDelaySeconds: 2
   combatController: {fileID: 0}
   unarmedAttackData: {fileID: 11400000, guid: c0a1fd7924d3c164cb97249b6177e0f9, type: 2}
+  attackRangeFillColor: {r: 1, g: 0.25, b: 0.05, a: 0.2}
+  attackRangeOutlineColor: {r: 1, g: 0.4, b: 0.05, a: 0.9}
+  attackRangeSegments: 32
   weaponGroundHeight: 0.08
   weaponHandlePivot: {x: 0.15, y: 0.15}
   weaponFlipX: 1
   weaponPlanarAngle: 135
-  healthLabelOffset: {x: 0, y: 2.2, z: 0}
+  weaponHitHeight: 0.5
+  weaponSweepStepDegrees: 4
+  healthLabelOffset: {x: 0, y: 1.5, z: 0}
 --- !u!114 &-2242094449183278105
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -380,6 +384,34 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   ShowTopMostFoldoutHeaderGroup: 1
+  maxCapacity: 100
+--- !u!54 &3385117832603171593
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  serializedVersion: 5
+  m_Mass: 1
+  m_LinearDamping: 0
+  m_AngularDamping: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 0
+  m_Constraints: 0
+  m_CollisionDetection: 0
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0

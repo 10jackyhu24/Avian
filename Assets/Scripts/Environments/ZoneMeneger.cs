@@ -41,7 +41,7 @@ public class ZoneManager : MonoBehaviour
             currentRadius = initialRadius;
 
             isInitialized = true;
-            Debug.LogError($"[ZoneManager] Get World Center. Center Coordinate：{worldCenter}，Initial Radius：{initialRadius}");
+            Debug.Log($"[ZoneManager] Get World Center. Center Coordinate：{worldCenter}，Initial Radius：{initialRadius}");
         }
         else
         {
