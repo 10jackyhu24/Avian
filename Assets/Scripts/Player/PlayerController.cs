@@ -107,6 +107,10 @@ public class PlayerController : NetworkBehaviour {
         new Dictionary<ulong, Coroutine>();
     private readonly Dictionary<ulong, float> projectileVisualSpawnTimes =
         new Dictionary<ulong, float>();
+    private readonly Dictionary<ulong, float> projectileVisualConfirmedTimes =
+        new Dictionary<ulong, float>();
+    private readonly Dictionary<ulong, int> projectileVisualSpawnFrames =
+        new Dictionary<ulong, int>();
     private ulong nextLocalProjectileId;
     private Vector3 spawnPosition;
     private Coroutine respawnCoroutine;
@@ -986,6 +990,13 @@ public class PlayerController : NetworkBehaviour {
         );
     }
 
+    private Vector3 GetArrowSpawnPosition() {
+        // The bow itself is displayed beside the player, but the arrow's path
+        // begins at the player. A forward offset shifts the start down-screen
+        // whenever the player aims toward the camera.
+        return GetRangedAimOrigin();
+    }
+
     private ulong SpawnPredictedArrowProjectile(
         AttackData attackData,
         Vector3 attackDirection
@@ -1000,8 +1011,7 @@ public class PlayerController : NetworkBehaviour {
         direction = direction.sqrMagnitude > 0.0001f
             ? direction.normalized
             : Vector3.forward;
-        Vector3 startPosition = GetRangedAimOrigin() +
-            direction * Mathf.Max(0f, attackData.effectForwardOffset);
+        Vector3 startPosition = GetArrowSpawnPosition();
 
         CreateArrowProjectileVisual(
             projectileId,
@@ -1030,8 +1040,7 @@ public class PlayerController : NetworkBehaviour {
         float radius = Mathf.Max(0.01f, attackData.projectileRadius);
         // Keep the projectile on the same center-to-cursor line used for aiming.
         // The bow may remain beside the player, but it must not offset the shot path.
-        Vector3 position = GetRangedAimOrigin() +
-            direction * Mathf.Max(0f, attackData.effectForwardOffset);
+        Vector3 position = GetArrowSpawnPosition();
         ulong projectileId = predictedProjectileId;
         if (projectileId == 0) {
             projectileId = ++nextLocalProjectileId;
@@ -1042,7 +1051,6 @@ public class PlayerController : NetworkBehaviour {
 
         SpawnArrowProjectileClientRpc(
             projectileId,
-            position,
             direction,
             speed,
             maxDistance,
@@ -1150,7 +1158,6 @@ public class PlayerController : NetworkBehaviour {
     [ClientRpc]
     private void SpawnArrowProjectileClientRpc(
         ulong projectileId,
-        Vector3 startPosition,
         Vector3 direction,
         float speed,
         float maxDistance,
@@ -1162,12 +1169,13 @@ public class PlayerController : NetworkBehaviour {
         // missing. Other clients create their visual from this server message.
         if (IsOwner && activeProjectileVisuals.TryGetValue(projectileId, out GameObject existingVisual) &&
             existingVisual != null) {
+            projectileVisualConfirmedTimes[projectileId] = Time.time;
             return;
         }
 
         CreateArrowProjectileVisual(
             projectileId,
-            startPosition,
+            GetArrowSpawnPosition(),
             direction,
             speed,
             maxDistance,
@@ -1175,6 +1183,9 @@ public class PlayerController : NetworkBehaviour {
             trailWidth,
             trailDuration
         );
+        if (activeProjectileVisuals.ContainsKey(projectileId)) {
+            projectileVisualConfirmedTimes[projectileId] = Time.time;
+        }
     }
 
     private void CreateArrowProjectileVisual(
@@ -1193,7 +1204,7 @@ public class PlayerController : NetworkBehaviour {
         if (ItemManager.TryGetItemById(ArrowProjectileItemId, out ItemData arrowItem)) {
             arrowObject = arrowItem.itemObject;
         }
-        if (arrowObject == null) {
+        if (arrowObject == null || arrowObject.icon == null) {
             // This also covers the first shot during scene startup, before the item
             // registry has finished building on a client.
             arrowObject = Resources.Load<ItemObject>("Items/Arrow");
@@ -1208,6 +1219,9 @@ public class PlayerController : NetworkBehaviour {
         };
         projectileVisual.transform.position = startPosition;
         projectileVisual.transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
+        // Keep the launch point attached until its first rendered frame. On a
+        // host, player movement can still run later in the same Update.
+        projectileVisual.transform.SetParent(transform, true);
 
         GameObject spriteObject = new GameObject("Sprite");
         spriteObject.transform.SetParent(projectileVisual.transform, false);
@@ -1251,6 +1265,7 @@ public class PlayerController : NetworkBehaviour {
 
         activeProjectileVisuals[projectileId] = projectileVisual;
         projectileVisualSpawnTimes[projectileId] = Time.time;
+        projectileVisualSpawnFrames[projectileId] = Time.frameCount;
         Coroutine routine = StartCoroutine(ArrowProjectileVisualRoutine(
             projectileId,
             projectileVisual,
@@ -1268,6 +1283,13 @@ public class PlayerController : NetworkBehaviour {
         float speed,
         float maxDistance
     ) {
+        // StartCoroutine runs up to its first yield immediately. Draw one frame
+        // at the player's position before detaching and advancing the arrow.
+        yield return null;
+        if (projectileVisual != null) {
+            projectileVisual.transform.SetParent(null, true);
+        }
+
         float distanceTravelled = 0f;
         while (projectileVisual != null && distanceTravelled < maxDistance) {
             float stepDistance = Mathf.Min(
@@ -1351,14 +1373,60 @@ public class PlayerController : NetworkBehaviour {
             movementRoutine != null) {
             StopCoroutine(movementRoutine);
         }
+
+        if (projectileVisualSpawnFrames.TryGetValue(projectileId, out int spawnFrame) &&
+            Time.frameCount == spawnFrame) {
+            // A nearby hit can be reported before this client renders the spawn.
+            // Preserve the first frame at the player, then show the impact.
+            projectileVisualCoroutines[projectileId] = StartCoroutine(
+                FinishArrowProjectileAfterFirstFrame(
+                    projectileId,
+                    finalPosition,
+                    ensureMinimumVisibleTime
+                )
+            );
+            return;
+        }
+
+        CompleteArrowProjectileVisual(projectileId, finalPosition, ensureMinimumVisibleTime);
+    }
+
+    private IEnumerator FinishArrowProjectileAfterFirstFrame(
+        ulong projectileId,
+        Vector3 finalPosition,
+        bool ensureMinimumVisibleTime
+    ) {
+        yield return null;
+        CompleteArrowProjectileVisual(projectileId, finalPosition, ensureMinimumVisibleTime);
+    }
+
+    private void CompleteArrowProjectileVisual(
+        ulong projectileId,
+        Vector3 finalPosition,
+        bool ensureMinimumVisibleTime
+    ) {
+        if (!activeProjectileVisuals.TryGetValue(projectileId, out GameObject visual) ||
+            visual == null) {
+            RemoveProjectileVisual(projectileId, stopCoroutine: false);
+            return;
+        }
+
+        visual.transform.SetParent(null, true);
         visual.transform.position = finalPosition;
 
         float remainingVisibleTime = 0f;
-        if (ensureMinimumVisibleTime &&
-            projectileVisualSpawnTimes.TryGetValue(projectileId, out float spawnedAt)) {
+        if (ensureMinimumVisibleTime) {
+            float visibleSince = projectileVisualConfirmedTimes.TryGetValue(
+                projectileId,
+                out float confirmedAt
+            )
+                ? confirmedAt
+                : projectileVisualSpawnTimes.TryGetValue(projectileId, out float spawnedAt)
+                    ? spawnedAt
+                    : Time.time;
             remainingVisibleTime = Mathf.Max(
                 0f,
-                minimumArrowVisibleDuration - (Time.time - spawnedAt)
+                minimumArrowVisibleDuration - (Time.time - visibleSince)
             );
         }
 
@@ -1391,6 +1459,8 @@ public class PlayerController : NetworkBehaviour {
         activeProjectileVisuals.Remove(projectileId);
         projectileVisualCoroutines.Remove(projectileId);
         projectileVisualSpawnTimes.Remove(projectileId);
+        projectileVisualConfirmedTimes.Remove(projectileId);
+        projectileVisualSpawnFrames.Remove(projectileId);
     }
 
     private void ClearProjectileVisuals() {
@@ -1407,6 +1477,8 @@ public class PlayerController : NetworkBehaviour {
         projectileVisualCoroutines.Clear();
         activeProjectileVisuals.Clear();
         projectileVisualSpawnTimes.Clear();
+        projectileVisualConfirmedTimes.Clear();
+        projectileVisualSpawnFrames.Clear();
     }
 
     private IEnumerator WeaponDamageSweepRoutine(
