@@ -21,7 +21,6 @@ GameObject:
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
   - component: {fileID: -3278912345678901234}
-  - component: {fileID: 3385117832603171593}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -103,7 +102,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d5a57f767e5e46a458fc5d3c628d0cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Unity.Netcode.Runtime::Unity.Netcode.NetworkObject
-  GlobalObjectIdHash: 1140519983
+  GlobalObjectIdHash: 971165633
   InScenePlacedSourceGlobalObjectIdHash: 0
   DeferredDespawnTick: 0
   Ownership: 1
@@ -138,14 +137,20 @@ MonoBehaviour:
   combatController: {fileID: 0}
   unarmedAttackData: {fileID: 11400000, guid: c0a1fd7924d3c164cb97249b6177e0f9, type: 2}
   attackRangeFillColor: {r: 1, g: 0.25, b: 0.05, a: 0.2}
-  attackRangeOutlineColor: {r: 1, g: 0.4, b: 0.05, a: 0.9}
   attackRangeSegments: 32
+  attackPreviewHeight: 0.12
   weaponGroundHeight: 0.08
   weaponHandlePivot: {x: 0.15, y: 0.15}
   weaponFlipX: 1
   weaponPlanarAngle: 135
   weaponHitHeight: 0.5
   weaponSweepStepDegrees: 4
+  bowSideOffset: 0.55
+  bowForwardOffset: 0.25
+  bowHeightOffset: 0
+  bowPlanarAngle: -135
+  arrowTrailColor: {r: 1, g: 0.75, b: 0.15, a: 0.95}
+  minimumArrowVisibleDuration: 0.2
   healthLabelOffset: {x: 0, y: 1.5, z: 0}
 --- !u!114 &-2242094449183278105
 MonoBehaviour:
@@ -385,33 +390,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   ShowTopMostFoldoutHeaderGroup: 1
   maxCapacity: 100
---- !u!54 &3385117832603171593
-Rigidbody:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 386513580500606536}
-  serializedVersion: 5
-  m_Mass: 1
-  m_LinearDamping: 0
-  m_AngularDamping: 0.05
-  m_CenterOfMass: {x: 0, y: 0, z: 0}
-  m_InertiaTensor: {x: 1, y: 1, z: 1}
-  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ImplicitCom: 1
-  m_ImplicitTensor: 1
-  m_UseGravity: 1
-  m_IsKinematic: 0
-  m_Interpolate: 0
-  m_Constraints: 0
-  m_CollisionDetection: 0
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0
