@@ -9,15 +9,16 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2580887161878038996}
+  - component: {fileID: 5269795760485386085}
   - component: {fileID: 6141537312125776872}
-  - component: {fileID: 4814956471844642049}
   - component: {fileID: 869050399589122529}
   - component: {fileID: 3756386315141669475}
   - component: {fileID: 7400890116226977703}
-  - component: {fileID: 6988774309905714176}
   - component: {fileID: 8525829744740857856}
+  - component: {fileID: 6988774309905714176}
   - component: {fileID: 2134342598931846410}
   - component: {fileID: 2134342598931846411}
+  - component: {fileID: 1798369720388031348}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Untagged
@@ -40,15 +41,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!33 &6141537312125776872
-MeshFilter:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8603952728123809946}
-  m_Mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
---- !u!23 &4814956471844642049
+--- !u!23 &5269795760485386085
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -73,7 +66,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a8a09f5711d4bc44c8d726b82a8de0f3, type: 2}
+  - {fileID: 0}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -97,6 +90,14 @@ MeshRenderer:
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &6141537312125776872
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8603952728123809946}
+  m_Mesh: {fileID: 10208, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!136 &869050399589122529
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -165,31 +166,17 @@ MonoBehaviour:
   chaseSpeed: 4.5
   chaseDuration: 5
   chaseCooldown: 3
+  targetRefreshInterval: 0.25
   rotationSpeed: 8
   gravity: -20
+  knockbackDistance: 3
+  knockbackDuration: 1
+  firstStageDistanceShare: 0.6
+  firstStageTimeShare: 0.35
+  firstStageLiftHeight: 0.5
   disableWhenOutOfView: 1
   visibilityBoundsSize: {x: 2, y: 3, z: 2}
   visibilityCheckInterval: 0.2
---- !u!114 &6988774309905714176
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8603952728123809946}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2037496dbc98499bb32665c918a14003, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthDrop
-  maxHealth: 30
-  healthBarOffset: {x: 0, y: 1.5, z: 0}
-  coinPickupPrefab: {fileID: 8479608651360194323, guid: 04708eb1e12619140aa03123d81414c8,
-    type: 3}
-  minCoinsDropped: 1
-  maxCoinsDropped: 3
-  dropScatterRadius: 1.25
-  dropHeightOffset: 0.75
 --- !u!114 &8525829744740857856
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -215,6 +202,27 @@ MonoBehaviour:
   AutoObjectParentSync: 1
   SyncOwnerTransformWhenParented: 1
   AllowOwnerToParent: 0
+--- !u!114 &6988774309905714176
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8603952728123809946}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2037496dbc98499bb32665c918a14003, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyHealthDrop
+  ShowTopMostFoldoutHeaderGroup: 1
+  maxHealth: 30
+  healthBarOffset: {x: 0, y: 1.5, z: 0}
+  coinPickupPrefab: {fileID: 8479608651360194323, guid: 04708eb1e12619140aa03123d81414c8,
+    type: 3}
+  minCoinsDropped: 1
+  maxCoinsDropped: 3
+  dropScatterRadius: 1.25
+  dropHeightOffset: 0.75
 --- !u!114 &2134342598931846410
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -278,3 +286,26 @@ MonoBehaviour:
   displayName: Enemy
   icon: {fileID: 0}
   discoveryRadius: 50
+--- !u!114 &1798369720388031348
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8603952728123809946}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f3c01dab00e768a40aad7f2dc91be12c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyAttackController
+  ShowTopMostFoldoutHeaderGroup: 1
+  attackData: {fileID: 0}
+  defaultDamage: 10
+  defaultRadius: 2
+  defaultCooldown: 1
+  defaultWindup: 0.3
+  hitStunDuration: 0.4
+  defaultCenterOffset: {x: 0, y: 1, z: 0}
+  warningColor: {r: 1, g: 0.15, b: 0.05, a: 0.35}
+  warningSegments: 32
+  warningHeight: 0.12

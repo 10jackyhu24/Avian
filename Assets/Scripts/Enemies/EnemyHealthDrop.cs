@@ -60,7 +60,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
         WorldHealthBarGUI.Remove(this);
     }
 
-    public void TakeDamage(float damage, ulong attackerClientId) {
+    public void TakeDamage(float damage, ulong attackerClientId, Vector3? attackerPosition = null) {
         if (!CanServerTakeDamage() || isDead || damage <= 0) {
             return;
         }
@@ -70,7 +70,11 @@ public class EnemyHealthDrop : NetworkBehaviour {
 
         if (newHealth <= 0f) {
             Die(attackerClientId);
+            return;
         }
+
+        GetComponent<EnemyAttackController>()?.InterruptAttack();
+        GetComponent<EnemyController>()?.ApplyKnockback(attackerPosition ?? transform.position - transform.forward);
     }
 
     private void SetCurrentHealth(float value) {
