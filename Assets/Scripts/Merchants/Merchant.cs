@@ -25,6 +25,10 @@ public sealed class Merchant : NetworkBehaviour {
     public override void OnNetworkSpawn() {
         CreatePlaceholderVisual();
 
+        if (IsClient) {
+            MerchantMenu.EnsureExists();
+        }
+
         if (definition == null) {
             Debug.LogError("[Merchant] Merchant definition is missing.", this);
             return;
@@ -50,47 +54,53 @@ public sealed class Merchant : NetworkBehaviour {
         }
 
         if (!offer.unlimitedStock) {
-            RejectPurchase(clientId, "limited stock is not implemented yet");
+            RejectPurchase(clientId, "Limited stock is not implemented yet");
             return;
         }
 
         if (!NetworkManager.ConnectedClients.TryGetValue(clientId, out NetworkClient client) ||
             client.PlayerObject == null) {
-            RejectPurchase(clientId, "player object was not found");
+            RejectPurchase(clientId, "Player object was not found");
             return;
         }
 
         float distanceSquared = (client.PlayerObject.transform.position - transform.position).sqrMagnitude;
         if (distanceSquared > InteractionRadius * InteractionRadius) {
-            RejectPurchase(clientId, "player is too far away");
+            RejectPurchase(clientId, "You are too far away");
             return;
         }
 
         if (!client.PlayerObject.TryGetComponent(out PlayerInventory inventory) ||
             !client.PlayerObject.TryGetComponent(out PlayerCurrency currency)) {
-            RejectPurchase(clientId, "player inventory or currency was not found");
+            RejectPurchase(clientId, "Player inventory or currency was not found");
             return;
         }
 
         if (!inventory.ServerCanAddItem(itemId)) {
-            RejectPurchase(clientId, "inventory does not have enough capacity");
+            RejectPurchase(clientId, "Inventory is full");
             return;
         }
 
         if (offer.buyPrice > 0 && !currency.ServerTrySpendCoins(offer.buyPrice)) {
-            RejectPurchase(clientId, "not enough coins");
+            RejectPurchase(clientId, "Not enough coins");
             return;
         }
 
         if (!inventory.ServerTryAddItem(itemId)) {
             currency.ServerAddCoins(offer.buyPrice);
-            RejectPurchase(clientId, "item could not be added");
+            RejectPurchase(clientId, "Item could not be added");
             return;
         }
 
         Debug.Log(
             $"[Merchant] Client {clientId} bought {itemId} for {offer.buyPrice} coin(s).",
             this
+        );
+
+        SendPurchaseResult(
+            clientId,
+            succeeded: true,
+            $"Purchased {GetItemDisplayName(itemId)}."
         );
     }
 
@@ -115,6 +125,33 @@ public sealed class Merchant : NetworkBehaviour {
 
     private void RejectPurchase(ulong clientId, string reason) {
         Debug.LogWarning($"[Merchant] Rejected purchase from client {clientId}: {reason}.", this);
+        SendPurchaseResult(clientId, succeeded: false, $"{reason}.");
+    }
+
+    private void SendPurchaseResult(ulong clientId, bool succeeded, string message) {
+        PurchaseResultRpc(
+            succeeded,
+            new FixedString128Bytes(message),
+            RpcTarget.Single(clientId, RpcTargetUse.Temp)
+        );
+    }
+
+    [Rpc(SendTo.SpecifiedInParams)]
+    private void PurchaseResultRpc(
+        bool succeeded,
+        FixedString128Bytes message,
+        RpcParams rpcParams = default) {
+        MerchantMenu.ShowPurchaseResult(message.ToString(), succeeded);
+    }
+
+    private static string GetItemDisplayName(string itemId) {
+        if (ItemManager.TryGetItemById(itemId, out ItemData itemData) &&
+            itemData.itemObject != null &&
+            !string.IsNullOrWhiteSpace(itemData.itemObject.itemName)) {
+            return itemData.itemObject.itemName;
+        }
+
+        return itemId;
     }
 
     private void CreatePlaceholderVisual() {

@@ -247,7 +247,11 @@ public class PlayerController : NetworkBehaviour {
         bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
         InputAction attackAction = inputActions.Player.Attack;
 
-        if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen || !IsAlive) {
+        if (!GameState.isPlaying ||
+            PauseMenu.isOpen ||
+            BagMenu.IsOpen ||
+            MerchantMenu.IsOpen ||
+            !IsAlive) {
             SubmitMovementServerRpc(0f, 0f, false, false);
             CancelPreparedAttack();
             return;
