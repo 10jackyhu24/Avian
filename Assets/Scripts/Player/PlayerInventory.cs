@@ -88,6 +88,28 @@ public class PlayerInventory : NetworkBehaviour {
         return true;
     }
 
+    public bool ServerTryRemoveItem(
+        ulong instanceId,
+        out InventoryItemState removedItem) {
+        removedItem = InventoryItemState.Empty;
+        if (!IsServer || instanceId == 0) {
+            return false;
+        }
+
+        for (int i = 0; i < slots.Count; i++) {
+            if (slots[i].Item.InstanceId != instanceId) {
+                continue;
+            }
+
+            removedItem = slots[i].Item;
+            RemoveSlotOnServer(i);
+            GetComponent<PlayerController>()?.UnequipRemovedItemOnServer(instanceId);
+            return true;
+        }
+
+        return false;
+    }
+
     public bool TryConsumeItemOnServer(string itemId, int amount = 1) {
         if (!IsServer || string.IsNullOrWhiteSpace(itemId) || amount <= 0 ||
             GetItemCount(itemId) < amount) {

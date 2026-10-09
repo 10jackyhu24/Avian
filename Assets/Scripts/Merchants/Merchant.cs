@@ -22,6 +22,14 @@ public sealed class Merchant : NetworkBehaviour {
         RequestPurchaseRpc(new FixedString64Bytes(itemId));
     }
 
+    public void RequestSale(ulong instanceId) {
+        if (!IsSpawned || !IsClient || instanceId == 0) {
+            return;
+        }
+
+        RequestSaleRpc(instanceId);
+    }
+
     public override void OnNetworkSpawn() {
         CreatePlaceholderVisual();
 
@@ -97,10 +105,69 @@ public sealed class Merchant : NetworkBehaviour {
             this
         );
 
-        SendPurchaseResult(
+        SendTransactionResult(
             clientId,
             succeeded: true,
             $"Purchased {GetItemDisplayName(itemId)}."
+        );
+    }
+
+    [Rpc(SendTo.Server, InvokePermission = RpcInvokePermission.Everyone)]
+    private void RequestSaleRpc(ulong instanceId, RpcParams rpcParams = default) {
+        ulong clientId = rpcParams.Receive.SenderClientId;
+
+        if (!NetworkManager.ConnectedClients.TryGetValue(clientId, out NetworkClient client) ||
+            client.PlayerObject == null) {
+            RejectSale(clientId, "Player object was not found");
+            return;
+        }
+
+        float distanceSquared = (client.PlayerObject.transform.position - transform.position).sqrMagnitude;
+        if (distanceSquared > InteractionRadius * InteractionRadius) {
+            RejectSale(clientId, "You are too far away");
+            return;
+        }
+
+        if (!client.PlayerObject.TryGetComponent(out PlayerInventory inventory) ||
+            !client.PlayerObject.TryGetComponent(out PlayerCurrency currency)) {
+            RejectSale(clientId, "Player inventory or currency was not found");
+            return;
+        }
+
+        if (!inventory.TryGetItem(instanceId, out InventoryItemState item)) {
+            RejectSale(clientId, "Item is no longer available");
+            return;
+        }
+
+        string itemId = item.ItemId.ToString();
+        if (!TryGetPurchaseOffer(itemId, out MerchantOffer offer)) {
+            RejectSale(clientId, "Merchant does not buy this item");
+            return;
+        }
+
+        if (HasAttachments(item)) {
+            RejectSale(clientId, "Remove attachments before selling this weapon");
+            return;
+        }
+
+        if (!inventory.ServerTryRemoveItem(instanceId, out InventoryItemState removedItem)) {
+            RejectSale(clientId, "Item could not be removed");
+            return;
+        }
+
+        int coinValue = offer.sellPrice * removedItem.Count;
+        currency.ServerAddCoins(coinValue);
+
+        Debug.Log(
+            $"[Merchant] Client {clientId} sold {itemId} x{removedItem.Count} " +
+            $"for {coinValue} coin(s).",
+            this
+        );
+
+        SendTransactionResult(
+            clientId,
+            succeeded: true,
+            $"Sold {GetItemDisplayName(itemId)} for {coinValue} coins."
         );
     }
 
@@ -123,13 +190,43 @@ public sealed class Merchant : NetworkBehaviour {
         return false;
     }
 
-    private void RejectPurchase(ulong clientId, string reason) {
-        Debug.LogWarning($"[Merchant] Rejected purchase from client {clientId}: {reason}.", this);
-        SendPurchaseResult(clientId, succeeded: false, $"{reason}.");
+    private bool TryGetPurchaseOffer(string itemId, out MerchantOffer matchingOffer) {
+        matchingOffer = null;
+        if (definition == null || definition.offers == null) {
+            return false;
+        }
+
+        foreach (MerchantOffer offer in definition.offers) {
+            if (offer != null &&
+                offer.merchantBuysThisItem &&
+                offer.sellPrice >= 0 &&
+                string.Equals(offer.itemId, itemId, StringComparison.Ordinal)) {
+                matchingOffer = offer;
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private void SendPurchaseResult(ulong clientId, bool succeeded, string message) {
-        PurchaseResultRpc(
+    private static bool HasAttachments(InventoryItemState item) {
+        return item.AttackSpeedAttachmentId.Length > 0 ||
+               item.DamageBonusAttachmentId.Length > 0 ||
+               item.CriticalRateAttachmentId.Length > 0;
+    }
+
+    private void RejectPurchase(ulong clientId, string reason) {
+        Debug.LogWarning($"[Merchant] Rejected purchase from client {clientId}: {reason}.", this);
+        SendTransactionResult(clientId, succeeded: false, $"{reason}.");
+    }
+
+    private void RejectSale(ulong clientId, string reason) {
+        Debug.LogWarning($"[Merchant] Rejected sale from client {clientId}: {reason}.", this);
+        SendTransactionResult(clientId, succeeded: false, $"{reason}.");
+    }
+
+    private void SendTransactionResult(ulong clientId, bool succeeded, string message) {
+        TransactionResultRpc(
             succeeded,
             new FixedString128Bytes(message),
             RpcTarget.Single(clientId, RpcTargetUse.Temp)
@@ -137,11 +234,11 @@ public sealed class Merchant : NetworkBehaviour {
     }
 
     [Rpc(SendTo.SpecifiedInParams)]
-    private void PurchaseResultRpc(
+    private void TransactionResultRpc(
         bool succeeded,
         FixedString128Bytes message,
         RpcParams rpcParams = default) {
-        MerchantMenu.ShowPurchaseResult(message.ToString(), succeeded);
+        MerchantMenu.ShowTransactionResult(message.ToString(), succeeded);
     }
 
     private static string GetItemDisplayName(string itemId) {

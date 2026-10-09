@@ -2139,6 +2139,16 @@ public class PlayerController : NetworkBehaviour {
         Debug.Log($"[Combat] Client {OwnerClientId} dropped its equipped Axe; unequipping.", this);
     }
 
+    public void UnequipRemovedItemOnServer(ulong removedInstanceId) {
+        if (!IsServer || selectedItemInstanceId != removedInstanceId) {
+            return;
+        }
+
+        ClearEquippedWeapon();
+        ClearEquippedWeaponClientRpc();
+        Debug.Log($"[Combat] Client {OwnerClientId} sold its equipped weapon; unequipping.", this);
+    }
+
     [ClientRpc]
     private void ClearEquippedWeaponClientRpc() {
         if (IsOwner) {

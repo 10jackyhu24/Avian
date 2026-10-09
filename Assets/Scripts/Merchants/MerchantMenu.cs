@@ -11,6 +11,7 @@ public sealed class MerchantMenu : MonoBehaviour {
 
     private GameInput inputActions;
     private Merchant currentMerchant;
+    private PlayerInventory localInventory;
 
     private GameObject mainPanel;
     private GameObject buyPanel;
@@ -19,6 +20,7 @@ public sealed class MerchantMenu : MonoBehaviour {
     private TMP_Text titleText;
     private TMP_Text statusText;
     private Button[] offerButtons;
+    private Button[] sellItemButtons;
 
     public static bool IsOpen => instance != null && instance.gameObject.activeSelf;
 
@@ -48,7 +50,7 @@ public sealed class MerchantMenu : MonoBehaviour {
         return true;
     }
 
-    public static void ShowPurchaseResult(string message, bool succeeded) {
+    public static void ShowTransactionResult(string message, bool succeeded) {
         if (instance?.statusText == null) {
             return;
         }
@@ -85,6 +87,7 @@ public sealed class MerchantMenu : MonoBehaviour {
     }
 
     private void OnDestroy() {
+        UnbindLocalInventory();
         OptionsMenu.BindingOverridesChanged -= ReloadBindings;
 
         if (inputActions != null) {
@@ -104,12 +107,18 @@ public sealed class MerchantMenu : MonoBehaviour {
         sellPanel = transform.Find("SellPanel")?.gameObject;
         talkPanel = transform.Find("TalkPanel")?.gameObject;
         titleText = transform.Find("TextMeshPro_Title")?.GetComponent<TMP_Text>();
-        statusText = buyPanel?.transform.Find("TextMeshPro_Status")?.GetComponent<TMP_Text>();
+        statusText = transform.Find("TextMeshPro_Status")?.GetComponent<TMP_Text>();
 
         offerButtons = new[] {
             buyPanel?.transform.Find("OfferButton_1")?.GetComponent<Button>(),
             buyPanel?.transform.Find("OfferButton_2")?.GetComponent<Button>(),
             buyPanel?.transform.Find("OfferButton_3")?.GetComponent<Button>()
+        };
+
+        sellItemButtons = new[] {
+            sellPanel?.transform.Find("SellItemButton_1")?.GetComponent<Button>(),
+            sellPanel?.transform.Find("SellItemButton_2")?.GetComponent<Button>(),
+            sellPanel?.transform.Find("SellItemButton_3")?.GetComponent<Button>()
         };
 
         return mainPanel != null &&
@@ -118,11 +127,12 @@ public sealed class MerchantMenu : MonoBehaviour {
                talkPanel != null &&
                titleText != null &&
                statusText != null &&
-               AllOfferButtonsExist();
+               AllButtonsExist(offerButtons) &&
+               AllButtonsExist(sellItemButtons);
     }
 
-    private bool AllOfferButtonsExist() {
-        foreach (Button button in offerButtons) {
+    private static bool AllButtonsExist(Button[] buttons) {
+        foreach (Button button in buttons) {
             if (button == null) {
                 return false;
             }
@@ -136,7 +146,7 @@ public sealed class MerchantMenu : MonoBehaviour {
 
         Button sellButton = mainPanel.transform.Find("Button_Sell").GetComponent<Button>();
         Button talkButton = mainPanel.transform.Find("Button_Talk").GetComponent<Button>();
-        sellButton.interactable = false;
+        sellButton.onClick.AddListener(ShowSellPanel);
         talkButton.interactable = false;
 
         mainPanel.transform.Find("Button_Close").GetComponent<Button>().onClick.AddListener(Close);
@@ -190,6 +200,7 @@ public sealed class MerchantMenu : MonoBehaviour {
 
     private void Open(Merchant merchant) {
         currentMerchant = merchant;
+        BindLocalInventory();
         titleText.text = merchant.Definition.displayName;
         statusText.text = string.Empty;
         PopulateOffers();
@@ -198,6 +209,7 @@ public sealed class MerchantMenu : MonoBehaviour {
     }
 
     private void Close() {
+        UnbindLocalInventory();
         currentMerchant = null;
         gameObject.SetActive(false);
     }
@@ -211,11 +223,17 @@ public sealed class MerchantMenu : MonoBehaviour {
         ShowOnly(buyPanel);
     }
 
+    private void ShowSellPanel() {
+        PopulateSellItems();
+        ShowOnly(sellPanel);
+    }
+
     private void ShowOnly(GameObject visiblePanel) {
         mainPanel.SetActive(visiblePanel == mainPanel);
         buyPanel.SetActive(visiblePanel == buyPanel);
         sellPanel.SetActive(visiblePanel == sellPanel);
         talkPanel.SetActive(visiblePanel == talkPanel);
+        statusText.gameObject.SetActive(visiblePanel == buyPanel || visiblePanel == sellPanel);
     }
 
     private void PopulateOffers() {
@@ -242,6 +260,77 @@ public sealed class MerchantMenu : MonoBehaviour {
             button.gameObject.SetActive(true);
             buttonIndex++;
         }
+    }
+
+    private void PopulateSellItems() {
+        foreach (Button button in sellItemButtons) {
+            button.onClick.RemoveAllListeners();
+            button.interactable = true;
+            button.gameObject.SetActive(false);
+        }
+
+        if (localInventory == null ||
+            currentMerchant?.Definition?.offers == null) {
+            return;
+        }
+
+        int buttonIndex = 0;
+        for (int slotIndex = 0;
+             slotIndex < localInventory.SlotCount && buttonIndex < sellItemButtons.Length;
+             slotIndex++) {
+            if (!localInventory.TryGetSlot(slotIndex, out InventorySlotState slot) || slot.IsEmpty) {
+                continue;
+            }
+
+            string itemId = slot.Item.ItemId.ToString();
+            if (!TryGetMerchantPurchaseOffer(itemId, out MerchantOffer offer)) {
+                continue;
+            }
+
+            string countText = slot.Item.Count > 1 ? $" x{slot.Item.Count}" : string.Empty;
+            Button button = sellItemButtons[buttonIndex];
+            button.GetComponentInChildren<TMP_Text>(true).text =
+                $"{GetItemName(itemId)}{countText} - sell for {offer.sellPrice} coins";
+            ulong instanceId = slot.Item.InstanceId;
+            button.onClick.AddListener(() => currentMerchant?.RequestSale(instanceId));
+            button.gameObject.SetActive(true);
+            buttonIndex++;
+        }
+    }
+
+    private void BindLocalInventory() {
+        UnbindLocalInventory();
+
+        NetworkObject localPlayer = NetworkManager.Singleton?.LocalClient?.PlayerObject;
+        if (localPlayer != null && localPlayer.TryGetComponent(out PlayerInventory inventory)) {
+            localInventory = inventory;
+            localInventory.InventoryChanged += HandleInventoryChanged;
+        }
+    }
+
+    private void UnbindLocalInventory() {
+        if (localInventory != null) {
+            localInventory.InventoryChanged -= HandleInventoryChanged;
+            localInventory = null;
+        }
+    }
+
+    private void HandleInventoryChanged() {
+        if (sellPanel.activeSelf) {
+            PopulateSellItems();
+        }
+    }
+
+    private bool TryGetMerchantPurchaseOffer(string itemId, out MerchantOffer matchingOffer) {
+        matchingOffer = null;
+        foreach (MerchantOffer offer in currentMerchant.Definition.offers) {
+            if (offer != null && offer.merchantBuysThisItem && offer.itemId == itemId) {
+                matchingOffer = offer;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GetItemName(string itemId) {
