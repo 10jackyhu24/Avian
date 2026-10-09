@@ -19,8 +19,12 @@ public sealed class MerchantMenu : MonoBehaviour {
     private GameObject talkPanel;
     private TMP_Text titleText;
     private TMP_Text statusText;
+    private TMP_Text dialogueText;
+    private Image portraitImage;
     private Button[] offerButtons;
     private Button[] sellItemButtons;
+    private Button[] dialogueButtons;
+    private int[] dialogueResponseIndices;
 
     public static bool IsOpen => instance != null && instance.gameObject.activeSelf;
 
@@ -108,6 +112,8 @@ public sealed class MerchantMenu : MonoBehaviour {
         talkPanel = transform.Find("TalkPanel")?.gameObject;
         titleText = transform.Find("TextMeshPro_Title")?.GetComponent<TMP_Text>();
         statusText = transform.Find("TextMeshPro_Status")?.GetComponent<TMP_Text>();
+        portraitImage = transform.Find("MerchantPortrait")?.GetComponent<Image>();
+        dialogueText = talkPanel?.transform.Find("TextMeshPro_Dialogue")?.GetComponent<TMP_Text>();
 
         offerButtons = new[] {
             buyPanel?.transform.Find("OfferButton_1")?.GetComponent<Button>(),
@@ -121,14 +127,23 @@ public sealed class MerchantMenu : MonoBehaviour {
             sellPanel?.transform.Find("SellItemButton_3")?.GetComponent<Button>()
         };
 
+        dialogueButtons = new[] {
+            talkPanel?.transform.Find("DialogueChoiceButton_1")?.GetComponent<Button>(),
+            talkPanel?.transform.Find("DialogueChoiceButton_2")?.GetComponent<Button>(),
+            talkPanel?.transform.Find("DialogueChoiceButton_3")?.GetComponent<Button>()
+        };
+
         return mainPanel != null &&
                buyPanel != null &&
                sellPanel != null &&
                talkPanel != null &&
                titleText != null &&
                statusText != null &&
+               portraitImage != null &&
+               dialogueText != null &&
                AllButtonsExist(offerButtons) &&
-               AllButtonsExist(sellItemButtons);
+               AllButtonsExist(sellItemButtons) &&
+               AllButtonsExist(dialogueButtons);
     }
 
     private static bool AllButtonsExist(Button[] buttons) {
@@ -147,7 +162,7 @@ public sealed class MerchantMenu : MonoBehaviour {
         Button sellButton = mainPanel.transform.Find("Button_Sell").GetComponent<Button>();
         Button talkButton = mainPanel.transform.Find("Button_Talk").GetComponent<Button>();
         sellButton.onClick.AddListener(ShowSellPanel);
-        talkButton.interactable = false;
+        talkButton.onClick.AddListener(ShowTalkPanel);
 
         mainPanel.transform.Find("Button_Close").GetComponent<Button>().onClick.AddListener(Close);
         buyPanel.transform.Find("Button_Back").GetComponent<Button>().onClick.AddListener(ShowMainPanel);
@@ -203,6 +218,8 @@ public sealed class MerchantMenu : MonoBehaviour {
         BindLocalInventory();
         titleText.text = merchant.Definition.displayName;
         statusText.text = string.Empty;
+        portraitImage.sprite = merchant.Definition.portrait;
+        portraitImage.gameObject.SetActive(portraitImage.sprite != null);
         PopulateOffers();
         ShowMainPanel();
         gameObject.SetActive(true);
@@ -226,6 +243,11 @@ public sealed class MerchantMenu : MonoBehaviour {
     private void ShowSellPanel() {
         PopulateSellItems();
         ShowOnly(sellPanel);
+    }
+
+    private void ShowTalkPanel() {
+        PopulateDialogueTopics();
+        ShowOnly(talkPanel);
     }
 
     private void ShowOnly(GameObject visiblePanel) {
@@ -296,6 +318,55 @@ public sealed class MerchantMenu : MonoBehaviour {
             button.gameObject.SetActive(true);
             buttonIndex++;
         }
+    }
+
+    private void PopulateDialogueTopics() {
+        dialogueText.text = currentMerchant?.Definition?.greeting ?? string.Empty;
+
+        foreach (Button button in dialogueButtons) {
+            button.onClick.RemoveAllListeners();
+            button.gameObject.SetActive(false);
+        }
+
+        MerchantDialogueTopic[] topics = currentMerchant?.Definition?.dialogueTopics;
+        if (topics == null) {
+            return;
+        }
+
+        dialogueResponseIndices = new int[topics.Length];
+        int buttonIndex = 0;
+        for (int topicIndex = 0; topicIndex < topics.Length; topicIndex++) {
+            MerchantDialogueTopic topic = topics[topicIndex];
+            if (topic == null ||
+                string.IsNullOrWhiteSpace(topic.buttonText) ||
+                buttonIndex >= dialogueButtons.Length) {
+                continue;
+            }
+
+            Button button = dialogueButtons[buttonIndex];
+            int selectedTopicIndex = topicIndex;
+            button.GetComponentInChildren<TMP_Text>(true).text = topic.buttonText;
+            button.onClick.AddListener(() => ShowNextDialogueResponse(selectedTopicIndex));
+            button.gameObject.SetActive(true);
+            buttonIndex++;
+        }
+    }
+
+    private void ShowNextDialogueResponse(int topicIndex) {
+        MerchantDialogueTopic[] topics = currentMerchant?.Definition?.dialogueTopics;
+        if (topics == null || topicIndex < 0 || topicIndex >= topics.Length) {
+            return;
+        }
+
+        string[] responses = topics[topicIndex].responses;
+        if (responses == null || responses.Length == 0) {
+            dialogueText.text = string.Empty;
+            return;
+        }
+
+        int responseIndex = dialogueResponseIndices[topicIndex];
+        dialogueText.text = responses[responseIndex] ?? string.Empty;
+        dialogueResponseIndices[topicIndex] = (responseIndex + 1) % responses.Length;
     }
 
     private void BindLocalInventory() {

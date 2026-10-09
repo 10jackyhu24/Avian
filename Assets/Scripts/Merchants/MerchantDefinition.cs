@@ -19,6 +19,14 @@ public sealed class MerchantOffer {
     [Min(0)] public int startingStock;
 }
 
+[Serializable]
+public sealed class MerchantDialogueTopic {
+    public string buttonText;
+
+    [TextArea(2, 4)]
+    public string[] responses = Array.Empty<string>();
+}
+
 [CreateAssetMenu(
     fileName = "NewMerchantDefinition",
     menuName = "Merchant/Merchant Definition"
@@ -28,6 +36,7 @@ public sealed class MerchantDefinition : ScriptableObject {
     [Tooltip("Stable identifier used by the server. Do not change after release.")]
     public string merchantId;
     public string displayName;
+    public Sprite portrait;
 
     [TextArea(2, 4)]
     public string greeting;
@@ -38,12 +47,14 @@ public sealed class MerchantDefinition : ScriptableObject {
     [Header("Catalogue")]
     public MerchantOffer[] offers = Array.Empty<MerchantOffer>();
 
+    [Header("Dialogue")]
+    public MerchantDialogueTopic[] dialogueTopics = Array.Empty<MerchantDialogueTopic>();
+
     private void OnValidate() {
         interactionRadius = Mathf.Max(0.1f, interactionRadius);
 
         if (offers == null) {
             offers = Array.Empty<MerchantOffer>();
-            return;
         }
 
         foreach (MerchantOffer offer in offers) {
@@ -54,6 +65,16 @@ public sealed class MerchantDefinition : ScriptableObject {
             offer.buyPrice = Mathf.Max(0, offer.buyPrice);
             offer.sellPrice = Mathf.Max(0, offer.sellPrice);
             offer.startingStock = Mathf.Max(0, offer.startingStock);
+        }
+
+        if (dialogueTopics == null) {
+            dialogueTopics = Array.Empty<MerchantDialogueTopic>();
+        }
+
+        foreach (MerchantDialogueTopic topic in dialogueTopics) {
+            if (topic != null && topic.responses == null) {
+                topic.responses = Array.Empty<string>();
+            }
         }
     }
 }
