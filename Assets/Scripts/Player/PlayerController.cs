@@ -17,7 +17,6 @@ public class PlayerController : NetworkBehaviour {
     [Header("Movement")]
     [SerializeField] private float moveSpeed = 2.5f;
     [SerializeField] private float runSpeedMultiplier = 1.75f;
-    [SerializeField] private float jumpHeight = 1.5f;
     [SerializeField] private float gravity = -20f;
 
     [Header("Health")]
@@ -83,7 +82,6 @@ public class PlayerController : NetworkBehaviour {
     private float moveInputX;
     private float moveInputZ;
     private bool runRequested;
-    private bool jumpRequested;
     private float nextServerAttackTime;
     private float nextLocalAttackTime;
     private double nextAcceptedClientRangedAttackTime = double.NegativeInfinity;
@@ -214,7 +212,6 @@ public class PlayerController : NetworkBehaviour {
         }
 
         MovePlayer();
-        jumpRequested = false;
     }
 
     private void LateUpdate() {
@@ -244,15 +241,10 @@ public class PlayerController : NetworkBehaviour {
     private void SendInputToServer() {
         Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
         bool runPressed = inputActions.Player.Run.IsPressed();
-        bool jumpPressed = Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
         InputAction attackAction = inputActions.Player.Attack;
 
-        if (!GameState.isPlaying ||
-            PauseMenu.isOpen ||
-            BagMenu.IsOpen ||
-            MerchantMenu.IsOpen ||
-            !IsAlive) {
-            SubmitMovementServerRpc(0f, 0f, false, false);
+        if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen || !IsAlive) {
+            SubmitMovementServerRpc(0f, 0f, false);
             CancelPreparedAttack();
             return;
         }
@@ -269,8 +261,7 @@ public class PlayerController : NetworkBehaviour {
         SubmitMovementServerRpc(
             isMovementLocked ? 0f : moveInput.x,
             isMovementLocked ? 0f : moveInput.y,
-            !isMovementLocked && runPressed,
-            !isMovementLocked && jumpPressed
+            !isMovementLocked && runPressed
         );
     }
 
@@ -543,7 +534,7 @@ public class PlayerController : NetworkBehaviour {
     }
 
     [ServerRpc]
-    private void SubmitMovementServerRpc(float horizontal, float vertical, bool runPressed, bool jumpPressed) {
+    private void SubmitMovementServerRpc(float horizontal, float vertical, bool runPressed) {
         if (currentHealth.Value <= 0 || IsAttackMovementLockedOnServer()) {
             StopMovementOnServer();
             return;
@@ -552,7 +543,6 @@ public class PlayerController : NetworkBehaviour {
         moveInputX = Mathf.Clamp(horizontal, -1f, 1f);
         moveInputZ = Mathf.Clamp(vertical, -1f, 1f);
         runRequested = runPressed;
-        jumpRequested |= jumpPressed;
     }
 
     [ServerRpc]
@@ -766,7 +756,7 @@ public class PlayerController : NetworkBehaviour {
         }
 
         string enemyName = enemy.name;
-        enemy.TakeDamage(attackData.damage, OwnerClientId);
+        enemy.TakeDamage(attackData.damage, OwnerClientId, transform.position);
         Debug.Log(
             $"[PlayerController] Client {OwnerClientId} hit enemy {enemyName} for {attackData.damage}.",
             this
@@ -1875,10 +1865,6 @@ public class PlayerController : NetworkBehaviour {
             isFacingLeftVisual.Value = moveInputX < 0f;
         }
 
-        if (jumpRequested && characterController.isGrounded) {
-            verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
-        }
-
         verticalVelocity += gravity * Time.deltaTime;
 
         float currentMoveSpeed = isRunning ? moveSpeed * runSpeedMultiplier : moveSpeed;
@@ -1895,14 +1881,24 @@ public class PlayerController : NetworkBehaviour {
         moveInputX = 0f;
         moveInputZ = 0f;
         runRequested = false;
-        jumpRequested = false;
 
         if (IsServer) {
             isMovingVisual.Value = false;
         }
     }
 
+    public void TakeDamageFromEnemy(float amount) {
+        if (amount <= 0f) {
+            return;
+        }
+        ApplyDamage(amount, "enemy");
+    }
+
     private void TakeDamage(float amount, ulong attackerClientId) {
+        ApplyDamage(amount, $"client {attackerClientId}");
+    }
+
+    private void ApplyDamage(float amount, string attackerName) {
         if (!IsServer || currentHealth.Value <= 0) {
             return;
         }
@@ -1913,7 +1909,7 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        Debug.Log($"[PlayerController] Client {OwnerClientId} was defeated by client {attackerClientId}.", this);
+        Debug.Log($"[PlayerController] Client {OwnerClientId} was defeated by {attackerName}.", this);
 
         if (respawnCoroutine != null) {
             StopCoroutine(respawnCoroutine);
@@ -1931,7 +1927,6 @@ public class PlayerController : NetworkBehaviour {
         moveInputX = 0f;
         moveInputZ = 0f;
         runRequested = false;
-        jumpRequested = false;
         characterController.enabled = true;
 
         currentHealth.Value = maxHealth;

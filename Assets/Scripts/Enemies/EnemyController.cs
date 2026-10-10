@@ -26,12 +26,20 @@ public class EnemyController : MonoBehaviour {
     [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float gravity = -20f;
 
+    [Header("Hit Reaction")]
+    [Min(0f)] [SerializeField] private float knockbackDistance = 0.8f;
+    [Min(0.01f)] [SerializeField] private float knockbackDuration = 0.2f;
+    [Range(0.05f, 0.95f)] [SerializeField] private float firstStageDistanceShare = 0.6f;
+    [Range(0.05f, 0.95f)] [SerializeField] private float firstStageTimeShare = 0.35f;
+    [Min(0f)] [SerializeField] private float firstStageLiftHeight = 0.25f;
+
     [Header("Camera Culling")]
     [SerializeField] private bool disableWhenOutOfView = true;
     [SerializeField] private Vector3 visibilityBoundsSize = new Vector3(2f, 3f, 2f);
     [SerializeField] private float visibilityCheckInterval = 0.2f;
 
     private CharacterController characterController;
+    private EnemyAttackController attackController;
     private Camera mainCamera;
     private Renderer[] cachedRenderers;
     private Collider[] cachedColliders;
@@ -48,9 +56,16 @@ public class EnemyController : MonoBehaviour {
     private float nextTargetSearchTime;
     private float nextVisibilityCheckTime;
     private bool isSuspendedByCamera;
+    private Vector3 knockbackDirection;
+    private int knockbackStage;
+    private float stageRemainingDistance;
+    private float stageRemainingTime;
+    private float secondStageDistance;
+    private float secondStageDuration;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
+        attackController = GetComponent<EnemyAttackController>();
         mainCamera = Camera.main;
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         cachedColliders = GetComponentsInChildren<Collider>(true);
@@ -81,6 +96,11 @@ public class EnemyController : MonoBehaviour {
 
         if (isSuspendedByCamera) return;
         if (!GameState.isPlaying) return;
+
+        if (knockbackStage != 0 && Time.deltaTime > 0f) {
+            UpdateKnockback(Time.deltaTime);
+            return;
+        }
 
         ResolvePlayerTarget();
 
@@ -204,6 +224,22 @@ public class EnemyController : MonoBehaviour {
         Vector3 toPlayer = playerTarget.position - transform.position;
         toPlayer.y = 0f;
 
+        if (attackController != null && attackController.IsAttacking) {
+            MoveCharacter(Vector3.zero, 0f);
+            return;
+        }
+
+        PlayerController targetPlayer = playerTarget.GetComponent<PlayerController>();
+        if (attackController != null && targetPlayer != null &&
+            toPlayer.magnitude <= attackController.AttackRange) {
+            MoveCharacter(Vector3.zero, 0f);
+            attackController.TryAttack(targetPlayer);
+            if (chaseTimer <= 0f) {
+                BeginCooldown();
+            }
+            return;
+        }
+
         if (toPlayer.sqrMagnitude > 0.01f) {
             MoveCharacter(toPlayer.normalized, chaseSpeed);
         } else {
@@ -227,6 +263,70 @@ public class EnemyController : MonoBehaviour {
         cooldownTimer = chaseCooldown;
         patrolPauseTimer = 0f;
         PickNextPatrolPoint();
+    }
+
+    public void ApplyKnockback(Vector3 attackerPosition) {
+        Vector3 direction = transform.position - attackerPosition;
+        direction.y = 0f;
+        knockbackDirection = direction.sqrMagnitude > 0.0001f
+            ? direction.normalized
+            : -transform.forward;
+        knockbackDirection.y = 0f;
+        knockbackDirection.Normalize();
+
+        float totalDistance = Mathf.Max(0f, knockbackDistance);
+        float totalDuration = Mathf.Max(0.01f, knockbackDuration);
+        float distanceShare = Mathf.Clamp(firstStageDistanceShare, 0.05f, 0.95f);
+        float timeShare = Mathf.Clamp(firstStageTimeShare, 0.05f, 0.95f);
+        knockbackStage = 1;
+        stageRemainingDistance = totalDistance * distanceShare;
+        stageRemainingTime = totalDuration * timeShare;
+        secondStageDistance = totalDistance - stageRemainingDistance;
+        secondStageDuration = totalDuration - stageRemainingTime;
+
+        if (firstStageLiftHeight > 0f) {
+            verticalVelocity = Mathf.Sqrt(
+                2f * Mathf.Max(0.01f, -gravity) * firstStageLiftHeight
+            );
+        }
+    }
+
+    private void UpdateKnockback(float deltaTime) {
+        float remainingFrameTime = deltaTime;
+        float horizontalDistance = 0f;
+
+        while (knockbackStage != 0 && remainingFrameTime > 0f) {
+            float stepTime = Mathf.Min(remainingFrameTime, stageRemainingTime);
+            float stepDistance = stageRemainingDistance * stepTime / stageRemainingTime;
+            horizontalDistance += stepDistance;
+            stageRemainingDistance -= stepDistance;
+            stageRemainingTime -= stepTime;
+            remainingFrameTime -= stepTime;
+
+            if (stageRemainingTime > 0.00001f) {
+                break;
+            }
+
+            if (knockbackStage == 1) {
+                knockbackStage = 2;
+                stageRemainingDistance = secondStageDistance;
+                stageRemainingTime = secondStageDuration;
+            } else {
+                knockbackStage = 0;
+            }
+        }
+
+        float verticalDistance = verticalVelocity * deltaTime +
+            0.5f * gravity * deltaTime * deltaTime;
+        verticalVelocity += gravity * deltaTime;
+        CollisionFlags collisions = characterController.Move(
+            knockbackDirection * horizontalDistance + Vector3.up * verticalDistance
+        );
+        if ((collisions & CollisionFlags.Below) != 0 && verticalVelocity < 0f) {
+            verticalVelocity = -2f;
+        } else if ((collisions & CollisionFlags.Above) != 0 && verticalVelocity > 0f) {
+            verticalVelocity = 0f;
+        }
     }
 
     private void PickNextPatrolPoint() {
