@@ -42,6 +42,10 @@ public class PauseMenu : MonoBehaviour {
             return;
         }
 
+        if (MerchantMenu.TryClose()) {
+            return;
+        }
+
         if (menuManager.pageHistoryStack.Count == 0) {
             OpenPauseMenu();
             return;

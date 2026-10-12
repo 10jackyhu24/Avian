@@ -48,6 +48,68 @@ public class PlayerInventory : NetworkBehaviour {
         return requiredCount > 0 && GetItemCount(itemId) >= requiredCount;
     }
 
+    public bool ServerCanAddItem(string itemId, int count = 1) {
+        if (!IsServer ||
+            !TryCreateUnattachedItemState(itemId, count, out InventoryItemState item, out _)) {
+            return false;
+        }
+
+        return CanAddItemOnServer(item);
+    }
+
+    public bool ServerTryAddItem(string itemId, int count = 1) {
+        if (!IsServer ||
+            !TryCreateUnattachedItemState(itemId, count, out InventoryItemState item, out ItemData itemData) ||
+            !CanAddItemOnServer(item)) {
+            return false;
+        }
+
+        int mergeSlotIndex = FindMergeSlot(item, itemData);
+        if (mergeSlotIndex >= 0) {
+            InventoryItemState existingStack = slots[mergeSlotIndex].Item;
+            existingStack.Count += count;
+            SetSlotItem(mergeSlotIndex, existingStack);
+
+            Debug.Log(
+                $"[PlayerInventory] Server added {itemId} x{count} to client {OwnerClientId}; " +
+                $"merged into slot {mergeSlotIndex}.",
+                this
+            );
+            return true;
+        }
+
+        item.InstanceId = AllocateInstanceId();
+        InsertItemOnServer(item, slots.Count);
+        Debug.Log(
+            $"[PlayerInventory] Server added {itemId} x{count} to client {OwnerClientId}; " +
+            $"created slot {slots.Count - 1}.",
+            this
+        );
+        return true;
+    }
+
+    public bool ServerTryRemoveItem(
+        ulong instanceId,
+        out InventoryItemState removedItem) {
+        removedItem = InventoryItemState.Empty;
+        if (!IsServer || instanceId == 0) {
+            return false;
+        }
+
+        for (int i = 0; i < slots.Count; i++) {
+            if (slots[i].Item.InstanceId != instanceId) {
+                continue;
+            }
+
+            removedItem = slots[i].Item;
+            RemoveSlotOnServer(i);
+            GetComponent<PlayerController>()?.UnequipRemovedItemOnServer(instanceId);
+            return true;
+        }
+
+        return false;
+    }
+
     public bool TryConsumeItemOnServer(string itemId, int amount = 1) {
         if (!IsServer || string.IsNullOrWhiteSpace(itemId) || amount <= 0 ||
             GetItemCount(itemId) < amount) {
@@ -423,6 +485,31 @@ public class PlayerInventory : NetworkBehaviour {
         return item.AttackSpeedAttachmentId.Length > 0 ||
                item.DamageBonusAttachmentId.Length > 0 ||
                item.CriticalRateAttachmentId.Length > 0;
+    }
+
+    private static bool TryCreateUnattachedItemState(
+        string itemId,
+        int count,
+        out InventoryItemState item,
+        out ItemData itemData) {
+        item = InventoryItemState.Empty;
+        itemData = ItemData.Empty;
+
+        if (string.IsNullOrWhiteSpace(itemId) || count <= 0 ||
+            !ItemManager.TryGetItemById(itemId, out itemData) ||
+            !itemData.IsValid ||
+            count > Mathf.Max(1, itemData.itemObject.maxCount)) {
+            return false;
+        }
+
+        // A nonzero placeholder makes the state valid for the existing weight and
+        // stacking checks. A real match-scoped ID is allocated only for a new slot.
+        item = new InventoryItemState {
+            InstanceId = 1,
+            ItemId = new FixedString64Bytes(itemId),
+            Count = count
+        };
+        return true;
     }
 
     private void MoveItemOnServer(int sourceIndex, int destinationIndex) {

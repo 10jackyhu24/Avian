@@ -48,6 +48,7 @@ public class PlayerSpawner : NetworkBehaviour {
         DroppedItemStreamer.EnsureExists(NetworkManager.Singleton);
         RegisterPlayerSpawning(NetworkManager.Singleton, playerPrefab, spawnPosition, this);
         SpawnEnemies();
+        MerchantSpawner.TrySpawnOriginMerchant(NetworkManager.Singleton, this);
         Debug.Log("[PlayerSpawner] Server spawn callback registered.", this);
     }
 

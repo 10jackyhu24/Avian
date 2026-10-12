@@ -69,6 +69,7 @@ public class ServerBootstrap : MonoBehaviour {
         );
 
         SpawnEnemies();
+        MerchantSpawner.TrySpawnOriginMerchant(NetworkManager.Singleton, this);
     }
 
     private void OnDestroy() {
