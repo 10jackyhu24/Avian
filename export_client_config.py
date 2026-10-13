@@ -1,4 +1,4 @@
-"""Write a Windows client's runtime API config from the active Avian tunnel."""
+"""Write client API config using a direct URL or the active Avian ngrok tunnel."""
 
 import argparse
 import ipaddress
@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -44,23 +45,45 @@ def main():
     )
     parser.add_argument("--ngrok-port", type=int, default=4040, help="Host port of the ngrok inspector.")
     parser.add_argument("--matchmaker-port", type=int, default=8080, help="Host port of the matchmaker.")
+    parser.add_argument("--api-url", help="Direct API base URL; checks its matchmaking API without using ngrok.")
     args = parser.parse_args()
 
-    try:
-        tunnels = read_json(f"http://127.0.0.1:{args.ngrok_port}/api/tunnels").get("tunnels", [])
-        diagnostics = read_json(f"http://127.0.0.1:{args.matchmaker_port}/match/diagnostics")
-    except (OSError, URLError, ValueError, json.JSONDecodeError) as error:
-        parser.error(f"Cannot read local ngrok or matchmaker status: {error}")
+    if args.api_url is not None:
+        api_base_url = args.api_url.strip().rstrip("/")
+        try:
+            parsed = urlsplit(api_base_url)
+            valid = (parsed.scheme in ("http", "https") and parsed.hostname
+                     and not parsed.username and not parsed.password
+                     and not parsed.query and not parsed.fragment)
+            parsed.port  # Validate the optional port number.
+        except ValueError:
+            valid = False
+        if not valid:
+            parser.error("--api-url must be an HTTP(S) base URL without credentials, query, or fragment.")
+        try:
+            diagnostics = read_json(f"{api_base_url}/match/diagnostics")
+        except (OSError, URLError, ValueError) as error:
+            parser.error(f"Cannot read matchmaking diagnostics from the direct API: {error}")
+    else:
+        try:
+            tunnels = read_json(f"http://127.0.0.1:{args.ngrok_port}/api/tunnels").get("tunnels", [])
+            diagnostics = read_json(f"http://127.0.0.1:{args.matchmaker_port}/match/diagnostics")
+        except (OSError, URLError, ValueError) as error:
+            parser.error(f"Cannot read local ngrok or matchmaker status: {error}")
 
-    avian_tunnels = [
-        tunnel for tunnel in tunnels
-        if tunnel.get("proto") == "https"
-        and tunnel.get("config", {}).get("addr") == AVIAN_UPSTREAM
-    ]
-    if len(avian_tunnels) != 1:
-        parser.error(
-            f"Expected one HTTPS ngrok tunnel to avian-caddy:8000 on localhost:{args.ngrok_port}."
-        )
+        avian_tunnels = [
+            tunnel for tunnel in tunnels
+            if tunnel.get("proto") == "https"
+            and tunnel.get("config", {}).get("addr") == AVIAN_UPSTREAM
+        ]
+        if len(avian_tunnels) != 1:
+            parser.error(f"Expected one HTTPS ngrok tunnel to avian-caddy:8000 on localhost:{args.ngrok_port}.")
+        api_base_url = avian_tunnels[0].get("public_url", "")
+        if not api_base_url.startswith("https://"):
+            parser.error("Avian ngrok tunnel has no HTTPS public URL.")
+
+    if not isinstance(diagnostics, dict):
+        parser.error("Matchmaking diagnostics did not return a JSON object.")
 
     mode = diagnostics.get("room_mode")
     if mode == "static":
@@ -76,10 +99,6 @@ def main():
             "Set a reachable UDP endpoint in backend/.env and recreate avian-matchmaker first."
         )
 
-    api_base_url = avian_tunnels[0].get("public_url", "")
-    if not api_base_url.startswith("https://"):
-        parser.error("Avian ngrok tunnel has no HTTPS public URL.")
-
     output = Path(args.output).expanduser()
     if not output.is_absolute():
         output = PROJECT_ROOT / output
@@ -89,6 +108,7 @@ def main():
     output.write_text(json.dumps({"apiBaseUrl": api_base_url}, indent=2) + "\n", encoding="utf-8")
     print(f"Client config written to {output}")
     print(f"Matchmaker currently advertises UDP game endpoint {game_endpoint}")
+    print("The API check does not verify UDP reachability; test a match from another computer.")
 
 
 if __name__ == "__main__":
