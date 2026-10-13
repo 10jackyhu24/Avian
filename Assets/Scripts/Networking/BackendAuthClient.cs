@@ -32,7 +32,7 @@ public class BackendAuthClient : MonoBehaviour {
         public string detail;
     }
 
-    private string baseUrl = URL.BaseUrl;
+    private string baseUrl;
     private bool persistSessionToken = false;
 
     public string SessionToken { get; private set; }
@@ -87,7 +87,7 @@ public class BackendAuthClient : MonoBehaviour {
 
         string json = JsonUtility.ToJson(body);
         byte[] payload = Encoding.UTF8.GetBytes(json);
-        string url = $"{baseUrl}{path}";
+        string url = $"{(string.IsNullOrWhiteSpace(baseUrl) ? URL.BaseUrl : baseUrl)}{path}";
 
         using UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
         request.uploadHandler = new UploadHandlerRaw(payload);
@@ -120,7 +120,7 @@ public class BackendAuthClient : MonoBehaviour {
             yield break;
         }
 
-        string url = $"{baseUrl}{URL.AuthValidatePath}?token={UnityWebRequest.EscapeURL(SessionToken)}";
+        string url = $"{(string.IsNullOrWhiteSpace(baseUrl) ? URL.BaseUrl : baseUrl)}{URL.AuthValidatePath}?token={UnityWebRequest.EscapeURL(SessionToken)}";
         using UnityWebRequest request = UnityWebRequest.Get(url);
         yield return request.SendWebRequest();
 

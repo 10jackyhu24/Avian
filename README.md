@@ -98,7 +98,7 @@ The host machine is the computer running the backend and dedicated server. A pla
 
 * Windows Unity client `.exe`.
 * Internet connection.
-* The client must be built with a reachable `URL.BaseUrl`.
+* The Windows client needs `network-config.json` beside its `.exe` with a reachable API URL.
 
 The player machine does **not** need Docker, Kubernetes, Playit, ngrok, `backend/.env`, or a Linux dedicated server build.
 
@@ -124,6 +124,12 @@ PASSWORD_HASH_ITERATIONS=210000
 ```
 
 `backend/.env` is ignored by Git and should remain local.
+
+If another app on the host uses one of Avian's published TCP ports, set
+`AVIAN_HTTP_PORT`, `AVIAN_MATCHMAKER_PORT`, `AVIAN_NGROK_INSPECTOR_PORT`, or
+`AVIAN_POSTGRES_PORT` in `backend/.env` to free host ports. The container ports
+and ngrok's route to `avian-caddy:8000` stay the same. For example, if a file
+converter uses host port 4040, set `AVIAN_NGROK_INSPECTOR_PORT=4041`.
 
 Then set your [ngrok authtoken](https://ngrok.com/) in the same file or export it before starting Docker:
 
@@ -182,29 +188,55 @@ Open `localhost:4040` on the browser to get the public HTTPS URL. Then test:
 curl.exe https://your-ngrok-url.ngrok.app/health
 ```
 
-**5. Point Unity to the local API**
+**5. Configure the Windows client**
 
-For same-computer local testing, set `URL.cs` to:
+For local testing in the Unity Editor, no file is needed: the API defaults to
+`http://localhost:8000`. For a Windows build, put `network-config.json` beside
+the game's `.exe` (next to its `_Data` folder):
 
-```text
-BaseUrl = http://localhost:8000
+```json
+{
+  "apiBaseUrl": "https://your-ngrok-domain.ngrok-free.app"
+}
 ```
 
-If you need another computer to reach your backend through ngrok, set `URL.cs` to your ngrok URL instead:
+Copy `network-config.example.json` and replace the URL with the Avian tunnel's
+HTTPS address from `http://localhost:4040` (or the configured inspector port).
+The client uses the matchmaker's
+`world_endpoint` for game UDP traffic; the config file only contains the HTTP
+API address. `URL.WorldServer` is empty by default so a missing match endpoint
+cannot silently connect to the player's own computer.
 
-```text
-BaseUrl = https://your-ngrok-url.ngrok.app
+After configuring the public UDP endpoint on the host, you can write the
+client file directly into an existing Windows build folder:
+
+```powershell
+python export_client_config.py --output "Builds/WindowsClient/network-config.json"
 ```
 
-`URL.WorldServer` should normally stay empty. The client should use `world_endpoint` from the matchmaking response.
+This checks that port 4040 reports the **Avian** tunnel to `avian-caddy:8000`
+and that the matchmaker is no longer advertising a loopback game address.
+If you changed the host ports, add `--ngrok-port 4041` and/or
+`--matchmaker-port <port>` to the command.
 
 Changing `backend/.env` does not require rebuilding the Unity client. Restart the matchmaker instead:
 
 ```powershell
-docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-matchmaker
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --no-deps --force-recreate avian-matchmaker
 ```
 
-Changing `URL.BaseUrl` does require rebuilding the Windows client because that value is compiled into the client build.
+Changing the API URL only requires editing `network-config.json`; the same
+Windows build can be copied to another player computer. If the ngrok URL
+changes when the host moves, update this file in the copied build.
+
+To move the backend to a different host computer, create its own
+`backend/.env` from `.env.example`, set its ngrok token and reachable UDP
+`WORLD_ENDPOINT` (or `ROOM_ENDPOINT_HOST` for dynamic rooms), build the Linux
+dedicated server there, and start Compose and Kind. The Unity `Builds` folder
+and `backend/.env` are ignored by Git, so they do not come with a code clone.
+Run `export_client_config.py` on the new host and copy the resulting
+`network-config.json` beside each Windows client `.exe`. The C# source and
+Windows client binary do not need host-specific edits.
 
 ### Kubernetes / Kind + Unity Dedicated Server
 
@@ -423,14 +455,14 @@ Example:
 https://your-ngrok-url.ngrok-free.app
 ```
 
-7. Set `URL.cs` before building the Windows client:
+7. Put `network-config.json` beside the Windows client `.exe`, with
+   `apiBaseUrl` set to the Avian ngrok HTTPS URL. You can use
+   `export_client_config.py` after the matchmaker advertises a public UDP
+   address.
 
-```csharp
-public static string BaseUrl = "https://your-ngrok-url.ngrok-free.app";
-public static string WorldServer = "";
-```
-
-8. Rebuild the Windows client and send the same build to Computer B.
+8. Send the Windows build together with `network-config.json` to Computer B.
+   When the host's public HTTP URL changes, edit that file on each player
+   computer; recompiling the client is not required.
 
 **Computer B: player**
 
