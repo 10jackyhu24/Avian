@@ -90,7 +90,7 @@ public sealed class MerchantInteractionPrompt : MonoBehaviour {
         string binding = MerchantMenu.GetInteractBindingDisplayString();
         if (binding != currentBinding) {
             currentBinding = binding;
-            promptText.text = $"按 ({binding}) 互動";
+            promptText.text = $"Press {binding} to talk";
         }
 
         promptRect.anchoredPosition = canvasPoint;
