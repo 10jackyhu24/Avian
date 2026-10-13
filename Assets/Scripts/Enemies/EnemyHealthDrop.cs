@@ -8,6 +8,9 @@ public class EnemyHealthDrop : NetworkBehaviour {
 
     [Header("Health Display")]
     [SerializeField] private Vector3 healthBarOffset = new Vector3(0f, 1.5f, 0f);
+    [SerializeField] private string displayName = "Enemy";
+    [Tooltip("Optional HUD portrait. Uses the enemy sprite when left empty.")]
+    [SerializeField] private Sprite portrait;
 
     [Header("Coin Drop")]
     [SerializeField] private GameObject coinPickupPrefab;
@@ -23,7 +26,10 @@ public class EnemyHealthDrop : NetworkBehaviour {
     private float localHealth;
     private bool isDead;
 
-    private float CurrentHealth => IsSpawned ? networkHealth.Value : localHealth;
+    public float CurrentHealth => IsSpawned ? networkHealth.Value : localHealth;
+    public float MaxHealth => maxHealth;
+    public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? name.Replace("(Clone)", "") : displayName;
+    public Sprite Portrait => portrait != null ? portrait : GetComponentInChildren<SpriteRenderer>()?.sprite;
     public bool IsAlive => !isDead && CurrentHealth > 0f;
     public event Action<EnemyHealthDrop> Died;
 

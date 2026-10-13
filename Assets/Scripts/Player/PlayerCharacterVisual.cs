@@ -10,6 +10,7 @@ public class PlayerCharacterVisual : NetworkBehaviour {
     private class CharacterVisualOption {
         public string characterId;
         public Sprite sprite;
+        public Sprite portrait;
         public RuntimeAnimatorController animatorController;
     }
 
@@ -23,6 +24,16 @@ public class PlayerCharacterVisual : NetworkBehaviour {
 
     private SpriteRenderer spriteRenderer;
     private Animator animator;
+
+    public Sprite Portrait {
+        get {
+            CharacterVisualOption option = FindVisualOption(syncedCharacterId.Value.ToString());
+            if (option != null) {
+                return option.portrait != null ? option.portrait : option.sprite;
+            }
+            return spriteRenderer != null ? spriteRenderer.sprite : null;
+        }
+    }
 
     private void Awake() {
         spriteRenderer = GetComponent<SpriteRenderer>();
