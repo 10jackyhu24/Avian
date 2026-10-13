@@ -114,6 +114,8 @@ public class PlayerController : NetworkBehaviour {
     private Coroutine respawnCoroutine;
     private GameInput inputActions;
 
+    public float CurrentHealth => currentHealth.Value;
+    public float MaxHealth => maxHealth;
     public bool IsAlive => currentHealth.Value > 0;
 
     private void Awake() {
@@ -222,7 +224,7 @@ public class PlayerController : NetworkBehaviour {
             UpdatePreparedAttackDirection();
         }
 
-        if (!IsSpawned) {
+        if (!IsSpawned || (IsOwner && IsClient)) {
             WorldHealthBarGUI.Remove(this);
             return;
         }

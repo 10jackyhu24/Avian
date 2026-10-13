@@ -21,6 +21,8 @@ GameObject:
   - component: {fileID: 4901829517552619559}
   - component: {fileID: 8646609708124771328}
   - component: {fileID: -3278912345678901234}
+  - component: {fileID: 8125043076010300101}
+  - component: {fileID: 8125043076010300102}
   m_Layer: 6
   m_Name: Player
   m_TagString: Player
@@ -390,6 +392,41 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   ShowTopMostFoldoutHeaderGroup: 1
   maxCapacity: 200
+--- !u!114 &8125043076010300101
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 53fadb58dfb244f7b4b2741c01208047, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerEnemySensor
+  detectionRadius: 12
+  enemyLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  scanInterval: 0.1
+--- !u!114 &8125043076010300102
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 386513580500606536}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4caa7f6a40aa487a96f6aa04e45e8784, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::PlayerCombatHUD
+  portraitOffset: {x: 32, y: 32}
+  portraitSize: 220
+  playerHealthBarHeight: 440
+  playerHealthBarWidth: 56
+  enemyPanelSize: {x: 580, y: 116}
+  enemyPanelTopOffset: 30
 --- !u!1 &5279530500253440966
 GameObject:
   m_ObjectHideFlags: 0
