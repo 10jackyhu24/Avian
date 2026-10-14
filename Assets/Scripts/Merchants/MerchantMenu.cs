@@ -12,6 +12,7 @@ public sealed class MerchantMenu : MonoBehaviour {
     private GameInput inputActions;
     private Merchant currentMerchant;
     private PlayerInventory localInventory;
+    private GameObject interactionPrompt;
 
     private GameObject mainPanel;
     private GameObject buyPanel;
@@ -86,6 +87,14 @@ public sealed class MerchantMenu : MonoBehaviour {
         inputActions.Player.Enable();
         OptionsMenu.BindingOverridesChanged += ReloadBindings;
 
+        interactionPrompt = new GameObject(
+            "Merchant Interaction Prompt",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler),
+            typeof(MerchantInteractionPrompt)
+        );
+
         ShowMainPanel();
         gameObject.SetActive(false);
     }
@@ -93,6 +102,9 @@ public sealed class MerchantMenu : MonoBehaviour {
     private void OnDestroy() {
         UnbindLocalInventory();
         OptionsMenu.BindingOverridesChanged -= ReloadBindings;
+        if (interactionPrompt != null) {
+            Destroy(interactionPrompt);
+        }
 
         if (inputActions != null) {
             inputActions.Player.Interact.performed -= HandleInteract;
@@ -186,7 +198,15 @@ public sealed class MerchantMenu : MonoBehaviour {
         }
     }
 
-    private Merchant FindNearestMerchant() {
+    internal static string GetInteractBindingDisplayString() {
+        if (instance == null || instance.inputActions == null) {
+            return string.Empty;
+        }
+
+        return instance.inputActions.Player.Interact.GetBindingDisplayString(0);
+    }
+
+    internal static Merchant FindNearestMerchant() {
         NetworkObject localPlayer = NetworkManager.Singleton?.LocalClient?.PlayerObject;
         if (localPlayer == null) {
             return null;

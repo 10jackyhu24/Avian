@@ -121,6 +121,9 @@ __pycache__/
 secret.yaml
 .env
 
+# Client API address for this machine or build
+/network-config.json
+
 # unity
 /Assets/_Recovery/
 _Recovery.meta
