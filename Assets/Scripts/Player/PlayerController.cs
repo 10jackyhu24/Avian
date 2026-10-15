@@ -120,8 +120,8 @@ public class PlayerController : NetworkBehaviour {
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>(true);
+        animator = GetComponentInChildren<Animator>(true);
         playerInventory = GetComponent<PlayerInventory>();
         inputActions = new GameInput();
         KeyBinding.LoadBindingOverrides(inputActions);
