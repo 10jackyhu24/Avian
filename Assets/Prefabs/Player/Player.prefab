@@ -147,7 +147,7 @@ MonoBehaviour:
   weaponSweepStepDegrees: 4
   bowSideOffset: 0.55
   bowForwardOffset: 0.25
-  bowHeightOffset: 0
+  bowHeightOffset: -0.4
   bowPlanarAngle: -135
   arrowTrailColor: {r: 1, g: 0.75, b: 0.15, a: 0.95}
   minimumArrowVisibleDuration: 0.2

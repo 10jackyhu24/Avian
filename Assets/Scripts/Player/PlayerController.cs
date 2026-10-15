@@ -48,7 +48,8 @@ public class PlayerController : NetworkBehaviour {
     [Header("Ranged Weapon Visual")]
     [Min(0f)] [SerializeField] private float bowSideOffset = 0.55f;
     [Min(0f)] [SerializeField] private float bowForwardOffset = 0.25f;
-    [SerializeField] private float bowHeightOffset;
+    [Tooltip("World-space height offset from the character center for the bow and arrow flight.")]
+    [SerializeField] private float bowHeightOffset = -0.4f;
     [Range(-180f, 180f)] [SerializeField] private float bowPlanarAngle = -135f;
     [SerializeField] private Color arrowTrailColor = new Color(1f, 0.75f, 0.15f, 0.95f);
     [Min(0.01f)] [SerializeField] private float minimumArrowVisibleDuration = 0.2f;
@@ -285,10 +286,6 @@ public class PlayerController : NetworkBehaviour {
         preparedAttackDirection = isFacingLeftVisual.Value ? Vector3.left : Vector3.right;
         UpdatePreparedAttackDirection();
         ShowAttackRangePreview();
-
-        if (!currentAttackUsesWeapon) {
-            PlayPreparedUnarmedAttackServerRpc(preparedAttackDirection.x, preparedAttackDirection.z);
-        }
     }
 
     private void ReleasePreparedAttack() {
@@ -549,20 +546,8 @@ public class PlayerController : NetworkBehaviour {
         runRequested = runPressed;
     }
 
-    [ServerRpc]
-    private void PlayPreparedUnarmedAttackServerRpc(float aimDirectionX, float aimDirectionZ) {
-        if (currentHealth.Value <= 0 || currentAttackUsesWeapon || currentAttackData == null ||
-            Time.time < nextServerAttackTime) {
-            return;
-        }
-
-        Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        Vector3 effectPosition = GetUnarmedAttackEffectPosition(currentAttackData, attackDirection);
-        PlayPreparedUnarmedAttackClientRpc(effectPosition, attackDirection.x < 0f);
-    }
-
     [ClientRpc]
-    private void PlayPreparedUnarmedAttackClientRpc(Vector3 effectPosition, bool facingLeft) {
+    private void PlayUnarmedAttackClientRpc(Vector3 effectPosition, bool facingLeft) {
         PlayUnarmedEffect(effectPosition, facingLeft);
     }
 
@@ -642,9 +627,9 @@ public class PlayerController : NetworkBehaviour {
         StopMovementOnServer();
 
         Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        PlayAttackVisualClientRpc(attackItemId, attackDirection, usesWeapon);
 
         if (usesWeapon) {
+            PlayAttackVisualClientRpc(attackItemId, attackDirection);
             if (weaponAttackData.attackmode == AttackMode.WeaponRanged) {
                 StartCoroutine(RangedProjectileRoutine(
                     weaponAttackData,
@@ -668,6 +653,8 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
+        Vector3 effectPosition = GetUnarmedAttackEffectPosition(attackData, attackDirection);
+        PlayUnarmedAttackClientRpc(effectPosition, attackDirection.x < 0f);
         ApplyAreaAttackDamage(attackData, attackDirection);
     }
 
@@ -796,15 +783,8 @@ public class PlayerController : NetworkBehaviour {
     [ClientRpc]
     private void PlayAttackVisualClientRpc(
         FixedString64Bytes itemId,
-        Vector3 attackDirection,
-        bool usesWeapon
+        Vector3 attackDirection
     ) {
-        // Unarmed visuals start on button press. The release RPC only executes
-        // damage and weapon swing visuals, preventing a second Punch animation.
-        if (!usesWeapon) {
-            return;
-        }
-
         if (ItemManager.TryGetWeaponById(itemId.ToString(), out ItemData weaponItem, out AttackData attackData)) {
             if (IsOwner && attackData.attackmode == AttackMode.WeaponRanged) {
                 return;

@@ -55,7 +55,7 @@ public class BagMenu : MonoBehaviour {
     }
 
     public void OnBagPerformed(InputAction.CallbackContext context) {
-        if (!context.performed || !GameState.isPlaying || PauseMenu.isOpen) {
+        if (!context.performed || !GameState.isPlaying || PauseMenu.isOpen || MerchantMenu.IsOpen) {
             return;
         }
 
