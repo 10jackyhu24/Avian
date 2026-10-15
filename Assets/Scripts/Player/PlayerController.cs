@@ -133,6 +133,7 @@ public class PlayerController : NetworkBehaviour {
         if (combatController == null) {
             combatController = GetComponent<CombatController>();
         }
+        SetUnarmedAttack(default);
         bagManager = FindFirstObjectByType<UI_BagManager>();
     }
 
@@ -578,7 +579,7 @@ public class PlayerController : NetworkBehaviour {
         }
 
         if (currentAttackData == null) {
-            Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no supported weapon is equipped.", this);
+            Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no attack data is available.", this);
             RejectAttackClientRpc(predictedProjectileId);
             return;
         }
@@ -2051,7 +2052,7 @@ public class PlayerController : NetworkBehaviour {
 
         FixedString64Bytes newSelectedItemId = default;
         ulong newSelectedItemInstanceId = 0;
-        AttackData localAttackData = null;
+        AttackData localAttackData = unarmedAttackData;
         bool localUsesWeapon = false;
         string selectedItemName = "Empty";
 
@@ -2067,12 +2068,14 @@ public class PlayerController : NetworkBehaviour {
                 newSelectedItemId = new FixedString64Bytes(item.itemId);
             }
 
-            if (item.IsWeapon && ItemManager.TryGetWeaponById(item.itemId, out _, out AttackData attackData)) {
-                localAttackData = attackData;
-                localUsesWeapon = true;
-            }
-            else if (!item.IsWeapon) {
-                localAttackData = unarmedAttackData;
+            if (item.IsWeapon) {
+                if (ItemManager.TryGetWeaponById(item.itemId, out _, out AttackData attackData)) {
+                    localAttackData = attackData;
+                    localUsesWeapon = true;
+                }
+                else {
+                    localAttackData = null;
+                }
             }
         }
 
@@ -2094,6 +2097,18 @@ public class PlayerController : NetworkBehaviour {
 
     [ServerRpc]
     private void SetSelectedAttackServerRpc(FixedString64Bytes newSelectedItemId) {
+        if (newSelectedItemId.Length == 0) {
+            SetUnarmedAttack(default);
+            if (unarmedAttackData != null) {
+                combatController?.EntryCombat();
+            }
+            else {
+                combatController?.ExitCombat();
+            }
+            Debug.Log($"[Combat] Client {OwnerClientId} selected an empty slot; using unarmed attack.", this);
+            return;
+        }
+
         string itemId = newSelectedItemId.ToString();
         if (ItemManager.TryGetItemById(itemId, out ItemData selectedItem) && selectedItem.itemObject != null) {
             if (selectedItem.IsWeapon && selectedItem.itemObject.attackData != null) {
@@ -2107,10 +2122,7 @@ public class PlayerController : NetworkBehaviour {
             }
 
             if (!selectedItem.IsWeapon && unarmedAttackData != null) {
-                selectedItemId = newSelectedItemId;
-                currentAttackData = unarmedAttackData;
-                currentAttackUsesWeapon = false;
-                combatController?.SetAttackData(unarmedAttackData);
+                SetUnarmedAttack(newSelectedItemId);
                 combatController?.EntryCombat();
                 Debug.Log($"[Combat] Client {OwnerClientId} selected non-weapon {selectedItem.itemObject.itemName}; using unarmed attack.", this);
                 return;
@@ -2124,6 +2136,13 @@ public class PlayerController : NetworkBehaviour {
         combatController?.ExitCombat();
 
         Debug.Log($"[Combat] Client {OwnerClientId} cleared its selected attack.", this);
+    }
+
+    private void SetUnarmedAttack(FixedString64Bytes itemId) {
+        selectedItemId = itemId;
+        currentAttackData = unarmedAttackData;
+        currentAttackUsesWeapon = false;
+        combatController?.SetAttackData(unarmedAttackData);
     }
 
     public void UnequipDroppedWeaponOnServer(string droppedItemId) {
@@ -2155,12 +2174,14 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void ClearEquippedWeapon() {
-        selectedItemId = default;
         selectedItemInstanceId = 0;
-        currentAttackUsesWeapon = false;
-        currentAttackData = null;
-        combatController?.SetAttackData(null);
-        combatController?.ExitCombat();
+        SetUnarmedAttack(default);
+        if (unarmedAttackData == null) {
+            combatController?.ExitCombat();
+        }
+        else if (IsServer) {
+            combatController?.EntryCombat();
+        }
     }
 
     private void OnDestroy() {
