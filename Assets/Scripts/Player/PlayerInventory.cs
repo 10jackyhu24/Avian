@@ -6,6 +6,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 [RequireComponent(typeof(NetworkObject))]
 public class PlayerInventory : NetworkBehaviour {
+    public const int DefaultMaxCapacity = 100;
     private const float PickupRange = 6f;
     private const string ArrowId = "arrow";
     private const string BowId = "bow";
@@ -14,7 +15,12 @@ public class PlayerInventory : NetworkBehaviour {
     private const string SwordId = "sword";
     private const string AttackSpeedId = "attack_speed";
 
-    [SerializeField] private int maxCapacity = 100;
+    [Min(0)] [SerializeField] private int maxCapacity = DefaultMaxCapacity;
+    private readonly NetworkVariable<int> networkMaxCapacity = new NetworkVariable<int>(
+        DefaultMaxCapacity,
+        readPerm: NetworkVariableReadPermission.Owner,
+        writePerm: NetworkVariableWritePermission.Server
+    );
 
     // Match-scoped IDs. Only the server calls AllocateInstanceId.
     private static ulong nextInstanceId = 1;
@@ -27,6 +33,7 @@ public class PlayerInventory : NetworkBehaviour {
     public event Action InventoryChanged;
 
     public int SlotCount => slots.Count;
+    public int MaxCapacity => IsSpawned ? networkMaxCapacity.Value : Mathf.Max(0, maxCapacity);
 
     public int GetItemCount(string itemId) {
         if (string.IsNullOrWhiteSpace(itemId)) {
@@ -142,6 +149,11 @@ public class PlayerInventory : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         slots.OnListChanged += HandleSlotsChanged;
+        networkMaxCapacity.OnValueChanged += HandleCapacityChanged;
+
+        if (IsServer) {
+            networkMaxCapacity.Value = Mathf.Max(0, maxCapacity);
+        }
 
         if (IsServer && slots.Count == 0) {
             InitializeStartingInventory();
@@ -154,6 +166,7 @@ public class PlayerInventory : NetworkBehaviour {
 
     public override void OnNetworkDespawn() {
         slots.OnListChanged -= HandleSlotsChanged;
+        networkMaxCapacity.OnValueChanged -= HandleCapacityChanged;
     }
 
     public bool TryGetSlot(int slotIndex, out InventorySlotState slot) {
@@ -570,32 +583,33 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     private bool CanAddItemOnServer(InventoryItemState incomingItem) {
-        if (!TryCalculateWeight(incomingItem, out int incomingWeight)) {
+        if (!TryCalculateWeight(incomingItem, out long incomingWeight)) {
             return false;
         }
 
-        int currentWeight = 0;
+        long currentWeight = 0;
         for (int i = 0; i < slots.Count; i++) {
-            if (!TryCalculateWeight(slots[i].Item, out int slotWeight)) {
+            if (!TryCalculateWeight(slots[i].Item, out long slotWeight)) {
                 return false;
             }
 
             currentWeight += slotWeight;
         }
 
-        return currentWeight + incomingWeight <= maxCapacity;
+        return currentWeight + incomingWeight <= MaxCapacity;
     }
 
-    private static bool TryCalculateWeight(InventoryItemState item, out int weight) {
+    private static bool TryCalculateWeight(InventoryItemState item, out long weight) {
         weight = 0;
         if (!item.IsValid ||
-            !ItemManager.TryGetItemById(item.ItemId.ToString(), out ItemData itemData)) {
+            !ItemManager.TryGetItemById(item.ItemId.ToString(), out ItemData itemData) ||
+            itemData.itemObject.baseWeight < 0) {
             return false;
         }
 
         weight = itemData.IsWeapon
             ? itemData.itemObject.baseWeight
-            : itemData.itemObject.baseWeight * item.Count;
+            : (long)itemData.itemObject.baseWeight * item.Count;
 
         return TryAddAttachmentWeight(item.AttackSpeedAttachmentId, AttachmentType.AttackSpeed, ref weight) &&
                TryAddAttachmentWeight(item.DamageBonusAttachmentId, AttachmentType.DamageBonus, ref weight) &&
@@ -605,13 +619,14 @@ public class PlayerInventory : NetworkBehaviour {
     private static bool TryAddAttachmentWeight(
         FixedString64Bytes attachmentItemId,
         AttachmentType expectedType,
-        ref int weight) {
+        ref long weight) {
         if (attachmentItemId.Length == 0) {
             return true;
         }
 
         if (!ItemManager.TryGetItemById(attachmentItemId.ToString(), out ItemData attachmentData) ||
-            attachmentData.attachmentType != expectedType) {
+            attachmentData.attachmentType != expectedType ||
+            attachmentData.itemObject.baseWeight < 0) {
             return false;
         }
 
@@ -620,17 +635,18 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     private void InitializeStartingInventory() {
-        AddStartingItem(slotIndex: 0, itemId: BowId, count: 1);
-        AddStartingItem(slotIndex: 1, itemId: AxeId, count: 1, attackSpeedAttachmentId: AttackSpeedId);
-        AddStartingItem(slotIndex: 2, itemId: SickleId, count: 1);
-        AddStartingItem(slotIndex: 3, itemId: SwordId, count: 1);
-        AddStartingItem(slotIndex: 4, itemId: ArrowId, count: 10);
-        AddStartingItem(slotIndex: 5, itemId: AttackSpeedId, count: 1);
+        AddStartingItem(itemId: BowId, count: 1);
+        AddStartingItem(itemId: AxeId, count: 1, attackSpeedAttachmentId: AttackSpeedId);
+        AddStartingItem(itemId: SickleId, count: 1);
+        AddStartingItem(itemId: SwordId, count: 1);
+        // Nine arrows keep all starter item types within the 100-weight limit.
+        AddStartingItem(itemId: ArrowId, count: 9);
+        AddStartingItem(itemId: AttackSpeedId, count: 1);
 
         Debug.Log($"[PlayerInventory] Server initialized client {OwnerClientId}: {BuildInventorySummary()}", this);
     }
 
-    private void AddStartingItem(int slotIndex, string itemId, int count, string attackSpeedAttachmentId = null) {
+    private void AddStartingItem(string itemId, int count, string attackSpeedAttachmentId = null) {
         if (!ItemManager.TryGetItemById(itemId, out ItemData itemData)) {
             Debug.LogError($"[PlayerInventory] Cannot add unknown starting item ID '{itemId}'.", this);
             return;
@@ -656,10 +672,12 @@ public class PlayerInventory : NetworkBehaviour {
             item.SetAttachmentId(AttachmentType.AttackSpeed, new FixedString64Bytes(attackSpeedAttachmentId));
         }
 
-        slots.Add(new InventorySlotState {
-            SlotIndex = slotIndex,
-            Item = item
-        });
+        if (!CanAddItemOnServer(item)) {
+            Debug.LogWarning($"[PlayerInventory] Starting item '{itemId}' would exceed capacity {MaxCapacity}; skipped.", this);
+            return;
+        }
+
+        InsertItemOnServer(item, slots.Count);
     }
 
     private bool TryResolveAttachment(string itemId, AttachmentType expectedType) {
@@ -681,6 +699,10 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     private void HandleSlotsChanged(NetworkListEvent<InventorySlotState> changeEvent) {
+        InventoryChanged?.Invoke();
+    }
+
+    private void HandleCapacityChanged(int previousValue, int currentValue) {
         InventoryChanged?.Invoke();
     }
 

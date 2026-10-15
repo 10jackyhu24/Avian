@@ -1,8 +1,8 @@
 using UnityEngine;
 using Unity.Netcode;
 
-[RequireComponent(typeof(CharacterController))]
-public class EnemyController : MonoBehaviour {
+[RequireComponent(typeof(CharacterController), typeof(NetworkObject))]
+public class EnemyController : NetworkBehaviour {
     private enum EnemyState {
         Patrol,
         Chase,
@@ -23,7 +23,6 @@ public class EnemyController : MonoBehaviour {
     [SerializeField] private float targetRefreshInterval = 0.25f;
 
     [Header("Movement")]
-    [SerializeField] private float rotationSpeed = 8f;
     [SerializeField] private float gravity = -20f;
 
     [Header("Hit Reaction")]
@@ -41,6 +40,13 @@ public class EnemyController : MonoBehaviour {
     private CharacterController characterController;
     private EnemyAttackController attackController;
     private Camera mainCamera;
+    private SpriteRenderer[] spriteRenderers;
+    private bool[] initialSpriteFlipX;
+    private bool localFacingLeft;
+    private readonly NetworkVariable<bool> facingLeft = new NetworkVariable<bool>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
     private Renderer[] cachedRenderers;
     private Collider[] cachedColliders;
     private bool[] rendererEnabledStates;
@@ -67,6 +73,11 @@ public class EnemyController : MonoBehaviour {
         characterController = GetComponent<CharacterController>();
         attackController = GetComponent<EnemyAttackController>();
         mainCamera = Camera.main;
+        spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
+        initialSpriteFlipX = new bool[spriteRenderers.Length];
+        for (int i = 0; i < spriteRenderers.Length; i++) {
+            initialSpriteFlipX[i] = spriteRenderers[i].flipX;
+        }
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         cachedColliders = GetComponentsInChildren<Collider>(true);
         rendererEnabledStates = new bool[cachedRenderers.Length];
@@ -83,6 +94,44 @@ public class EnemyController : MonoBehaviour {
         patrolCenter = transform.position;
         currentPatrolPoint = patrolCenter;
         PickNextPatrolPoint();
+    }
+
+    public override void OnNetworkSpawn() {
+        facingLeft.OnValueChanged += HandleFacingChanged;
+        if (IsServer) {
+            facingLeft.Value = localFacingLeft;
+        }
+        ApplyFacing(facingLeft.Value);
+    }
+
+    public override void OnNetworkDespawn() {
+        facingLeft.OnValueChanged -= HandleFacingChanged;
+    }
+
+    private void HandleFacingChanged(bool previousValue, bool currentValue) {
+        ApplyFacing(currentValue);
+    }
+
+    private void ApplyFacing(bool isFacingLeft) {
+        localFacingLeft = isFacingLeft;
+        for (int i = 0; i < spriteRenderers.Length; i++) {
+            if (spriteRenderers[i] != null) {
+                spriteRenderers[i].flipX = initialSpriteFlipX[i] ^ isFacingLeft;
+            }
+        }
+    }
+
+    private void UpdateFacing(Vector3 direction) {
+        // Keep the authored rotation and retain facing during vertical movement.
+        if (Mathf.Abs(direction.x) <= 0.01f) {
+            return;
+        }
+
+        bool isFacingLeft = direction.x < 0f;
+        if (IsSpawned && IsServer) {
+            facingLeft.Value = isFacingLeft;
+        }
+        ApplyFacing(isFacingLeft);
     }
 
     private void Update() {
@@ -362,14 +411,7 @@ public class EnemyController : MonoBehaviour {
             verticalVelocity = -2f;
         }
 
-        if (direction.sqrMagnitude > 0.001f) {
-            Quaternion targetRotation = Quaternion.LookRotation(direction);
-            transform.rotation = Quaternion.Slerp(
-                transform.rotation,
-                targetRotation,
-                rotationSpeed * Time.deltaTime
-            );
-        }
+        UpdateFacing(direction);
 
         verticalVelocity += gravity * Time.deltaTime;
 

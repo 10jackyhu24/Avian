@@ -168,7 +168,6 @@ MonoBehaviour:
   chaseDuration: 5
   chaseCooldown: 3
   targetRefreshInterval: 0.25
-  rotationSpeed: 8
   gravity: -20
   knockbackDistance: 3
   knockbackDuration: 1

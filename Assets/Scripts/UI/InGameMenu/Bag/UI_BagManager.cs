@@ -7,7 +7,6 @@ using UnityEngine;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
-    [SerializeField] private int maxCapacity = 100;
     [SerializeField] private TextMeshProUGUI totalCapacityText;
 
     [Header("Nearby Pickup Scan")]
@@ -27,6 +26,9 @@ public class UI_BagManager : MonoBehaviour {
 
     private PlayerInventory playerInventory;
     private Coroutine pendingInventoryRefresh;
+    public int MaxCapacity => playerInventory != null
+        ? playerInventory.MaxCapacity
+        : PlayerInventory.DefaultMaxCapacity;
 
     public event Action InventoryDisplayChanged;
 
@@ -436,7 +438,7 @@ public class UI_BagManager : MonoBehaviour {
 
     // Check if adding an item exceeds maximum capacity
     public bool CanAddItem(int itemWeight) {
-        return CalculateTotalWeight() + itemWeight <= maxCapacity;
+        return itemWeight >= 0 && (long)CalculateTotalWeight() + itemWeight <= MaxCapacity;
     }
 
     public void ClearBag() {
@@ -462,7 +464,7 @@ public class UI_BagManager : MonoBehaviour {
 
     private void UpdateCapacityLabel() {
         if (totalCapacityText != null) {
-            totalCapacityText.text = $"{CalculateTotalWeight()} / {maxCapacity}";
+            totalCapacityText.text = $"{CalculateTotalWeight()} / {MaxCapacity}";
         }
     }
 

@@ -391,7 +391,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerInventory
   ShowTopMostFoldoutHeaderGroup: 1
-  maxCapacity: 200
+  maxCapacity: 100
 --- !u!114 &8125043076010300101
 MonoBehaviour:
   m_ObjectHideFlags: 0
