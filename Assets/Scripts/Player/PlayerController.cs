@@ -1902,11 +1902,11 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void ApplyDamage(float amount, string attackerName) {
-        if (!IsServer || currentHealth.Value <= 0) {
+        if (!IsServer || currentHealth.Value <= 0 || amount <= 0f) {
             return;
         }
 
-        currentHealth.Value = Mathf.Max(0, currentHealth.Value - amount);
+        currentHealth.Value = PlayerHealthMath.AfterDamage(currentHealth.Value, amount);
 
         if (currentHealth.Value > 0) {
             return;
