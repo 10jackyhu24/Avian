@@ -2,8 +2,7 @@ name: Unity 6 Web Build & Test 🚀
 
 on:
   push:
-    branches: [ main ] 
-    branches: [ Unity-CI-Testing ]
+    branches: [ "main", "Unity-CI-Testing" ] 
   pull_request:
     branches: [ main ]
 
