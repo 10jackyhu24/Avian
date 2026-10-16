@@ -83,6 +83,14 @@ public class EnemyHealthDrop : NetworkBehaviour {
         GetComponent<EnemyController>()?.ApplyKnockback(attackerPosition ?? transform.position - transform.forward);
     }
 
+    // Environmental damage does not interrupt attacks or knock enemies back.
+    public void TakeZoneDamageOnServer(float damage) {
+        if (!CanServerTakeDamage() || isDead || damage <= 0f) return;
+        float newHealth = Mathf.Max(0f, CurrentHealth - damage);
+        SetCurrentHealth(newHealth);
+        if (newHealth <= 0f) Die(Unity.Netcode.NetworkManager.ServerClientId);
+    }
+
     private void SetCurrentHealth(float value) {
         localHealth = value;
         if (IsSpawned && IsServer) {

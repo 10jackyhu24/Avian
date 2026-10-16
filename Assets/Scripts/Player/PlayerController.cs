@@ -1878,6 +1878,10 @@ public class PlayerController : NetworkBehaviour {
         ApplyDamage(amount, "enemy");
     }
 
+    public void TakeZoneDamageOnServer(float amount) {
+        if (amount > 0f) ApplyDamage(amount, "safe zone");
+    }
+
     private void TakeDamage(float amount, ulong attackerClientId) {
         ApplyDamage(amount, $"client {attackerClientId}");
     }

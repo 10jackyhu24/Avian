@@ -68,7 +68,8 @@ public class PauseMenu : MonoBehaviour {
         menuManager.HideMenu();
         menuManager.ClearHistory();
         menuManager.SwitchToPanel(PanelType.PauseMenu);
-        Time.timeScale = 0f;
+        // A multiplayer menu cannot pause the shared match clock or simulation.
+        Time.timeScale = GameState.currentRoomId == "singleplayer" ? 0f : 1f;
     }
 
     private void ResumeGame() {

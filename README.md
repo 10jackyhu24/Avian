@@ -106,6 +106,31 @@ Run this on the backend host. It finds the active Avian ngrok HTTPS tunnel and r
 
 If you already know the HTTPS URL, you can also pass `--api-url https://your-host.ngrok-free.app` to the export script from another computer. The default export workflow uses ngrok HTTPS; game UDP connects directly without Playit.
 
+## Safe zone
+
+Singleplayer and multiplayer share a server-controlled, three-stage safe zone.
+The clock starts after the first player enters the world. Each seeded target circle
+is fully inside its parent circle and has a different center.
+
+| Match time | Action | Radius on the default 1000-unit map |
+| --- | --- | --- |
+| 0:00–1:30 | Wait and show the first target | 500 |
+| 1:30–3:00 | First shrink | 500 → 225 |
+| 3:00–4:00 | Hold and show the second target | 225 |
+| 4:00–5:30 | Second shrink | 225 → 90 |
+| 5:30–6:30 | Hold and show the final target | 90 |
+| 6:30–8:00 | Final shrink | 90 → 25 |
+| After 8:00 | Keep the final circle fixed | 25 |
+
+Outside players and active enemies take 2 / 5 / 10 HP per second in stages 1 / 2 / 3.
+Damage continues after the final shrink. The outside world is tinted translucent
+light blue. Both map sizes show the current circle in cyan, the next target as a
+dashed white circle and cross, and a countdown, even over unexplored areas.
+
+Configure duration, final radius, damage and tint in `Assets/Resources/SafeZone.prefab`.
+Singleplayer pause freezes the simulation; multiplayer menus do not pause the shared
+match. Rebuild clients and the dedicated server together after updating the network prefab.
+
 ## Connection checks
 
 - **The IP opens the wrong site:** This project exposes Caddy on port **8000**, not the default HTTP port 80. Test `http://HOST:8000/health`, or use the ngrok HTTPS URL. `http://HOST/` may reach another service entirely.

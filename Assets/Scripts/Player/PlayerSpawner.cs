@@ -95,6 +95,7 @@ public class PlayerSpawner : NetworkBehaviour {
 
         if (networkManager.ConnectedClients.TryGetValue(clientId, out var connectedClient) &&
             connectedClient.PlayerObject != null) {
+            ZoneManager.EnsureServerZone(networkManager);
             if (context != null) {
                 Debug.Log($"[PlayerSpawner] Client {clientId} already has a player object.", context);
             }
@@ -116,6 +117,7 @@ public class PlayerSpawner : NetworkBehaviour {
         }
 
         networkObject.SpawnAsPlayerObject(clientId);
+        ZoneManager.EnsureServerZone(networkManager);
 
         if (context != null) {
             Debug.Log($"[PlayerSpawner] Spawned player for client {clientId}.", context);
