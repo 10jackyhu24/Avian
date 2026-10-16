@@ -42,7 +42,6 @@ jobs:
         with:
           unityVersion: 6000.3.15f1
           githubToken: ${{ secrets.GITHUB_TOKEN }}
-          coverageEnabled: false
 
       # 4. 執行 Unity 建置
       - name: Upload Unity Test Results
