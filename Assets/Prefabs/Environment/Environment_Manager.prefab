@@ -94,6 +94,7 @@ MonoBehaviour:
   - {fileID: 2800000, guid: af5f0bc60c6d9a340a1f5524a773efde, type: 3}
   materialVariationPatchSize: 3
   rotateTerrainTiles: 1
+  rockPrefab: {fileID: 8020968498399523836, guid: 0527cbab5c4bbe445a7983b360c7568e, type: 3}
   spawnRockCovers: 1
   rockSpawnCellSize: 4
   mountainRockSpawnChance: 0.7

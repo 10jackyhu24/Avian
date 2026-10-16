@@ -79,6 +79,7 @@ public class TerrainController : MonoBehaviour {
     [SerializeField] private bool rotateTerrainTiles = true;
 
     [Header("Rock Covers")]
+    [SerializeField] private GameObject rockPrefab;
     [SerializeField] private bool spawnRockCovers = true;
     [Min(1)]
     [SerializeField] private int rockSpawnCellSize = 4;
@@ -235,6 +236,10 @@ public class TerrainController : MonoBehaviour {
         EnsureBiomeMaterials();
         if (biomeMaterials == null) {
             return;
+        }
+
+        if (spawnRockCovers && rockPrefab == null) {
+            Debug.LogWarning("[TerrainController] Rock Prefab is not assigned; rock covers will not spawn.", this);
         }
 
         if (mainCameraTransform != null) {
@@ -426,7 +431,7 @@ public class TerrainController : MonoBehaviour {
     }
 
     private void TryCreateRockCover(GameObject terrainBlock, Renderer terrainRenderer, int biomeIndex, int x, int z) {
-        if (!ShouldSpawnRockCover(biomeIndex, x, z)) {
+        if (rockPrefab == null || !ShouldSpawnRockCover(biomeIndex, x, z)) {
             return;
         }
 
@@ -438,7 +443,7 @@ public class TerrainController : MonoBehaviour {
         Vector3 terrainPosition = GridToWorldPosition(x, z);
         float rockBottom = terrainRenderer.bounds.max.y + rockHeightOffset;
 
-        GameObject rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        GameObject rock = Instantiate(rockPrefab);
         rock.name = $"RockCover_{x}_{z}";
         rock.layer = terrainBlock.layer;
         rock.transform.position = new Vector3(
@@ -452,9 +457,6 @@ public class TerrainController : MonoBehaviour {
             0f
         );
         rock.transform.localScale = safeRockSize;
-
-        Renderer rockRenderer = rock.GetComponent<Renderer>();
-        rockRenderer.sharedMaterial = GetBiomeMaterial(MountainBiomeIndex, x, z);
 
         // Keep the rock's world-space size while making it follow terrain streaming.
         rock.transform.SetParent(terrainBlock.transform, true);
