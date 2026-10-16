@@ -10,6 +10,9 @@ jobs:
   build:
     name: Unity Build Job 🎮
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
     steps:
 
       # 1. 檢出你的專案程式碼
@@ -29,18 +32,31 @@ jobs:
 
       # 3. 執行 Unity 測試 (如果專案內沒寫測試，這段執行完會直接跳過，是安全的)
       - name: Run PlayMode & EditMode Tests 
+        id: unity-tests
         uses: game-ci/unity-test-runner@v4
         env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           unityVersion: 6000.3.15f1
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          coverageEnabled: false
 
       # 4. 執行 Unity 建置
-      - name: Build WebGL Target 
+      - name: Upload Unity Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Unity-Test-Results
+          path: artifacts
+          if-no-files-found: warn
+      - name: Build WebGL Target
         uses: game-ci/unity-builder@v4
         env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
