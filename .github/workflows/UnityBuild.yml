@@ -31,10 +31,20 @@ jobs:
             Library-
 
       # 3. 執行 Unity 測試 (如果專案內沒寫測試，這段執行完會直接跳過，是安全的)
-      - name: Run PlayMode & EditMode Tests 
+      - name: Check Unity license for GitHub runner
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        run: |
+          if [[ -z "$UNITY_LICENSE" && -z "$UNITY_SERIAL" ]]; then
+            echo "::error::No Unity license secret is configured for this GitHub runner. A Unity Personal license activated only in the local Hub is unavailable on ubuntu-latest."
+            exit 1
+          fi
+      - name: Run PlayMode & EditMode Tests
         id: unity-tests
         uses: game-ci/unity-test-runner@v4
         env:
+          GAME_CI_VERBOSE: 'true'
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
