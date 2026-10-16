@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-    name: Unity Build Job 🎮
+  test:
+    name: Unity Tests 🧪
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,6 +66,24 @@ jobs:
           name: Unity-Test-Results
           path: artifacts
           if-no-files-found: warn
+  build:
+    name: Unity WebGL Build 🎮
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          lfs: false
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-
       - name: Build WebGL Target
         uses: game-ci/unity-builder@v4
         env:
