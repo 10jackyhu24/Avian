@@ -1,27 +1,24 @@
-name: Unity 6 Web Build & Test 🚀
+name: Unity 6 Tests
 
 on:
   push:
-    branches: [ "main", "Unity-CI-Testing" ] 
+    branches: [main, Unity-CI-Testing]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   test:
-    name: Unity Tests 🧪
+    name: Unity PlayMode & EditMode Tests
     runs-on: ubuntu-latest
     permissions:
       contents: read
       checks: write
     steps:
-
-      # 1. 檢出你的專案程式碼
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          lfs: false # 💡 Windows 上若沒特別裝 Git LFS，建議改為 false 加快速度
+          lfs: false
 
-      # 2. 自動快取 Unity 專案的 Library 資料夾
       - name: Cache Unity Library
         uses: actions/cache@v4
         with:
@@ -30,7 +27,6 @@ jobs:
           restore-keys: |
             Library-
 
-      # 3. 執行 Unity 測試 (如果專案內沒寫測試，這段執行完會直接跳過，是安全的)
       - name: Check Unity license for GitHub runner
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
@@ -39,18 +35,18 @@ jobs:
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         run: |
           if [[ -z "$UNITY_LICENSE" && -z "$UNITY_SERIAL" ]]; then
-            echo "::error::No Unity license secret is configured for this GitHub runner. A Unity Personal license activated only in the local Hub is unavailable on ubuntu-latest."
+            echo "::error::Set UNITY_LICENSE for Unity Personal, or UNITY_SERIAL for a paid license."
             exit 1
           fi
           if [[ -n "$UNITY_LICENSE" && ( -z "$UNITY_EMAIL" || -z "$UNITY_PASSWORD" ) ]]; then
             echo "::error::UNITY_LICENSE is set, but UNITY_EMAIL or UNITY_PASSWORD is missing. GameCI needs all three for Personal license activation."
             exit 1
           fi
+
       - name: Run PlayMode & EditMode Tests
-        id: unity-tests
         uses: game-ci/unity-test-runner@v4.3.2
         env:
-          UNITY_LICENSE: ${{ secrets.UNITY_SERIAL != '' && '' || secrets.UNITY_LICENSE }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
@@ -58,7 +54,6 @@ jobs:
           unityVersion: 6000.3.15f1
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 
-      # 4. 執行 Unity 建置
       - name: Upload Unity Test Results
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,38 +61,3 @@ jobs:
           name: Unity-Test-Results
           path: artifacts
           if-no-files-found: warn
-  build:
-    name: Unity WebGL Build 🎮
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          lfs: false
-      - name: Cache Unity Library
-        uses: actions/cache@v4
-        with:
-          path: Library
-          key: Library-${{ hashFiles('ProjectSettings/ProjectVersion.txt') }}
-          restore-keys: |
-            Library-
-      - name: Build WebGL Target
-        uses: game-ci/unity-builder@v4
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_SERIAL != '' && '' || secrets.UNITY_LICENSE }}
-          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        with:
-          unityVersion: 6000.3.15f1
-          targetPlatform: WebGL 
-
-      # 5. 上傳建置好的成品
-      - name: Upload Build Artifact 
-        uses: actions/upload-artifact@v4
-        with:
-          name: Unity-WebGL-Build
-          path: build/WebGL # Unity 6 預設打包路徑，如果打包失敗可以檢查專案設定
