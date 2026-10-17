@@ -203,6 +203,10 @@ MonoBehaviour:
   disableWhenOutOfView: 1
   visibilityBoundsSize: {x: 2, y: 3, z: 2}
   visibilityCheckInterval: 0.2
+  raiderAnimatorController: {fileID: 9100000, guid: abf31d1f71de5cdea2519b1c4e837840, type: 2}
+  spitterAnimatorController: {fileID: 9100000, guid: 4d58ff85629755b2b17d822fd6ca095e, type: 2}
+  miniBossAnimatorController: {fileID: 9100000, guid: 7c7b2670249352589dc9e13ddc767346, type: 2}
+  bossAnimatorController: {fileID: 9100000, guid: 7ba8a07e8a9220449853c3f56e39d012, type: 2}
 --- !u!114 &6988774309905714176
 MonoBehaviour:
   m_ObjectHideFlags: 0

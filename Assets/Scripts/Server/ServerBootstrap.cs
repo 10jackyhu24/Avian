@@ -167,6 +167,7 @@ public class ServerBootstrap : MonoBehaviour {
         for (int i = 0; i < enemyCount; i++) {
             Vector3 enemySpawnPosition = GetEnemySpawnPosition(i);
             GameObject enemyInstance = Instantiate(enemyPrefab, enemySpawnPosition, Quaternion.identity);
+            enemyInstance.GetComponent<EnemyController>()?.ConfigureArchetype(EnemyArchetypes.ForDemoIndex(i));
             spawnedEnemies.Add(enemyInstance);
 
             NetworkObject networkObject = enemyInstance.GetComponent<NetworkObject>();

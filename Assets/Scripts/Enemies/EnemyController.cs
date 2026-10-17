@@ -37,6 +37,12 @@ public class EnemyController : NetworkBehaviour {
     [SerializeField] private Vector3 visibilityBoundsSize = new Vector3(2f, 3f, 2f);
     [SerializeField] private float visibilityCheckInterval = 0.2f;
 
+    [Header("Enemy Visuals")]
+    [SerializeField] private RuntimeAnimatorController raiderAnimatorController;
+    [SerializeField] private RuntimeAnimatorController spitterAnimatorController;
+    [SerializeField] private RuntimeAnimatorController miniBossAnimatorController;
+    [SerializeField] private RuntimeAnimatorController bossAnimatorController;
+
     private CharacterController characterController;
     private EnemyAttackController attackController;
     private Camera mainCamera;
@@ -47,6 +53,36 @@ public class EnemyController : NetworkBehaviour {
         readPerm: NetworkVariableReadPermission.Everyone,
         writePerm: NetworkVariableWritePermission.Server
     );
+    private readonly NetworkVariable<EnemyArchetype> networkArchetype = new NetworkVariable<EnemyArchetype>(
+        EnemyArchetype.Grunt,
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+    private readonly NetworkVariable<bool> networkIsAttacking = new NetworkVariable<bool>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+    private static readonly int IsMovingParameter = Animator.StringToHash("IsMoving");
+    private static readonly int IsAttackingParameter = Animator.StringToHash("IsAttacking");
+    private static readonly int AttackSpeedParameter = Animator.StringToHash("AttackSpeed");
+    private EnemyArchetype pendingArchetype = EnemyArchetype.Grunt;
+    private Transform visualTransform;
+    private Vector3 initialVisualScale;
+    private SpriteRenderer visualSpriteRenderer;
+    private bool customSpriteFacesLeft;
+    private bool usesArchetypeAnimations;
+    private Vector3 previousAnimationPosition;
+    private float movingAnimationUntil;
+    private Animator visualAnimator;
+    private RuntimeAnimatorController initialAnimatorController;
+    private CapsuleCollider bodyCollider;
+    private float initialControllerHeight;
+    private float initialControllerRadius;
+    private Vector3 initialControllerCenter;
+    private float initialColliderHeight;
+    private float initialColliderRadius;
+    private Vector3 initialColliderCenter;
+    private Vector3 initialVisibilityBoundsSize;
     private Renderer[] cachedRenderers;
     private Collider[] cachedColliders;
     private bool[] rendererEnabledStates;
@@ -69,6 +105,8 @@ public class EnemyController : NetworkBehaviour {
     private float secondStageDistance;
     private float secondStageDuration;
 
+    public bool IsBossType => (IsSpawned ? networkArchetype.Value : pendingArchetype) >= EnemyArchetype.MiniBoss;
+
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         attackController = GetComponent<EnemyAttackController>();
@@ -78,6 +116,22 @@ public class EnemyController : NetworkBehaviour {
         for (int i = 0; i < spriteRenderers.Length; i++) {
             initialSpriteFlipX[i] = spriteRenderers[i].flipX;
         }
+        visualSpriteRenderer = spriteRenderers.Length > 0 ? spriteRenderers[0] : null;
+        visualTransform = visualSpriteRenderer != null ? visualSpriteRenderer.transform : null;
+        initialVisualScale = visualTransform != null ? visualTransform.localScale : Vector3.one;
+        visualAnimator = visualTransform != null ? visualTransform.GetComponent<Animator>() : null;
+        initialAnimatorController = visualAnimator != null ? visualAnimator.runtimeAnimatorController : null;
+        previousAnimationPosition = transform.position;
+        bodyCollider = GetComponent<CapsuleCollider>();
+        initialControllerHeight = characterController.height;
+        initialControllerRadius = characterController.radius;
+        initialControllerCenter = characterController.center;
+        if (bodyCollider != null) {
+            initialColliderHeight = bodyCollider.height;
+            initialColliderRadius = bodyCollider.radius;
+            initialColliderCenter = bodyCollider.center;
+        }
+        initialVisibilityBoundsSize = visibilityBoundsSize;
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
         cachedColliders = GetComponentsInChildren<Collider>(true);
         rendererEnabledStates = new bool[cachedRenderers.Length];
@@ -98,14 +152,83 @@ public class EnemyController : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         facingLeft.OnValueChanged += HandleFacingChanged;
+        networkArchetype.OnValueChanged += HandleArchetypeChanged;
         if (IsServer) {
             facingLeft.Value = localFacingLeft;
+            networkArchetype.Value = pendingArchetype;
+            networkIsAttacking.Value = false;
         }
+        previousAnimationPosition = transform.position;
+        movingAnimationUntil = 0f;
+        ApplyArchetype(networkArchetype.Value);
         ApplyFacing(facingLeft.Value);
     }
 
     public override void OnNetworkDespawn() {
         facingLeft.OnValueChanged -= HandleFacingChanged;
+        networkArchetype.OnValueChanged -= HandleArchetypeChanged;
+    }
+
+    public void ConfigureArchetype(EnemyArchetype archetype) {
+        if (IsSpawned && !IsServer) return;
+        pendingArchetype = archetype;
+        ApplyArchetype(archetype);
+        if (IsSpawned) networkArchetype.Value = archetype;
+    }
+
+    private void HandleArchetypeChanged(EnemyArchetype previousValue, EnemyArchetype currentValue) {
+        ApplyArchetype(currentValue);
+    }
+
+    private void ApplyArchetype(EnemyArchetype archetype) {
+        EnemyArchetypeStats stats = EnemyArchetypes.Get(archetype);
+        patrolSpeed = stats.PatrolSpeed;
+        chaseSpeed = stats.ChaseSpeed;
+        detectionRange = stats.DetectionRange;
+        visibilityBoundsSize = initialVisibilityBoundsSize * stats.ColliderScale;
+
+        if (visualTransform != null) {
+            visualTransform.localScale = initialVisualScale * stats.VisualScale;
+        }
+        RuntimeAnimatorController controller = archetype switch {
+            EnemyArchetype.Raider => raiderAnimatorController,
+            EnemyArchetype.Spitter => spitterAnimatorController,
+            EnemyArchetype.MiniBoss => miniBossAnimatorController,
+            EnemyArchetype.Boss => bossAnimatorController,
+            _ => initialAnimatorController
+        };
+        usesArchetypeAnimations = controller != null &&
+            (archetype == EnemyArchetype.Raider || archetype == EnemyArchetype.Spitter || archetype == EnemyArchetype.MiniBoss);
+        if (controller == null) controller = initialAnimatorController;
+        if (visualAnimator != null) {
+            bool changed = !visualAnimator.enabled || visualAnimator.runtimeAnimatorController != controller;
+            visualAnimator.runtimeAnimatorController = controller;
+            visualAnimator.enabled = true;
+            if (changed) {
+                visualAnimator.Rebind();
+                visualAnimator.Update(0f);
+            }
+            if (usesArchetypeAnimations) {
+                // The attack clip is 0.6 seconds long. Match windup and the full charge.
+                float duration = stats.Windup + (stats.Pattern == EnemyAttackPattern.Charge ? stats.ChargeDuration : 0f);
+                visualAnimator.SetFloat(AttackSpeedParameter, 0.6f / Mathf.Max(0.05f, duration));
+            }
+        }
+        customSpriteFacesLeft = usesArchetypeAnimations;
+        ApplyFacing(localFacingLeft);
+
+        float heightIncrease = initialControllerHeight * (stats.ColliderScale - 1f);
+        characterController.height = initialControllerHeight * stats.ColliderScale;
+        characterController.radius = initialControllerRadius * stats.ColliderScale;
+        characterController.center = initialControllerCenter + Vector3.up * (heightIncrease * 0.5f);
+        if (bodyCollider != null) {
+            bodyCollider.height = initialColliderHeight * stats.ColliderScale;
+            bodyCollider.radius = initialColliderRadius * stats.ColliderScale;
+            bodyCollider.center = initialColliderCenter + Vector3.up * (initialColliderHeight * (stats.ColliderScale - 1f) * 0.5f);
+        }
+
+        GetComponent<EnemyHealthDrop>()?.ApplyArchetype(stats);
+        attackController?.ApplyArchetype(stats);
     }
 
     private void HandleFacingChanged(bool previousValue, bool currentValue) {
@@ -116,7 +239,8 @@ public class EnemyController : NetworkBehaviour {
         localFacingLeft = isFacingLeft;
         for (int i = 0; i < spriteRenderers.Length; i++) {
             if (spriteRenderers[i] != null) {
-                spriteRenderers[i].flipX = initialSpriteFlipX[i] ^ isFacingLeft;
+                spriteRenderers[i].flipX = initialSpriteFlipX[i] ^ isFacingLeft ^
+                    (customSpriteFacesLeft && spriteRenderers[i] == visualSpriteRenderer);
             }
         }
     }
@@ -173,6 +297,27 @@ public class EnemyController : NetworkBehaviour {
                 UpdatePatrol();
                 break;
         }
+    }
+
+    private void LateUpdate() {
+        bool localAttack = GameState.isPlaying && attackController != null && attackController.IsAttacking;
+        if (IsSpawned && IsServer && networkIsAttacking.Value != localAttack) {
+            networkIsAttacking.Value = localAttack;
+        }
+
+        Vector3 displacement = transform.position - previousAnimationPosition;
+        previousAnimationPosition = transform.position;
+        if (!usesArchetypeAnimations || visualAnimator == null || !visualAnimator.enabled) return;
+
+        displacement.y = 0f;
+        float minimumStep = 0.1f * Time.deltaTime;
+        if (Time.deltaTime > 0f && displacement.sqrMagnitude > minimumStep * minimumStep) {
+            // A short hold prevents idle/move flicker between NetworkTransform updates.
+            movingAnimationUntil = Time.time + 0.12f;
+        }
+        bool attacking = IsSpawned ? networkIsAttacking.Value : localAttack;
+        visualAnimator.SetBool(IsMovingParameter, GameState.isPlaying && Time.time < movingAnimationUntil);
+        visualAnimator.SetBool(IsAttackingParameter, attacking);
     }
 
     private void RefreshVisibilityState() {
