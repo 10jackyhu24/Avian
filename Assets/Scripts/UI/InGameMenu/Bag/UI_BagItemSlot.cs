@@ -74,16 +74,14 @@ public class UI_BagItemSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IE
         if (slotData.IsWeapon) {
             attachmentContainer.SetActive(true);
 
+            // Keep the typed data for network/drop compatibility, but expose one shared slot.
+            AttachmentSlotData displayedAttachment = slotData.attachments.Find(slot => slot != null && !slot.IsEmpty);
             for (int i = 0; i < attachmentSlots.Count; i++) {
                 if (attachmentSlots[i] == null) {
                     continue;
                 }
-                attachmentSlots[i].gameObject.SetActive(true);
-                if (i < slotData.attachments.Count) {
-                    attachmentSlots[i].BindAttachmentSlotData(slotData.attachments[i]);
-                } else {
-                    attachmentSlots[i].BindAttachmentSlotData(null);
-                }
+                attachmentSlots[i].gameObject.SetActive(i == 0);
+                attachmentSlots[i].BindAttachmentSlotData(i == 0 ? displayedAttachment : null);
             }
         } else {
             attachmentContainer.SetActive(false);

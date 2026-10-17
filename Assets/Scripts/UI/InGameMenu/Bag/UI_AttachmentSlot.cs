@@ -4,9 +4,6 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 
 public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler, IPointerEnterHandler, IPointerExitHandler, IPointerClickHandler {
-    [Header("Slot Setup")]
-    [SerializeField] private ItemType itemType;
-
     public ItemData CurrentAttachment { get; private set; }
 
     private AttachmentSlotData boundAttachmentSlotData;
@@ -30,7 +27,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     }
 
     public ItemType GetItemType() {
-        return itemType;
+        return CurrentAttachment.itemType;
     }
 
     public void setAttachment(ItemData itemData) {
@@ -87,8 +84,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
     public void OnPointerEnter(PointerEventData eventData) {
         if (dragDropManager.GetCurrentDragAttachment() == null && dragDropManager.GetCurrentDragSlot() == null) return;
         dragDropManager.SetHoverAttachment(this);
-        if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging && dragDropManager.IsAttachmentMatch(itemType)) {
-            dragDropManager.Hide();
+        if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging && dragDropManager.IsAttachmentMatch()) {
             selectCover.Show();
         }
     }
@@ -98,7 +94,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
         dragDropManager.SetHoverAttachment(null);
         if (dragDropManager.GetCurrentDragAttachment() != this && eventData.dragging) {
             selectCover.Hide();
-            dragDropManager.Show();
+            dragDropManager.OnBagItemSlotHover(eventData.position);
         }
     }
     #endregion

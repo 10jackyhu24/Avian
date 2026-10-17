@@ -212,12 +212,20 @@ public class PlayerInventory : NetworkBehaviour {
         RequestInstallAttachmentServerRpc(attachmentInstanceId, weaponInstanceId, attachmentType);
     }
 
-    public void RequestDetachAttachment(ulong weaponInstanceId, AttachmentType attachmentType) {
+    public void RequestDetachAttachment(ulong weaponInstanceId, AttachmentType attachmentType, int insertionIndex = -1) {
         if (!IsSpawned || !IsClient || !IsOwner) {
             return;
         }
 
-        RequestDetachAttachmentServerRpc(weaponInstanceId, attachmentType);
+        RequestDetachAttachmentServerRpc(weaponInstanceId, attachmentType, insertionIndex);
+    }
+
+    public void RequestTransferAttachment(ulong sourceWeaponInstanceId, ulong targetWeaponInstanceId, AttachmentType attachmentType) {
+        if (!IsSpawned || !IsClient || !IsOwner) {
+            return;
+        }
+
+        RequestTransferAttachmentServerRpc(sourceWeaponInstanceId, targetWeaponInstanceId, attachmentType);
     }
 
     public void RequestDropItem(ulong instanceId) {
@@ -228,12 +236,29 @@ public class PlayerInventory : NetworkBehaviour {
         RequestDropItemServerRpc(instanceId);
     }
 
+    public void RequestDropAttachment(ulong weaponInstanceId, AttachmentType attachmentType) {
+        if (!IsSpawned || !IsClient || !IsOwner) {
+            return;
+        }
+
+        RequestDropAttachmentServerRpc(weaponInstanceId, attachmentType);
+    }
+
     public void RequestPickupItem(NetworkObject droppedObject, int insertionIndex) {
         if (!IsSpawned || !IsClient || !IsOwner || droppedObject == null || !droppedObject.IsSpawned) {
             return;
         }
 
         RequestPickupItemServerRpc(new NetworkObjectReference(droppedObject), insertionIndex);
+    }
+
+    public void RequestPickupAttachment(NetworkObject droppedObject, ulong weaponInstanceId) {
+        if (!IsSpawned || !IsClient || !IsOwner || droppedObject == null ||
+            !droppedObject.IsSpawned || weaponInstanceId == 0) {
+            return;
+        }
+
+        RequestPickupAttachmentServerRpc(new NetworkObjectReference(droppedObject), weaponInstanceId);
     }
 
     [ServerRpc]
@@ -298,8 +323,8 @@ public class PlayerInventory : NetworkBehaviour {
             return;
         }
 
-        if (weaponItem.GetAttachmentId(attachmentType).Length > 0) {
-            Debug.LogWarning($"[PlayerInventory] Rejected attachment from client {OwnerClientId}: {attachmentType} slot is occupied.", this);
+        if (HasAttachments(weaponItem)) {
+            Debug.LogWarning($"[PlayerInventory] Rejected attachment from client {OwnerClientId}: the shared attachment slot is occupied.", this);
             return;
         }
 
@@ -313,8 +338,10 @@ public class PlayerInventory : NetworkBehaviour {
     [ServerRpc]
     private void RequestDetachAttachmentServerRpc(
         ulong weaponInstanceId,
-        AttachmentType attachmentType) {
-        if (weaponInstanceId == 0 || attachmentType == AttachmentType.None) {
+        AttachmentType attachmentType,
+        int insertionIndex) {
+        if (weaponInstanceId == 0 || attachmentType == AttachmentType.None ||
+            insertionIndex < -1 || insertionIndex > slots.Count) {
             Debug.LogWarning($"[PlayerInventory] Rejected invalid detachment request from client {OwnerClientId}.", this);
             return;
         }
@@ -347,16 +374,89 @@ public class PlayerInventory : NetworkBehaviour {
         weaponItem.SetAttachmentId(attachmentType, default);
         SetSlotItem(weaponIndex, weaponItem);
 
-        slots.Add(new InventorySlotState {
-            SlotIndex = slots.Count,
-            Item = new InventoryItemState {
-                InstanceId = AllocateInstanceId(),
-                ItemId = attachmentItemId,
-                Count = 1
-            }
-        });
+        InsertItemOnServer(new InventoryItemState {
+            InstanceId = AllocateInstanceId(),
+            ItemId = attachmentItemId,
+            Count = 1
+        }, insertionIndex < 0 ? slots.Count : insertionIndex);
 
         Debug.Log($"[PlayerInventory] Client {OwnerClientId} detached {attachmentItemId} from {weaponItem.ItemId}.", this);
+    }
+
+    [ServerRpc]
+    private void RequestTransferAttachmentServerRpc(
+        ulong sourceWeaponInstanceId,
+        ulong targetWeaponInstanceId,
+        AttachmentType attachmentType) {
+        if (sourceWeaponInstanceId == 0 || targetWeaponInstanceId == 0 ||
+            sourceWeaponInstanceId == targetWeaponInstanceId || attachmentType == AttachmentType.None) {
+            return;
+        }
+
+        int sourceIndex = FindItemIndex(sourceWeaponInstanceId);
+        int targetIndex = FindItemIndex(targetWeaponInstanceId);
+        if (sourceIndex < 0 || targetIndex < 0) {
+            return;
+        }
+
+        InventoryItemState source = slots[sourceIndex].Item;
+        InventoryItemState target = slots[targetIndex].Item;
+        FixedString64Bytes attachmentItemId = source.GetAttachmentId(attachmentType);
+        if (attachmentItemId.Length == 0 || HasAttachments(target) ||
+            !ItemManager.TryGetItemById(source.ItemId.ToString(), out ItemData sourceData) || !sourceData.IsWeapon ||
+            !ItemManager.TryGetItemById(target.ItemId.ToString(), out ItemData targetData) || !targetData.IsWeapon ||
+            !ItemManager.TryGetItemById(attachmentItemId.ToString(), out ItemData attachmentData) ||
+            attachmentData.attachmentType != attachmentType) {
+            return;
+        }
+
+        source.SetAttachmentId(attachmentType, default);
+        target.SetAttachmentId(attachmentType, attachmentItemId);
+        SetSlotItem(sourceIndex, source);
+        SetSlotItem(targetIndex, target);
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} transferred {attachmentItemId} from {source.ItemId} to {target.ItemId}.", this);
+    }
+
+    [ServerRpc]
+    private void RequestDropAttachmentServerRpc(ulong weaponInstanceId, AttachmentType attachmentType) {
+        if (weaponInstanceId == 0 || attachmentType == AttachmentType.None) {
+            return;
+        }
+
+        int weaponIndex = FindItemIndex(weaponInstanceId);
+        if (weaponIndex < 0) {
+            return;
+        }
+
+        InventoryItemState weaponItem = slots[weaponIndex].Item;
+        FixedString64Bytes attachmentItemId = weaponItem.GetAttachmentId(attachmentType);
+        if (attachmentItemId.Length == 0 ||
+            !ItemManager.TryGetItemById(weaponItem.ItemId.ToString(), out ItemData weaponData) || !weaponData.IsWeapon ||
+            !ItemManager.TryGetItemById(attachmentItemId.ToString(), out ItemData attachmentData) ||
+            attachmentData.attachmentType != attachmentType) {
+            return;
+        }
+
+        InventoryItemState droppedAttachment = new InventoryItemState {
+            InstanceId = AllocateInstanceId(),
+            ItemId = attachmentItemId,
+            Count = 1
+        };
+
+        Vector3 playerFootPosition = transform.position;
+        CharacterController characterController = GetComponent<CharacterController>();
+        if (characterController != null && characterController.enabled) {
+            playerFootPosition.y = characterController.bounds.min.y;
+        }
+
+        if (!NetworkDroppedItem.TrySpawnOnServer(droppedAttachment, playerFootPosition)) {
+            Debug.LogWarning($"[PlayerInventory] Failed to drop attachment {attachmentItemId} for client {OwnerClientId}.", this);
+            return;
+        }
+
+        weaponItem.SetAttachmentId(attachmentType, default);
+        SetSlotItem(weaponIndex, weaponItem);
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} dropped attachment {attachmentItemId} from {weaponItem.ItemId}.", this);
     }
 
     [ServerRpc]
@@ -464,6 +564,61 @@ public class PlayerInventory : NetworkBehaviour {
             ? $"merged and placed in slot {finalSlotIndex}"
             : $"inserted into slot {finalSlotIndex}";
         Debug.Log($"[PlayerInventory] Client {OwnerClientId} picked up {item.ItemId} x{item.Count}; {pickupResult}.", this);
+    }
+
+    [ServerRpc]
+    private void RequestPickupAttachmentServerRpc(
+        NetworkObjectReference droppedObjectReference,
+        ulong weaponInstanceId) {
+        int weaponIndex = FindItemIndex(weaponInstanceId);
+        if (weaponIndex < 0 ||
+            !droppedObjectReference.TryGet(out NetworkObject droppedObject) ||
+            droppedObject == null || !droppedObject.IsSpawned ||
+            !droppedObject.TryGetComponent(out NetworkDroppedItem droppedItem) ||
+            (droppedObject.transform.position - transform.position).sqrMagnitude > PickupRange * PickupRange) {
+            return;
+        }
+
+        InventoryItemState weaponItem = slots[weaponIndex].Item;
+        InventoryItemState groundItem = droppedItem.ItemState;
+        if (HasAttachments(weaponItem) || !groundItem.IsValid || HasAttachments(groundItem) ||
+            FindItemIndex(groundItem.InstanceId) >= 0 ||
+            !ItemManager.TryGetItemById(weaponItem.ItemId.ToString(), out ItemData weaponData) || !weaponData.IsWeapon ||
+            !ItemManager.TryGetItemById(groundItem.ItemId.ToString(), out ItemData attachmentData) ||
+            attachmentData.attachmentType == AttachmentType.None ||
+            groundItem.Count > Mathf.Max(1, attachmentData.itemObject.maxCount) ||
+            !DroppedItemRegistry.TryGet(groundItem.InstanceId, out DroppedItemRecord record) ||
+            record.SpawnedItem != droppedItem) {
+            return;
+        }
+
+        InventoryItemState oneAttachment = groundItem;
+        oneAttachment.Count = 1;
+        if (!CanAddItemOnServer(oneAttachment)) {
+            Debug.LogWarning($"[PlayerInventory] Client {OwnerClientId} does not have enough capacity for {groundItem.ItemId}.", this);
+            return;
+        }
+
+        if (groundItem.Count == 1) {
+            if (!DroppedItemRegistry.TryRemove(groundItem.InstanceId, droppedItem, out _)) {
+                return;
+            }
+        } else {
+            InventoryItemState remainder = groundItem;
+            remainder.Count--;
+            if (!DroppedItemRegistry.TryUpdateItemState(groundItem.InstanceId, droppedItem, remainder)) {
+                return;
+            }
+            droppedItem.SetItemStateOnServer(remainder);
+        }
+
+        weaponItem.SetAttachmentId(attachmentData.attachmentType, groundItem.ItemId);
+        SetSlotItem(weaponIndex, weaponItem);
+        if (groundItem.Count == 1) {
+            droppedObject.Despawn(true);
+        }
+
+        Debug.Log($"[PlayerInventory] Client {OwnerClientId} equipped {groundItem.ItemId} from the ground on {weaponItem.ItemId}.", this);
     }
 
     private int FindItemIndex(ulong instanceId) {
