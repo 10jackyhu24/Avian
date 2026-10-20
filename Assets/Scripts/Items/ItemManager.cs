@@ -47,6 +47,11 @@ public static class ItemManager {
             pickupable.SetCount(bagSlotData.count);
             pickupable.SetAttachment(bagSlotData.attachments);
         }
+        SpriteRenderer renderer = spawnedObject.GetComponentInChildren<SpriteRenderer>();
+        if (renderer != null) {
+            renderer.sprite = bagSlotData.itemData.itemObject.icon;
+            renderer.enabled = renderer.sprite != null;
+        }
 
         return spawnedObject;
     }

@@ -853,6 +853,10 @@ public class PlayerInventory : NetworkBehaviour {
         return nextInstanceId++;
     }
 
+    public static ulong AllocateWorldItemInstanceId() {
+        return NetworkManager.Singleton != null && NetworkManager.Singleton.IsServer ? AllocateInstanceId() : 0;
+    }
+
     private void HandleSlotsChanged(NetworkListEvent<InventorySlotState> changeEvent) {
         InventoryChanged?.Invoke();
     }

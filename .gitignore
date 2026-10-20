@@ -127,3 +127,8 @@ secret.yaml
 # unity
 /Assets/_Recovery/
 _Recovery.meta
+
+# Standalone attachment checks (keep the hand-written project, omit build output).
+!Tools/ItemAttachments/Tests/AttachmentChecks.csproj
+/Tools/ItemAttachments/Tests/bin/
+/Tools/ItemAttachments/Tests/obj/

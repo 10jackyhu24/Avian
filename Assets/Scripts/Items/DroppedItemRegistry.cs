@@ -33,10 +33,12 @@ public static class DroppedItemRegistry {
         new Dictionary<ulong, DroppedItemRecord>();
 
     public static int Count => records.Count;
+    public static uint WorldGeneration { get; private set; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     public static void Reset() {
         records.Clear();
+        unchecked { WorldGeneration++; }
     }
 
     public static bool TryRegister(

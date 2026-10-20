@@ -51,6 +51,7 @@ public class UI_AttachmentSlot : MonoBehaviour, IBeginDragHandler, IDragHandler,
 
         image.sprite = itemData.itemObject.icon;
         image.enabled = image.sprite != null;
+        image.preserveAspect = true;
     }
 
     #region Drag Drop Handlers

@@ -105,6 +105,8 @@ public class TerrainController : MonoBehaviour {
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
     private readonly HashSet<Vector2Int> lastLoadCenters = new HashSet<Vector2Int>();
     private int currentSeed;
+    public int WorldSeed => currentSeed;
+    private readonly Collider[] groundSpawnHits = new Collider[32];
 
     // Track the currently loaded and displayed coordinates
     private HashSet<Vector2Int> inRangePositions = new HashSet<Vector2Int>();
@@ -331,6 +333,23 @@ public class TerrainController : MonoBehaviour {
         }
 
         return inRangePositions.Contains(new Vector2Int(gridX, gridZ));
+    }
+
+    public bool TryGetClearGroundPosition(Vector3 candidate, out Vector3 ground) {
+        ground = default;
+        if (!IsWorldPositionLoaded(candidate)) return false;
+        int x = Mathf.RoundToInt(candidate.x) + size / 2;
+        int z = Mathf.RoundToInt(candidate.z) + size / 2;
+        GameObject tile = cubeGrid[x, z];
+        if (tile == null || !tile.activeInHierarchy || !tile.TryGetComponent(out Collider floor)) return false;
+        ground = new Vector3(candidate.x, floor.bounds.max.y, candidate.z);
+        int count = Physics.OverlapSphereNonAlloc(ground + Vector3.up * 0.6f, 0.45f,
+            groundSpawnHits, ~0, QueryTriggerInteraction.Ignore);
+        if (count == groundSpawnHits.Length) return false;
+        for (int i = 0; i < count; i++) {
+            if (groundSpawnHits[i] != floor) return false;
+        }
+        return true;
     }
 
     private void UpdateDynamicLoading() {
