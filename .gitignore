@@ -116,6 +116,7 @@ InitTestScene*.unity*
 
 # python
 __pycache__/
+/.utmp/
 
 # backend
 secret.yaml

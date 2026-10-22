@@ -109,7 +109,17 @@ def get_room_endpoint_host():
 
 
 def build_room_endpoint(node_port):
+    if get_game_transport() == "websocket":
+        base = os.getenv("ROOM_PUBLIC_BASE_URL", f"wss://{get_room_endpoint_host()}:8443/game").strip().rstrip("/")
+        return f"{base}/{node_port}"
     return f"{get_room_endpoint_host()}:{node_port}"
+
+
+def get_game_transport():
+    transport = os.getenv("GAME_TRANSPORT", "websocket").strip().lower()
+    if transport not in ("websocket", "udp"):
+        raise HTTPException(status_code=500, detail="GAME_TRANSPORT must be websocket or udp")
+    return transport
 
 
 def get_room_node_port_start():
@@ -147,6 +157,7 @@ def build_k8s_room_settings():
         namespace=get_room_namespace(),
         image=get_room_image(),
         game_port=get_room_game_port(),
+        transport=get_game_transport(),
     )
 
 
@@ -305,6 +316,7 @@ def build_diagnostics_payload():
     room_mode = get_room_mode()
     return {
         "room_mode": room_mode,
+        "game_transport": get_game_transport(),
         "queue_size": len(queue),
         "room_count": len(rooms_by_id),
         "static_world_endpoint": get_world_endpoint(),

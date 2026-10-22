@@ -1,19 +1,41 @@
 {
-	auto_https off
+    http_port 8000
+    auto_https disable_redirects
+    default_sni {$AVIAN_API_HOST}
+    servers {
+        protocols h1 h2
+    }
 }
 
-:8000 {
-	handle /auth/* {
-		reverse_proxy avian-lobby:8000
-	}
+http://:8000 {
+    redir https://{$AVIAN_API_HOST}:{$AVIAN_HTTPS_PORT:8443}{uri} 308
+}
 
-	handle /match/* {
-		reverse_proxy avian-matchmaker:8080
-	}
-
-	handle /health {
-		respond "ok" 200
-	}
-
-	respond "not found" 404
+https://{$AVIAN_API_HOST}:{$AVIAN_HTTPS_PORT:8443} {
+    tls {
+        issuer acme {
+            dir {$AVIAN_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+            profile shortlived
+            disable_tlsalpn_challenge
+        }
+    }
+    @game path_regexp game ^/game/(3008[0-4])$
+    handle @game {
+        rewrite * /
+        reverse_proxy {$AVIAN_GAME_GATEWAY_HOST:avian-cluster-control-plane}:{re.game.1} {
+            transport http {
+                versions 1.1
+            }
+        }
+    }
+    handle /auth/* {
+        reverse_proxy avian-lobby:8000
+    }
+    handle /match/* {
+        reverse_proxy avian-matchmaker:8080
+    }
+    handle /health {
+        respond "ok" 200
+    }
+    respond "not found" 404
 }

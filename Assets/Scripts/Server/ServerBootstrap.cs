@@ -45,7 +45,9 @@ public class ServerBootstrap : MonoBehaviour {
         }
 
         LoadRoomSettings();
-        ConfigureTransport();
+        if (!ConfigureTransport()) {
+            return;
+        }
         NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
 
         if (!NetworkManager.Singleton.IsListening) {
@@ -99,6 +101,9 @@ public class ServerBootstrap : MonoBehaviour {
     }
 
     private void LoadRoomSettings() {
+        if (bool.TryParse(Environment.GetEnvironmentVariable("QUIT_WHEN_EMPTY"), out bool configuredQuitWhenEmpty)) {
+            quitWhenEmpty = configuredQuitWhenEmpty;
+        }
         activeRoomId = Environment.GetEnvironmentVariable("ROOM_ID");
         if (string.IsNullOrWhiteSpace(activeRoomId)) {
             activeRoomId = string.IsNullOrWhiteSpace(GameState.currentRoomId)
@@ -121,7 +126,7 @@ public class ServerBootstrap : MonoBehaviour {
             Debug.LogError("[ServerBootstrap] TerrainController not found. Dedicated server will have no collidable world.", this);
         }
 
-        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Loaded seed={activeSeed}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Loaded seed={activeSeed}, quitWhenEmpty={quitWhenEmpty}", this);
     }
 
     private TerrainController ResolveTerrainController() {
@@ -137,10 +142,10 @@ public class ServerBootstrap : MonoBehaviour {
         return terrainController;
     }
 
-    private void ConfigureTransport() {
+    private bool ConfigureTransport() {
         if (NetworkManager.Singleton.NetworkConfig.NetworkTransport is not UnityTransport unityTransport) {
             Debug.LogWarning("[ServerBootstrap] NetworkManager transport is not UnityTransport.", this);
-            return;
+            return false;
         }
 
         ushort port = defaultPort;
@@ -149,8 +154,15 @@ public class ServerBootstrap : MonoBehaviour {
             port = parsedPort;
         }
 
-        unityTransport.SetConnectionData(listenAddress, port, listenAddress);
-        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}", this);
+        string mode = (Environment.GetEnvironmentVariable("GAME_TRANSPORT") ?? "websocket").Trim().ToLowerInvariant();
+        try {
+            GameConnectionSettings.ConfigureServer(unityTransport, listenAddress, port, mode);
+        } catch (ArgumentException error) {
+            Debug.LogError($"[ServerBootstrap] {error.Message}", this);
+            return false;
+        }
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}, transport={mode}", this);
+        return true;
     }
 
     private void SpawnEnemies() {

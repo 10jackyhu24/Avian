@@ -242,6 +242,8 @@ public class PlayerController : NetworkBehaviour {
         );
     }
 
+    private float nextMovementSendTime;
+
     private void SendInputToServer() {
         Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
         bool runPressed = inputActions.Player.Run.IsPressed();
@@ -249,7 +251,7 @@ public class PlayerController : NetworkBehaviour {
 
         if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen ||
             MerchantMenu.IsOpen || !IsAlive) {
-            SubmitMovementServerRpc(0f, 0f, false);
+            SendMovementAtNetworkRate(0f, 0f, false);
             CancelPreparedAttack();
             return;
         }
@@ -263,11 +265,20 @@ public class PlayerController : NetworkBehaviour {
         }
 
         bool isMovementLocked = Time.time < nextLocalAttackTime;
-        SubmitMovementServerRpc(
+        SendMovementAtNetworkRate(
             isMovementLocked ? 0f : moveInput.x,
             isMovementLocked ? 0f : moveInput.y,
             !isMovementLocked && runPressed
         );
+    }
+
+    private void SendMovementAtNetworkRate(float horizontal, float vertical, bool runPressed) {
+        if (Time.unscaledTime < nextMovementSendTime) {
+            return;
+        }
+        float tickRate = NetworkManager != null ? NetworkManager.NetworkConfig.TickRate : 30f;
+        nextMovementSendTime = Time.unscaledTime + 1f / Mathf.Max(1f, tickRate);
+        SubmitMovementServerRpc(horizontal, vertical, runPressed);
     }
 
     private void BeginPreparingAttack() {

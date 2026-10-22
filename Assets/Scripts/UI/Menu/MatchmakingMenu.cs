@@ -3,7 +3,6 @@ using TMPro;
 using System.Collections;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
-using Unity.VisualScripting;
 
 public class MatchmakingMenu : MonoBehaviour {
     private MenuManager menuManager;
@@ -11,6 +10,16 @@ public class MatchmakingMenu : MonoBehaviour {
     private MatchmakerClient matchmakerClient;
     private TerrainController terrainController;
     private bool isConnectingToWorldServer;
+    private string joiningRoomId;
+    private int joiningSeed;
+    private string joiningEndpoint;
+    private int connectionAttemptId;
+    private bool transportConnected;
+    private NetworkTransport observedTransport;
+    private bool hasEnteredMatchWorld;
+    private bool applicationQuitting;
+
+    [SerializeField, Min(1f)] private float connectionTimeoutSeconds = 30f;
 
     [Header("UI")]
     [SerializeField] private TMP_Text inQueueText;
@@ -29,6 +38,10 @@ public class MatchmakingMenu : MonoBehaviour {
 
     private void OnDestroy() {
         UnregisterNetworkCallbacks();
+    }
+
+    private void OnApplicationQuit() {
+        applicationQuitting = true;
     }
 
     public void Matchmaking() {
@@ -139,6 +152,9 @@ public class MatchmakingMenu : MonoBehaviour {
     }
 
     public void ConnectToPendingMatchWorld() {
+        if (isConnectingToWorldServer) {
+            return;
+        }
         if (!GameState.hasPendingMatchWorld) {
             warningWindow.Show("Match Missing", "No pending match found.");
             return;
@@ -152,17 +168,46 @@ public class MatchmakingMenu : MonoBehaviour {
     }
 
     private IEnumerator EnterWorldRoutine(string roomId, int seed, string worldEndpoint) {
-        GameState.SetWorld(roomId, seed);
-
         string endpoint = !string.IsNullOrWhiteSpace(worldEndpoint)
             ? worldEndpoint
             : URL.WorldServer;
+        joiningRoomId = roomId;
+        joiningSeed = seed;
+        joiningEndpoint = endpoint;
+        int attemptId = ++connectionAttemptId;
 
         if (!TryConnectToDedicatedServer(endpoint)) {
+            FindFirstObjectByType<CharacterSelectionMenu>()?.ShowConnectionFailure("Could not start the game connection. Check the connection warning.");
             yield break;
         }
 
-        yield return null;
+        float startedAt = Time.realtimeSinceStartup;
+        float deadline = startedAt + Mathf.Max(1f, connectionTimeoutSeconds);
+        float nextProgressAt = startedAt;
+        while (isConnectingToWorldServer && attemptId == connectionAttemptId) {
+            NetworkManager manager = NetworkManager.Singleton;
+            if (manager != null && manager.IsConnectedClient &&
+                manager.LocalClient?.PlayerObject != null && manager.LocalClient.PlayerObject.IsSpawned) {
+                CompleteWorldConnection(manager.LocalClientId);
+                yield break;
+            }
+            if (Time.realtimeSinceStartup >= deadline) {
+                string stage = manager != null && manager.IsConnectedClient
+                    ? "The server accepted the client, but its player did not spawn. Check matching client/server builds."
+                    : transportConnected ? "Transport connected, but Netcode did not finish joining. Check the client/server errors."
+                    : "The game transport did not connect. Check the endpoint, TLS certificate, and Caddy game proxy.";
+                FailWorldConnection($"Timed out joining {endpoint} after {connectionTimeoutSeconds:0}s. {stage}");
+                yield break;
+            }
+            if (Time.realtimeSinceStartup >= nextProgressAt) {
+                string progress = manager != null && manager.IsConnectedClient ? "Preparing your character"
+                    : transportConnected ? "Joining game server" : "Connecting to game server";
+                Debug.Log($"[MatchmakingMenu] {progress}: {endpoint}, elapsed={Time.realtimeSinceStartup - startedAt:0}s", this);
+                FindFirstObjectByType<CharacterSelectionMenu>()?.ShowConnectionProgress($"{progress}... ({Time.realtimeSinceStartup - startedAt:0}/{connectionTimeoutSeconds:0}s)");
+                nextProgressAt = Time.realtimeSinceStartup + 5f;
+            }
+            yield return null;
+        }
     }
 
     private bool TryConnectToDedicatedServer(string endpoint) {
@@ -173,7 +218,7 @@ public class MatchmakingMenu : MonoBehaviour {
 
         if (NetworkManager.Singleton.IsListening) {
             warningWindow.Show("NetworkManager", "NetworkManager is already running.");
-            return true;
+            return false;
         }
 
         if (NetworkManager.Singleton.NetworkConfig.NetworkTransport is not UnityTransport unityTransport) {
@@ -181,22 +226,26 @@ public class MatchmakingMenu : MonoBehaviour {
             return false;
         }
 
-        if (!TryParseEndpoint(endpoint, out string host, out ushort port)) {
-            warningWindow.Show("Connect Failed", $"Invalid world server endpoint: {endpoint}");
+        try {
+            GameConnectionSettings.ConfigureClient(unityTransport, endpoint);
+        } catch (System.ArgumentException error) {
+            warningWindow?.Show("Connect Failed", error.Message);
             return false;
         }
 
         NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
-        unityTransport.SetConnectionData(host, port);
+        transportConnected = false;
+        hasEnteredMatchWorld = false;
         RegisterNetworkCallbacks();
         isConnectingToWorldServer = true;
 
         bool started = NetworkManager.Singleton.StartClient();
 
-        Debug.Log($"[MatchmakingMenu] StartClient={started}, endpoint={host}:{port}", this);
+        Debug.Log($"[MatchmakingMenu] StartClient={started}, endpoint={endpoint}, websocket={unityTransport.UseWebSockets}, encrypted={unityTransport.UseEncryption}", this);
         if (!started) {
             isConnectingToWorldServer = false;
-            warningWindow.Show("Client Faild", "Failed to start client.");
+            UnregisterNetworkCallbacks();
+            warningWindow?.Show("Client Failed", "Failed to start client.");
         }
 
         return started;
@@ -211,15 +260,32 @@ public class MatchmakingMenu : MonoBehaviour {
         NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
+        NetworkManager.Singleton.OnTransportFailure -= HandleTransportFailure;
+        NetworkManager.Singleton.OnTransportFailure += HandleTransportFailure;
+        observedTransport = NetworkManager.Singleton.NetworkConfig.NetworkTransport;
+        observedTransport.OnTransportEvent -= HandleTransportEvent;
+        observedTransport.OnTransportEvent += HandleTransportEvent;
     }
 
     private void UnregisterNetworkCallbacks() {
+        if (observedTransport != null) {
+            observedTransport.OnTransportEvent -= HandleTransportEvent;
+            observedTransport = null;
+        }
         if (NetworkManager.Singleton == null) {
             return;
         }
 
         NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
+        NetworkManager.Singleton.OnTransportFailure -= HandleTransportFailure;
+    }
+
+    private void HandleTransportEvent(NetworkEvent eventType, ulong clientId, System.ArraySegment<byte> payload, float receiveTime) {
+        if (isConnectingToWorldServer && eventType == NetworkEvent.Connect) {
+            transportConnected = true;
+            Debug.Log($"[MatchmakingMenu] Game transport connected: {joiningEndpoint}; waiting for Netcode.", this);
+        }
     }
 
     private void HandleClientConnected(ulong clientId) {
@@ -227,7 +293,14 @@ public class MatchmakingMenu : MonoBehaviour {
             return;
         }
 
+        Debug.Log($"[MatchmakingMenu] Server accepted client {clientId}; waiting for its player object.", this);
+    }
+
+    private void CompleteWorldConnection(ulong clientId) {
         isConnectingToWorldServer = false;
+        hasEnteredMatchWorld = true;
+        GameState.SetWorld(joiningRoomId, joiningSeed);
+        Debug.Log($"[MatchmakingMenu] Local player spawned: client={clientId}, room={joiningRoomId}, seed={joiningSeed}", this);
         if (terrainController == null) {
             terrainController = FindFirstObjectByType<TerrainController>();
         }
@@ -242,18 +315,61 @@ public class MatchmakingMenu : MonoBehaviour {
         menuManager.ClearHistory();
     }
 
+    public void CancelPendingWorldConnection() {
+        if (!isConnectingToWorldServer) {
+            return;
+        }
+        isConnectingToWorldServer = false;
+        connectionAttemptId++;
+        UnregisterNetworkCallbacks();
+        NetworkManager.Singleton?.Shutdown();
+    }
+
+    private void FailWorldConnection(string message) {
+        CancelPendingWorldConnection();
+        GameState.SetPendingMatchWorld(joiningRoomId, joiningSeed, joiningEndpoint);
+        Debug.LogWarning($"[MatchmakingMenu] {message}", this);
+        FindFirstObjectByType<CharacterSelectionMenu>()?.ShowConnectionFailure(message);
+        warningWindow?.Show("Game connection failed", message);
+    }
+
+    private void HandleTransportFailure() {
+        if (isConnectingToWorldServer) {
+            FailWorldConnection($"Transport failed joining {joiningEndpoint}. Check the TLS/transport error in Console.");
+        }
+    }
+
     private void HandleClientDisconnected(ulong clientId) {
-        if (NetworkManager.Singleton == null || clientId != NetworkManager.Singleton.LocalClientId) {
+        if (applicationQuitting || NetworkManager.Singleton == null || clientId != NetworkManager.Singleton.LocalClientId) {
             return;
         }
 
-        string message = isConnectingToWorldServer
-            ? "Disconnected while joining game server. Check server build, scene list, and k8s logs."
-            : "Disconnected from game server.";
+        string reason = NetworkManager.Singleton.DisconnectReason;
+        if (isConnectingToWorldServer) {
+            FailWorldConnection($"Disconnected joining {joiningEndpoint}. {reason}");
+            return;
+        }
+        if (!hasEnteredMatchWorld || !GameState.isPlaying) {
+            // Leaving through the pause menu already resets the world and shows the main menu.
+            hasEnteredMatchWorld = false;
+            UnregisterNetworkCallbacks();
+            return;
+        }
+        string message = $"Disconnected from game server. {reason}";
 
         isConnectingToWorldServer = false;
         Debug.LogWarning($"[MatchmakingMenu] {message}", this);
-        warningWindow.Show("Warning", message);
+        if (hasEnteredMatchWorld) {
+            hasEnteredMatchWorld = false;
+            UnregisterNetworkCallbacks();
+            GameState.ResetWorld();
+            GameState.SetPendingMatchWorld(joiningRoomId, joiningSeed, joiningEndpoint);
+            menuManager?.ClearHistory();
+            menuManager?.HideMenu(true);
+            menuManager?.SwitchToPanel(PanelType.CharacterSelection);
+            FindFirstObjectByType<CharacterSelectionMenu>()?.ShowConnectionFailure(message);
+        }
+        warningWindow?.Show("Game disconnected", message);
     }
 
     private static bool TryParseEndpoint(string endpoint, out string host, out ushort port) {

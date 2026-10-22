@@ -21,14 +21,18 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 7777
-          protocol: UDP
+          protocol: TCP
         env:
         - name: GAME_PORT
           value: "7777"
+        - name: GAME_TRANSPORT
+          value: "websocket"
         - name: MAP_SEED
           value: "100000"
         - name: ROOM_ID
           value: "static-room"
+        - name: QUIT_WHEN_EMPTY
+          value: "false"
 
 ---
 apiVersion: v1
@@ -40,8 +44,8 @@ spec:
   selector:
     app: avian-game-room
   ports:
-  - name: udp-game
-    protocol: UDP
+  - name: websocket-game
+    protocol: TCP
     port: 7777
     targetPort: 7777
     nodePort: 30080

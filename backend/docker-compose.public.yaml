@@ -1,0 +1,5 @@
+# Use only when TCP port 80 is free on the host.
+services:
+  avian-caddy:
+    ports:
+      - "80:8000"

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -45,6 +46,8 @@ public class ZoneManager : NetworkBehaviour {
     private ZoneSession cachedSession;
     private ZoneSchedule schedule;
     private float damageAccumulator;
+    private readonly HashSet<ulong> readyPlayers = new HashSet<ulong>();
+    private bool localWorldReadySent;
     private GameObject overlayObject;
     private Material overlayMaterial;
     private Material lineMaterial;
@@ -66,18 +69,49 @@ public class ZoneManager : NetworkBehaviour {
 
     public override void OnNetworkSpawn() {
         Instance = this;
+        localWorldReadySent = false;
+        if (IsServer) NetworkManager.OnClientDisconnectCallback += HandlePlayerDisconnected;
     }
 
     public override void OnNetworkDespawn() {
+        if (NetworkManager != null) NetworkManager.OnClientDisconnectCallback -= HandlePlayerDisconnected;
+        readyPlayers.Clear();
+        localWorldReadySent = false;
         if (Instance == this) Instance = null;
         DestroyVisuals();
         schedule = null;
     }
 
     public override void OnDestroy() {
+        if (NetworkManager != null) NetworkManager.OnClientDisconnectCallback -= HandlePlayerDisconnected;
         if (Instance == this) Instance = null;
         DestroyVisuals();
         base.OnDestroy();
+    }
+
+    [ServerRpc(RequireOwnership = false)]
+    private void NotifyWorldReadyServerRpc(ServerRpcParams rpcParams = default) {
+        ulong clientId = rpcParams.Receive.SenderClientId;
+        if (!NetworkManager.ConnectedClients.TryGetValue(clientId, out NetworkClient client) ||
+            client.PlayerObject == null || !client.PlayerObject.IsSpawned) return;
+        if (readyPlayers.Add(clientId)) {
+            Debug.Log($"[ZoneManager] Player {clientId} entered the world. Ready players={readyPlayers.Count}.", this);
+        }
+    }
+
+    private void HandlePlayerDisconnected(ulong clientId) {
+        readyPlayers.Remove(clientId);
+        if (readyPlayers.Count == 0) ResetMatchClock();
+    }
+
+    private void ResetMatchClock() {
+        if (session.Value.IsInitialized) {
+            Debug.Log("[ZoneManager] No ready players remain. Match clock reset; waiting for players to enter the world.", this);
+        }
+        session.Value = default;
+        elapsedTime.Value = 0f;
+        damageAccumulator = 0f;
+        schedule = null;
     }
 
     public bool TryGetSnapshot(out ZoneSnapshot snapshot) {
@@ -94,12 +128,24 @@ public class ZoneManager : NetworkBehaviour {
 
     private void Update() {
         if (!IsSpawned || !GameState.isPlaying) {
+            localWorldReadySent = false;
             if (overlayObject != null) overlayObject.SetActive(false);
             if (boundary != null) boundary.gameObject.SetActive(false);
             return;
         }
 
+        // SetWorld is called only after the local player spawns; terrain generation
+        // then finishes on the same main thread before this Update can run.
+        if (IsClient && !localWorldReadySent && NetworkManager.IsConnectedClient &&
+            NetworkManager.LocalClient?.PlayerObject != null && NetworkManager.LocalClient.PlayerObject.IsSpawned) {
+            localWorldReadySent = true;
+            NotifyWorldReadyServerRpc();
+        }
+
         if (IsServer) {
+            // A running dedicated server or a newly connected socket is not a player
+            // entering gameplay. Wait for a connected player's world-ready RPC.
+            if (readyPlayers.Count == 0) return;
             if (!session.Value.IsInitialized) {
                 TerrainController terrain = TerrainController.Instance;
                 if (terrain == null || !GameState.hasWorldSeed) return;
@@ -113,6 +159,7 @@ public class ZoneManager : NetworkBehaviour {
                 };
                 elapsedTime.Value = 0f;
                 damageAccumulator = 0f;
+                Debug.Log($"[ZoneManager] Match clock started after world entry. Seed={GameState.currentSeed}, ready players={readyPlayers.Count}.", this);
             } else {
                 elapsedTime.Value = Mathf.Min(session.Value.Duration, elapsedTime.Value + Time.deltaTime);
             }

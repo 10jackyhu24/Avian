@@ -20,6 +20,6 @@ COPY . /app
 
 RUN chmod +x /app/AvianServer.x86_64
 
-EXPOSE 7777/udp
+EXPOSE 7777/tcp 7777/udp
 
 ENTRYPOINT ["/app/AvianServer.x86_64"]
