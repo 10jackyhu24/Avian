@@ -20,6 +20,7 @@ class K8sRoomSettings:
     image: str
     game_port: int
     transport: str = "websocket"
+    tls_secret_name: str = "avian-game-tls"
 
     @property
     def protocol(self):
@@ -232,11 +233,25 @@ def create_job(server_name, room_id, room_seed, settings, labels):
         ],
     )
 
+    volumes = []
+    if settings.transport == "websocket":
+        container.env.extend([
+            client.V1EnvVar(name="GAME_TLS_CERT_FILE", value="/run/avian-tls/tls.crt"),
+            client.V1EnvVar(name="GAME_TLS_KEY_FILE", value="/run/avian-tls/tls.key"),
+        ])
+        container.volume_mounts = [client.V1VolumeMount(
+            name="game-tls", mount_path="/run/avian-tls", read_only=True,
+        )]
+        volumes = [client.V1Volume(name="game-tls", secret=client.V1SecretVolumeSource(
+            secret_name=settings.tls_secret_name, default_mode=0o400,
+        ))]
+
     pod_template = client.V1PodTemplateSpec(
         metadata=client.V1ObjectMeta(labels=labels),
         spec=client.V1PodSpec(
             restart_policy="Never",
             containers=[container],
+            volumes=volumes,
         ),
     )
 

@@ -33,14 +33,29 @@ services:
     depends_on:
       avian-postgres:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.tls/lobby
+        target: /run/avian-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://avian-lobby:8000/health', context=ssl.create_default_context(cafile='/run/avian-tls/ca.crt'), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   avian-caddy:
     image: caddy:2.11.7
     container_name: avian_caddy
     restart: unless-stopped
     depends_on:
-      - avian-lobby
-      - avian-matchmaker
+      avian-lobby:
+        condition: service_healthy
+      avian-matchmaker:
+        condition: service_healthy
     environment:
       AVIAN_API_HOST: ${AVIAN_API_HOST:?Set AVIAN_API_HOST to the host public IP or domain}
       AVIAN_HTTPS_PORT: ${AVIAN_HTTPS_PORT:-8443}
@@ -53,6 +68,12 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - type: bind
+        source: ./.tls/ca.crt
+        target: /etc/avian-tls/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
     networks:
       - default
       - kind
@@ -82,9 +103,21 @@ services:
       KUBERNETES_API_HOST: ${KUBERNETES_API_HOST:-}
       KUBERNETES_VERIFY_SSL: ${KUBERNETES_VERIFY_SSL:-true}
     ports:
-      - "${AVIAN_MATCHMAKER_PORT:-8080}:8080"
+      - "127.0.0.1:${AVIAN_MATCHMAKER_PORT:-8080}:8080"
     volumes:
       - ${KUBECONFIG_HOST_PATH:-${USERPROFILE}/.kube/config}:/kube/config:ro
+      - type: bind
+        source: ./.tls/matchmaker
+        target: /run/avian-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://avian-matchmaker:8080/health', context=ssl.create_default_context(cafile='/run/avian-tls/ca.crt'), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
 volumes:
   pgdata:

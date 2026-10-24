@@ -18,13 +18,19 @@ Both computers use this same API address. Log in with different accounts, choose
 wss://140.136.151.88:8443/game/30080
 ```
 
-The client validates the public TLS certificate. Caddy decrypts the connection and forwards WebSockets over the private Docker/Kind network to the game server. The menu enters gameplay only after Netcode connects and the local player object spawns; a failed join times out and permits retry. If the connection later drops, it clears the active world state and returns to character selection with the disconnect reason, instead of leaving an empty map on screen.
+The client validates the public TLS certificate. Caddy terminates public TLS, then opens a **second, verified TLS connection** to each backend: HTTPS to Lobby/Matchmaker and WSS to the Unity game server. Caddy validates the private CA and the backend certificate name; certificate verification is not disabled. The menu enters gameplay only after Netcode connects and the local player object spawns; a failed join times out and permits retry. If the connection later drops, it clears the active world state and returns to character selection with the disconnect reason, instead of leaving an empty map on screen.
 
 The project includes Unity Transport 2.7.2 in `Packages/com.unity.transport` with a TLS receive-buffer fix. Without it, valid large TLS records can cause `AuthenticationFailure` shortly after spawning, particularly when a reverse proxy combines small WebSocket frames. Preserve this embedded package when moving the project. See [the patch notes](Packages/com.unity.transport/AVIAN-PATCHES.md) and [the regression fixture](tests/README-wss-tls.md).
 
 ## Build and deploy the host
 
 Install Git LFS, Docker Desktop, Kind, kubectl, Python, and Unity's Linux Dedicated Server build support. Run commands from the project root.
+
+Install the certificate-generation dependency once:
+
+```powershell
+python -m pip install -r backend/tls/requirements.txt
+```
 
 1. Copy `backend/.env.example` to `backend/.env` if it does not exist. Preserve existing database credentials. Set:
 
@@ -60,7 +66,9 @@ Install Git LFS, Docker Desktop, Kind, kubectl, Python, and Unity's Linux Dedica
    python compose.py --all
    ```
 
-   The script creates Kind only when missing, loads the new game image, updates the server, and starts Compose with Caddy. It reuses the existing cluster and database. Caddy joins the existing `kind` Docker network and reaches TCP NodePorts directly, including on an older cluster whose Windows port mappings only expose UDP. Game ports do not need public forwarding.
+   The script provisions internal certificates, installs the `avian-game-tls` Kubernetes Secret, creates Kind only when missing, loads the new game image, updates the server, and starts Compose with Caddy. It reuses the existing cluster and database. Caddy joins the existing `kind` Docker network and reaches encrypted TCP NodePorts directly. Game ports do not need public forwarding. **Rebuild the Linux server before the first internal-TLS deployment**; an older plaintext WS server cannot accept the new upstream TLS connection. Existing WSS clients keep the same public URL and do not need the internal CA installed.
+
+   Internal credentials are kept in git-ignored `backend/.tls/`, not in images or the repository. Back up this folder securely and never distribute it with the client. Run deployments regularly to renew the 90-day service certificates before they expire. For direct Compose commands, certificate rotation, and troubleshooting, see [internal TLS](backend/tls/README.md).
 
 4. Check HTTPS and export a client config:
 
@@ -96,6 +104,8 @@ Moving the backend requires updating `AVIAN_API_HOST`, the certificate challenge
 ## Dynamic rooms
 
 `ROOM_MODE=k8s` creates one server per match on ports 30081?30084, using `GAME_TRANSPORT=websocket`. Each endpoint is `ROOM_PUBLIC_BASE_URL/<node_port>`; Caddy permits only `/game/30080` through `/game/30084`. Keep the configured port pool within that range or update the proxy allowlist with it. Each room Job receives its own seed and uses a TCP Service.
+
+Both static and dynamic servers mount their internal TLS certificate/key from the `avian-game-tls` Secret. The deploy helper installs it in `default` and in the configured `ROOM_NAMESPACE` (the namespace must already exist). The Matchmaker's local diagnostic port is now HTTPS and bound to `127.0.0.1`, while public clients continue using Caddy.
 
 ## Safe zone
 

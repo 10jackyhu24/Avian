@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -156,12 +157,20 @@ public class ServerBootstrap : MonoBehaviour {
 
         string mode = (Environment.GetEnvironmentVariable("GAME_TRANSPORT") ?? "websocket").Trim().ToLowerInvariant();
         try {
-            GameConnectionSettings.ConfigureServer(unityTransport, listenAddress, port, mode);
-        } catch (ArgumentException error) {
+            string certificate = null;
+            string privateKey = null;
+            if (mode == "websocket") {
+                string certificateFile = Environment.GetEnvironmentVariable("GAME_TLS_CERT_FILE") ?? "/run/avian-tls/tls.crt";
+                string privateKeyFile = Environment.GetEnvironmentVariable("GAME_TLS_KEY_FILE") ?? "/run/avian-tls/tls.key";
+                certificate = File.ReadAllText(certificateFile);
+                privateKey = File.ReadAllText(privateKeyFile);
+            }
+            GameConnectionSettings.ConfigureServer(unityTransport, listenAddress, port, mode, certificate, privateKey);
+        } catch (Exception error) when (error is ArgumentException || error is IOException || error is UnauthorizedAccessException) {
             Debug.LogError($"[ServerBootstrap] {error.Message}", this);
             return false;
         }
-        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}, transport={mode}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}, transport={mode}, encrypted={unityTransport.UseEncryption}", this);
         return true;
     }
 

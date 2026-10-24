@@ -27,12 +27,25 @@ spec:
           value: "7777"
         - name: GAME_TRANSPORT
           value: "websocket"
+        - name: GAME_TLS_CERT_FILE
+          value: "/run/avian-tls/tls.crt"
+        - name: GAME_TLS_KEY_FILE
+          value: "/run/avian-tls/tls.key"
         - name: MAP_SEED
           value: "100000"
         - name: ROOM_ID
           value: "static-room"
         - name: QUIT_WHEN_EMPTY
           value: "false"
+        volumeMounts:
+        - name: game-tls
+          mountPath: /run/avian-tls
+          readOnly: true
+      volumes:
+      - name: game-tls
+        secret:
+          secretName: avian-game-tls
+          defaultMode: 256 # 0400; the existing server container runs as root.
 
 ---
 apiVersion: v1

@@ -38,15 +38,22 @@ public static class GameConnectionSettings {
         }
     }
 
-    public static void ConfigureServer(UnityTransport transport, string address, ushort port, string mode) {
+    public static void ConfigureServer(UnityTransport transport, string address, ushort port, string mode,
+        string certificatePem = null, string privateKeyPem = null) {
         if (mode != "websocket" && mode != "udp") {
             throw new ArgumentException("GAME_TRANSPORT must be websocket or udp.");
         }
         transport.UseWebSockets = mode == "websocket";
         if (transport.UseWebSockets) {
+            if (string.IsNullOrWhiteSpace(certificatePem) || string.IsNullOrWhiteSpace(privateKeyPem)) {
+                throw new ArgumentException("WebSocket servers require a TLS certificate and private key. Configure GAME_TLS_CERT_FILE and GAME_TLS_KEY_FILE.");
+            }
             transport.MaxPacketQueueSize = Math.Max(transport.MaxPacketQueueSize, 1024);
+            transport.SetServerSecrets(certificatePem, privateKeyPem);
         }
-        transport.UseEncryption = false; // Caddy terminates public TLS on the private proxy connection.
+        // Caddy terminates public TLS, then opens a separately verified TLS connection to the server.
+        // Local singleplayer UDP remains unchanged.
+        transport.UseEncryption = transport.UseWebSockets;
         transport.SetConnectionData(address, port, address);
         transport.ConnectionData.WebSocketPath = "/";
     }

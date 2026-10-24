@@ -14,5 +14,5 @@ COPY . .
 # Expose the port that Lobby Manager listens on (FastAPI default)
 EXPOSE 8000
 
-# Run the FastAPI app so the container stays alive and serves HTTP requests.
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Serve HTTPS with the read-only internal TLS certificate mount.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ssl-certfile", "/run/avian-tls/tls.crt", "--ssl-keyfile", "/run/avian-tls/tls.key"]
