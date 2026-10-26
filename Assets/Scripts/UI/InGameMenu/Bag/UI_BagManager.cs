@@ -7,13 +7,13 @@ using UnityEngine;
 
 public class UI_BagManager : MonoBehaviour {
     [Header("Capacity Settings")]
-    [SerializeField] private int maxCapacity = 100;
     [SerializeField] private TextMeshProUGUI totalCapacityText;
 
     [Header("Nearby Pickup Scan")]
     [SerializeField] private float pickupScanRadius = 6f;
     [SerializeField] private LayerMask pickupScanLayerMask = ~0;
     [SerializeField] public List<Pickupable> nearbyPickupables = new List<Pickupable>();
+    private readonly Dictionary<Pickupable, int> nearbyPickupableCounts = new Dictionary<Pickupable, int>();
     [SerializeField] private GameObject pickupableUI;
 
     [Header("UI Spawn Setup")]
@@ -27,6 +27,9 @@ public class UI_BagManager : MonoBehaviour {
 
     private PlayerInventory playerInventory;
     private Coroutine pendingInventoryRefresh;
+    public int MaxCapacity => playerInventory != null
+        ? playerInventory.MaxCapacity
+        : PlayerInventory.DefaultMaxCapacity;
 
     public event Action InventoryDisplayChanged;
 
@@ -185,11 +188,25 @@ public class UI_BagManager : MonoBehaviour {
         }
 
         if (!changed) {
+            foreach (Pickupable pickupable in foundPickupables) {
+                if (!nearbyPickupableCounts.TryGetValue(pickupable, out int previousCount) ||
+                    previousCount != pickupable.Count) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!changed) {
             return false;
         }
 
         nearbyPickupables.Clear();
         nearbyPickupables.AddRange(foundPickupables);
+        nearbyPickupableCounts.Clear();
+        foreach (Pickupable pickupable in foundPickupables) {
+            nearbyPickupableCounts[pickupable] = pickupable.Count;
+        }
         return true;
     }
 
@@ -267,6 +284,10 @@ public class UI_BagManager : MonoBehaviour {
 
         BagSlotData slotData = bagDataList[index];
         if (slotData == null || slotData.attachments == null) {
+            return false;
+        }
+
+        if (!slotData.IsWeapon || slotData.attachments.Exists(slot => slot != null && !slot.IsEmpty)) {
             return false;
         }
 
@@ -363,7 +384,7 @@ public class UI_BagManager : MonoBehaviour {
         );
     }
 
-    public void RequestDetachAttachment(int weaponIndex, AttachmentType attachmentType) {
+    public void RequestDetachAttachment(int weaponIndex, AttachmentType attachmentType, int insertionIndex = -1) {
         if (playerInventory == null || weaponIndex < 0 || weaponIndex >= bagDataList.Count) {
             return;
         }
@@ -374,7 +395,31 @@ public class UI_BagManager : MonoBehaviour {
             return;
         }
 
-        playerInventory.RequestDetachAttachment(weaponInstanceId, attachmentType);
+        playerInventory.RequestDetachAttachment(weaponInstanceId, attachmentType, insertionIndex);
+    }
+
+    public void RequestTransferAttachment(int sourceWeaponIndex, int targetWeaponIndex, AttachmentType attachmentType) {
+        if (playerInventory == null || sourceWeaponIndex < 0 || sourceWeaponIndex >= bagDataList.Count ||
+            targetWeaponIndex < 0 || targetWeaponIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong sourceId = bagDataList[sourceWeaponIndex].instanceId;
+        ulong targetId = bagDataList[targetWeaponIndex].instanceId;
+        if (sourceId != 0 && targetId != 0 && sourceId != targetId) {
+            playerInventory.RequestTransferAttachment(sourceId, targetId, attachmentType);
+        }
+    }
+
+    public void RequestDropAttachment(int weaponIndex, AttachmentType attachmentType) {
+        if (playerInventory == null || weaponIndex < 0 || weaponIndex >= bagDataList.Count) {
+            return;
+        }
+
+        ulong weaponInstanceId = bagDataList[weaponIndex].instanceId;
+        if (weaponInstanceId != 0) {
+            playerInventory.RequestDropAttachment(weaponInstanceId, attachmentType);
+        }
     }
 
     public void RequestDropSlot(int slotIndex) {
@@ -403,6 +448,19 @@ public class UI_BagManager : MonoBehaviour {
         }
 
         playerInventory.RequestPickupItem(droppedObject, insertionIndex);
+    }
+
+    public void RequestPickupAttachment(Pickupable pickupable, int weaponIndex) {
+        if (playerInventory == null || pickupable == null || !pickupable.HasItem ||
+            weaponIndex < 0 || weaponIndex >= bagDataList.Count) {
+            return;
+        }
+
+        NetworkObject droppedObject = pickupable.GetComponentInParent<NetworkObject>();
+        ulong weaponInstanceId = bagDataList[weaponIndex].instanceId;
+        if (droppedObject != null && droppedObject.IsSpawned && weaponInstanceId != 0) {
+            playerInventory.RequestPickupAttachment(droppedObject, weaponInstanceId);
+        }
     }
 
     public void RemoveSlot(int index) {
@@ -436,7 +494,7 @@ public class UI_BagManager : MonoBehaviour {
 
     // Check if adding an item exceeds maximum capacity
     public bool CanAddItem(int itemWeight) {
-        return CalculateTotalWeight() + itemWeight <= maxCapacity;
+        return itemWeight >= 0 && (long)CalculateTotalWeight() + itemWeight <= MaxCapacity;
     }
 
     public void ClearBag() {
@@ -462,7 +520,7 @@ public class UI_BagManager : MonoBehaviour {
 
     private void UpdateCapacityLabel() {
         if (totalCapacityText != null) {
-            totalCapacityText.text = $"{CalculateTotalWeight()} / {maxCapacity}";
+            totalCapacityText.text = $"{CalculateTotalWeight()} / {MaxCapacity}";
         }
     }
 
@@ -524,5 +582,9 @@ public class UI_BagManager : MonoBehaviour {
 
     public bool IsPlayerBagSlot(UI_BagItemSlot slot) {
         return slot != null && bagContentRoot != null && slot.transform.IsChildOf(bagContentRoot);
+    }
+
+    public bool IsNearbyPickupSlot(UI_BagItemSlot slot) {
+        return slot != null && pickupableContentRoot != null && slot.transform.IsChildOf(pickupableContentRoot);
     }
 }

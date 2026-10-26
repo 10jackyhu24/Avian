@@ -3,8 +3,6 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
-[RequireComponent(typeof(SpriteRenderer))]
-[RequireComponent(typeof(Animator))]
 public class PlayerCharacterVisual : NetworkBehaviour {
     [Serializable]
     private class CharacterVisualOption {
@@ -36,8 +34,8 @@ public class PlayerCharacterVisual : NetworkBehaviour {
     }
 
     private void Awake() {
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>(true);
+        animator = GetComponentInChildren<Animator>(true);
     }
 
     public override void OnNetworkSpawn() {

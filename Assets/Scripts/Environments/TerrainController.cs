@@ -79,6 +79,7 @@ public class TerrainController : MonoBehaviour {
     [SerializeField] private bool rotateTerrainTiles = true;
 
     [Header("Rock Covers")]
+    [SerializeField] private GameObject rockPrefab;
     [SerializeField] private bool spawnRockCovers = true;
     [Min(1)]
     [SerializeField] private int rockSpawnCellSize = 4;
@@ -104,6 +105,8 @@ public class TerrainController : MonoBehaviour {
     private Vector3Int lastCameraGridPos = new Vector3Int(-9999, -9999, -9999);
     private readonly HashSet<Vector2Int> lastLoadCenters = new HashSet<Vector2Int>();
     private int currentSeed;
+    public int WorldSeed => currentSeed;
+    private readonly Collider[] groundSpawnHits = new Collider[32];
 
     // Track the currently loaded and displayed coordinates
     private HashSet<Vector2Int> inRangePositions = new HashSet<Vector2Int>();
@@ -237,6 +240,10 @@ public class TerrainController : MonoBehaviour {
             return;
         }
 
+        if (spawnRockCovers && rockPrefab == null) {
+            Debug.LogWarning("[TerrainController] Rock Prefab is not assigned; rock covers will not spawn.", this);
+        }
+
         if (mainCameraTransform != null) {
             mainCameraTransform.position = new Vector3(0f, mainCameraTransform.position.y, 0f);
         }
@@ -326,6 +333,23 @@ public class TerrainController : MonoBehaviour {
         }
 
         return inRangePositions.Contains(new Vector2Int(gridX, gridZ));
+    }
+
+    public bool TryGetClearGroundPosition(Vector3 candidate, out Vector3 ground) {
+        ground = default;
+        if (!IsWorldPositionLoaded(candidate)) return false;
+        int x = Mathf.RoundToInt(candidate.x) + size / 2;
+        int z = Mathf.RoundToInt(candidate.z) + size / 2;
+        GameObject tile = cubeGrid[x, z];
+        if (tile == null || !tile.activeInHierarchy || !tile.TryGetComponent(out Collider floor)) return false;
+        ground = new Vector3(candidate.x, floor.bounds.max.y, candidate.z);
+        int count = Physics.OverlapSphereNonAlloc(ground + Vector3.up * 0.6f, 0.45f,
+            groundSpawnHits, ~0, QueryTriggerInteraction.Ignore);
+        if (count == groundSpawnHits.Length) return false;
+        for (int i = 0; i < count; i++) {
+            if (groundSpawnHits[i] != floor) return false;
+        }
+        return true;
     }
 
     private void UpdateDynamicLoading() {
@@ -426,7 +450,7 @@ public class TerrainController : MonoBehaviour {
     }
 
     private void TryCreateRockCover(GameObject terrainBlock, Renderer terrainRenderer, int biomeIndex, int x, int z) {
-        if (!ShouldSpawnRockCover(biomeIndex, x, z)) {
+        if (rockPrefab == null || !ShouldSpawnRockCover(biomeIndex, x, z)) {
             return;
         }
 
@@ -438,7 +462,7 @@ public class TerrainController : MonoBehaviour {
         Vector3 terrainPosition = GridToWorldPosition(x, z);
         float rockBottom = terrainRenderer.bounds.max.y + rockHeightOffset;
 
-        GameObject rock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        GameObject rock = Instantiate(rockPrefab);
         rock.name = $"RockCover_{x}_{z}";
         rock.layer = terrainBlock.layer;
         rock.transform.position = new Vector3(
@@ -452,9 +476,6 @@ public class TerrainController : MonoBehaviour {
             0f
         );
         rock.transform.localScale = safeRockSize;
-
-        Renderer rockRenderer = rock.GetComponent<Renderer>();
-        rockRenderer.sharedMaterial = GetBiomeMaterial(MountainBiomeIndex, x, z);
 
         // Keep the rock's world-space size while making it follow terrain streaming.
         rock.transform.SetParent(terrainBlock.transform, true);

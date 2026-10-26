@@ -1,116 +1,155 @@
 # Avian
 
-Avian is a Unity multiplayer game. The backend handles login and matchmaking over HTTP; a Unity dedicated server runs each game over UDP. You need both services for a complete multiplayer match.
+Avian uses Caddy HTTPS for login and matchmaking, and encrypted WebSockets (WSS) for multiplayer gameplay. Both use public TCP **8443**. Public game clients no longer require a working UDP return path or ngrok.
 
-## Play on an existing server
+## Connect from this or another computer
 
-You need [Git LFS](https://git-lfs.com/), Unity **6000.3.15f1**, and a working API URL from the host.
+Use Unity **6000.3.15f1** with `Assets/Scenes/SampleScene.unity`, or copy the **whole** freshly built `Builds/WindowsClient` folder to the other computer. Older clients that only support UDP cannot use the new WSS endpoint.
 
-1. Clone and open the project:
+Put `network-config.json` in the project root for the Editor, or beside `Avian.exe` for a Windows player:
 
-   ```powershell
-   git lfs install
-   git clone https://github.com/10jackyhu24/Avian.git
-   cd Avian
-   git lfs pull
-   ```
+```json
+{ "apiBaseUrl": "https://140.136.151.88:8443" }
+```
 
-   In Unity Hub, choose **Add project from disk** and select this folder. Open `Assets/Scenes/SampleScene.unity`.
+Both computers use this same API address. Log in with different accounts, choose Match, and select characters. Matchmaking supplies the game address:
 
-2. Copy the client configuration and set the host's current API URL:
+```text
+wss://140.136.151.88:8443/game/30080
+```
 
-   ```powershell
-   Copy-Item network-config.example.json network-config.json
-   ```
+The client validates the public TLS certificate. Caddy terminates public TLS, then opens a **second, verified TLS connection** to each backend: HTTPS to Lobby/Matchmaker and WSS to the Unity game server. Caddy validates the private CA and the backend certificate name; certificate verification is not disabled. The menu enters gameplay only after Netcode connects and the local player object spawns; a failed join times out and permits retry. If the connection later drops, it clears the active world state and returns to character selection with the disconnect reason, instead of leaving an empty map on screen.
 
-   ```json
-   { "apiBaseUrl": "https://2d6f-140-136-151-88.ngrok-free.app" }
-   ```
+The project includes Unity Transport 2.7.2 in `Packages/com.unity.transport` with a TLS receive-buffer fix. Without it, valid large TLS records can cause `AuthenticationFailure` shortly after spawning, particularly when a reverse proxy combines small WebSocket frames. Preserve this embedded package when moving the project. See [the patch notes](Packages/com.unity.transport/AVIAN-PATCHES.md) and [the regression fixture](tests/README-wss-tls.md).
 
-   The Unity Editor reads `network-config.json` from the project root. A Windows build reads it from beside the game's `.exe`, next to its `_Data` folder. The example URL may change; ask the host for the current one. Do not edit `URL.cs` to change hosts.
+## Build and deploy the host
 
-3. Press **Play**, register or log in, and use **Match**. Two players must use different accounts. The host must also have a reachable UDP game server; a working login alone does not guarantee that a match can start.
+Install Git LFS, Docker Desktop, Kind, kubectl, Python, and Unity's Linux Dedicated Server build support. Run commands from the project root.
 
-Only have a Windows build? Put the same `network-config.json` beside its `.exe` and run it. To make a build, use **File > Build Profiles** in Unity, keep `SampleScene` first, and build to `Builds/WindowsClient`. A Git clone does not include a built client or a running server.
+Install the certificate-generation dependency once:
 
-## Host a local match
+```powershell
+python -m pip install -r backend/tls/requirements.txt
+```
 
-You need Docker Desktop and Unity's Linux Dedicated Server build support. Run these commands in PowerShell from the project root.
-
-1. Copy `backend/.env.example` to `backend/.env`:
-
-   ```powershell
-   Copy-Item backend/.env.example backend/.env
-   ```
-
-   Edit the new file. Set a database username and password, your `NGROK_AUTHTOKEN`, and these local room values:
+1. Copy `backend/.env.example` to `backend/.env` if it does not exist. Preserve existing database credentials. Set:
 
    ```env
+   AVIAN_API_HOST=140.136.151.88
+   AVIAN_HTTPS_PORT=8443
+   AVIAN_HTTP_PORT=8000
    ROOM_MODE=static
+   GAME_TRANSPORT=websocket
+   WORLD_ENDPOINT=wss://140.136.151.88:8443/game/30080
+   ROOM_PUBLIC_BASE_URL=wss://140.136.151.88:8443/game
+   AVIAN_GAME_GATEWAY_HOST=avian-cluster-control-plane
    STATIC_ROOM_SEED=100000
-   WORLD_ENDPOINT=127.0.0.1:30080
    ```
 
-2. Start the HTTP backend:
+   `STATIC_ROOM_SEED` must match `MAP_SEED` in `backend/avian-cluster.yaml`. This static server shares one world across its matches. Its `QUIT_WHEN_EMPTY=false` keeps it available between matches; dynamic room Jobs retain their automatic empty-room cleanup.
+
+   The `.env.example` game URLs reference `${AVIAN_API_HOST}` and `${AVIAN_HTTPS_PORT}`. Keep those two variables above their references when editing `.env`; the current `.env` is arranged this way. With these references, the game URLs follow changes to the host IP automatically.
+
+2. Build the server and Windows client using **Avian > Build server and Windows client** in Unity. This explicitly chooses the correct scene for each build. Outputs are `Builds/LinuxServer/AvianServer.x86_64` and `Builds/WindowsClient/Avian.exe`. When Unity is closed, batch builds are also available:
 
    ```powershell
-   docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --build avian-ngrok
-   curl.exe http://localhost:8000/health
+   & 'C:\Program Files\Unity\Hub\Editor\6000.3.15f1\Editor\Unity.exe' -batchmode -nographics -quit -projectPath "$PWD" -buildTarget Linux64 -standaloneBuildSubtarget Server -executeMethod AvianBuild.BuildServer -logFile server-build.log
    ```
-
-   This starts ngrok, Caddy, and their backend dependencies. `/health` should return `ok`. Open `http://localhost:4040` on the host to find the current ngrok HTTPS URL. The API has no home page, so `/` returning `404` is normal.
-
-3. In Unity, build the **Linux Dedicated Server** with `Assets/Scenes/GameRoon_Server.unity` as its first scene. Output it to `Builds/LinuxServer`; the folder must contain `AvianServer.x86_64`. Then build and start the game server:
 
    ```powershell
-   docker build -t avian-dedicated-server:v1 -f backend/Linux_Dedicated_Server/Dockerfile Builds/LinuxServer
-   docker run --rm -p 30080:7777/udp -e ROOM_ID=static-room -e MAP_SEED=100000 -e GAME_PORT=7777 avian-dedicated-server:v1
+   & 'C:\Program Files\Unity\Hub\Editor\6000.3.15f1\Editor\Unity.exe' -batchmode -nographics -quit -projectPath "$PWD" -buildTarget Win64 -standaloneBuildSubtarget Player -executeMethod AvianBuild.BuildClient -logFile client-build.log
    ```
 
-   Keep this terminal open while playing. For clients on this computer, set `apiBaseUrl` in `network-config.json` to `http://localhost:8000`, then open two clients with different accounts.
+3. Deploy:
 
-## Play across different networks
+   ```powershell
+   python compose.py --all
+   ```
 
-The API and the game use different addresses:
+   The script provisions internal certificates, installs the `avian-game-tls` Kubernetes Secret, creates Kind only when missing, loads the new game image, updates the server, and starts Compose with Caddy. It reuses the existing cluster and database. Caddy joins the existing `kind` Docker network and reaches encrypted TCP NodePorts directly. Game ports do not need public forwarding. **Rebuild the Linux server before the first internal-TLS deployment**; an older plaintext WS server cannot accept the new upstream TLS connection. Existing WSS clients keep the same public URL and do not need the internal CA installed.
 
-| Purpose | Client setting | Host requirement |
+   Internal credentials are kept in git-ignored `backend/.tls/`, not in images or the repository. Back up this folder securely and never distribute it with the client. Run deployments regularly to renew the 90-day service certificates before they expire. For direct Compose commands, certificate rotation, and troubleshooting, see [internal TLS](backend/tls/README.md).
+
+4. Check HTTPS and export a client config:
+
+   ```powershell
+   curl.exe https://140.136.151.88:8443/health
+   python export_client_config.py --output Builds/WindowsClient/network-config.json
+   ```
+
+   The exporter verifies API TLS, the advertised endpoint, and a real WebSocket upgrade through Caddy before writing the file. This checks the proxy path; a full match additionally checks Netcode and player spawning. Copy the entire Windows client folder to each player.
+
+## Public certificate and sharing this IP
+
+Public TCP **80** must reach Caddy's ACME HTTP challenge for certificate issuance and renewal. Public TCP **8443** must reach Avian for HTTPS and WSS. Certificates and keys persist in the `caddy_data` and `caddy_config` Docker volumes. Caddy renews the public IP certificate automatically; keep the challenge route working.
+
+This computer already runs another Caddy for File-Converter on ports 80/443. Its `C:\D\Programing\File-Converter\Caddyfile` imports:
+
+```caddyfile
+import C:/D/Unity_project/Avian/backend/Caddyfile.acme-proxy
+```
+
+This forwards only IP HTTP ACME challenge requests to `127.0.0.1:8000`. File-Converter continues using its existing HTTPS 443 routes. Use `https://140.136.151.88:8443/health` for Avian; omitting `:8443` reaches the existing service.
+
+On a new host with port 80 free, expose the challenge listener directly:
+
+```powershell
+docker compose --env-file backend/.env -f backend/docker-compose.yaml -f backend/docker-compose.public.yaml up -d
+```
+
+If another Caddy owns port 80 on the new host, import the ACME proxy there and update its path and process environment instead. The host Caddy does not read Avian's `.env` automatically. Preserve its existing environment when reloading it.
+
+Moving the backend requires updating `AVIAN_API_HOST`, the certificate challenge route, and clients' `apiBaseUrl`. The default game URL references follow the host IP and HTTPS port; update `WORLD_ENDPOINT` and `ROOM_PUBLIC_BASE_URL` too if you replaced them with literal overrides. If using a domain, point its DNS to the new host. Caddy does not open firewall/router ports automatically.
+
+## Dynamic rooms
+
+`ROOM_MODE=k8s` creates one server per match on ports 30081?30084, using `GAME_TRANSPORT=websocket`. Each endpoint is `ROOM_PUBLIC_BASE_URL/<node_port>`; Caddy permits only `/game/30080` through `/game/30084`. Keep the configured port pool within that range or update the proxy allowlist with it. Each room Job receives its own seed and uses a TCP Service.
+
+Both static and dynamic servers mount their internal TLS certificate/key from the `avian-game-tls` Secret. The deploy helper installs it in `default` and in the configured `ROOM_NAMESPACE` (the namespace must already exist). The Matchmaker's local diagnostic port is now HTTPS and bound to `127.0.0.1`, while public clients continue using Caddy.
+
+## Safe zone
+
+Singleplayer and multiplayer share a server-controlled, three-stage safe zone.
+The clock starts after the first player has spawned locally, finished loading the
+world, and notified the server that gameplay is ready. Creating a room, accepting
+a connection, or waiting at character selection does not start it. When the last
+ready player disconnects, the static server resets the zone and waits for the
+next entry; the next game starts with the full initial 90-second wait. A player
+joining an ongoing shared world inherits that world's clock. Each seeded target circle
+is fully inside its parent circle and has a different center.
+
+| Match time | Action | Radius on the default 1000-unit map |
 | --- | --- | --- |
-| Login and matchmaking (HTTPS) | `apiBaseUrl`: the current ngrok HTTPS URL | Docker Compose and ngrok running |
-| Game room (UDP) | Supplied by matchmaking as `world_endpoint` | A public UDP address that reaches port `30080` on the host |
+| 0:00–1:30 | Wait and show the first target | 500 |
+| 1:30–3:00 | First shrink | 500 → 225 |
+| 3:00–4:00 | Hold and show the second target | 225 |
+| 4:00–5:30 | Second shrink | 225 → 90 |
+| 5:30–6:30 | Hold and show the final target | 90 |
+| 6:30–8:00 | Final shrink | 90 → 25 |
+| After 8:00 | Keep the final circle fixed | 25 |
 
-Use ngrok HTTPS for login and matchmaking, and direct UDP for gameplay. Playit is not required. Set the following in **the game host's** `backend/.env`:
+Outside players and active enemies take 2 / 5 / 10 HP per second in stages 1 / 2 / 3.
+Damage continues after the final shrink. The outside world is tinted translucent
+light blue. Both map sizes show the current circle in cyan, the next target as a
+dashed white circle and cross, and a countdown, even over unexplored areas.
 
-```env
-ROOM_MODE=static
-WORLD_ENDPOINT=140.136.151.88:30080
-```
-
-Allow incoming UDP `30080` on the host and forward it if the host is behind a router. The ngrok API tunnel does not require opening incoming TCP `8000`. Campus network rules may require an administrator. Editing these files does not open firewall ports. Do **not** add `http://` or `https://` to `WORLD_ENDPOINT`. Recreate the matchmaker on the host so it reads the change:
-
-```powershell
-docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d --no-deps --force-recreate avian-matchmaker
-curl.exe http://localhost:8080/match/diagnostics
-```
-
-Check that `static_world_endpoint` is `140.136.151.88:30080`. On another computer, open the current ngrok HTTPS URL with `/health` appended, then test a match. An API health check does not test UDP. Changing a local `.env` does not update a backend running on another computer.
-
-Keep the public client's `apiBaseUrl` on HTTPS to protect login data in transit. ngrok HTTPS protects the API connection; it does not encrypt the separate UDP game connection. The bare URL `http://140.136.151.88/` uses port 80, which currently belongs to another service.
-
-If Python is installed, the host can write a checked client config after both addresses are ready:
-
-```powershell
-python export_client_config.py --output "Builds/WindowsClient/network-config.json"
-```
-
-Run this on the backend host. It finds the active Avian ngrok HTTPS tunnel and rejects a local-only game endpoint. It does not test UDP. The output folder must already exist. Copy the resulting config beside each player's executable and restart the client.
-
-If you already know the HTTPS URL, you can also pass `--api-url https://your-host.ngrok-free.app` to the export script from another computer. The default export workflow uses ngrok HTTPS; game UDP connects directly without Playit.
+Configure duration, final radius, damage and tint in `Assets/Resources/SafeZone.prefab`.
+Singleplayer pause freezes the simulation; multiplayer menus do not pause the shared
+match. Rebuild clients and the dedicated server together after updating the network prefab.
 
 ## Connection checks
 
-- **The IP opens the wrong site:** This project exposes Caddy on port **8000**, not the default HTTP port 80. Test `http://HOST:8000/health`, or use the ngrok HTTPS URL. `http://HOST/` may reach another service entirely.
-- **The API works, but login fails in Unity:** Check the `apiBaseUrl` and placement of `network-config.json`. The file must be named exactly `network-config.json`.
-- **Login works, but the room does not connect:** Check `static_world_endpoint` with `/match/diagnostics`, confirm the dedicated server is running, and verify that its UDP port is reachable. `127.0.0.1` is only valid for a client on the host machine.
-- **The ngrok URL fails:** Check that Docker Compose is running and get the current URL from `http://localhost:4040` on the host.
+- **API URL:** `https://140.136.151.88:8443`; `/health` returns `ok`, while `/` returns 404.
+- **Matched game address:** It must start with `wss://` and include `/game/30080` for the static server. Recreate `avian-matchmaker` after editing `.env`.
+- **Old client/server builds:** Rebuild and deploy both after changing transport or network prefabs. Updating only `.env` cannot convert an old UDP binary to WebSockets.
+- **WSS upgrade fails:** Check `docker logs avian_caddy`, the Kind game Pod, and TCP service endpoints. A 502 indicates that Caddy cannot reach a ready WebSocket server. Certificate errors require fixing the certificate route/trust, not disabling validation.
+- **StartClient=True:** This starts an attempt. Look for transport connected, server accepted, and local player spawned. The client logs progress and times out after 30 seconds.
+- **Public access:** HTTPS/WSS need TCP 8443 from the other computer. Port 80 is for certificate validation. Public UDP 30080 is not used by this deployment.
 
-For dynamic Kubernetes rooms, use `backend/kind-config.yaml` and set `ROOM_MODE=k8s` with a reachable `ROOM_ENDPOINT_HOST`. This is an optional deployment path; the static room above is the shortest way to run a match.
+The built Windows client can run an opt-in connection check without UI interaction:
+
+```powershell
+.\Builds\WindowsClient\Avian.exe -batchmode -nographics -logFile connection-check.log --avian-smoke-endpoint wss://140.136.151.88:8443/game/30080
+```
+
+`[ConnectionSmoke] PASS` means the actual Unity client completed WSS/TLS, Netcode joining, and local player spawning, and retained an enabled character sprite. It exits after holding the connection for 30 seconds; two checks can run simultaneously. Optional arguments include `--avian-smoke-seconds 60`, `--avian-smoke-frame-rate 5`, and `--avian-smoke-character bird_02` for longer sessions, slow frame processing, and a different character.

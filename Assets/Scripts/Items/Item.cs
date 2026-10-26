@@ -23,6 +23,9 @@ public class ItemObject : ScriptableObject {
     [Tooltip("Stable identifier used for saves and networking. Do not change after release.")]
     public string itemId;
     public string itemName;
+    [Tooltip("Optional name shown in the inventory. itemName remains the legacy lookup key.")]
+    public string displayName;
+    [TextArea] public string description;
     public Sprite icon;
     public ItemType itemType;
     public GameObject gameObject;
@@ -32,7 +35,19 @@ public class ItemObject : ScriptableObject {
     public int baseWeight = 1;
     [Header("Combat")]
     public AttackData attackData;
+    [Header("Weapon Attachment")]
+    [Tooltip("Percentage bonus. For example, 20 means +20%. Critical rate adds percentage points.")]
+    [Min(0f)] public float bonusPercent;
     public bool IsWeapon => isWeapon || itemType == ItemType.Weapon;
+
+    public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? itemName : displayName;
+    public bool IsAttachment => ItemData.GetAttachmentType(itemType) != AttachmentType.None;
+    public string EffectSummary => itemType switch {
+        ItemType.AttackSpeed => $"Attack speed +{bonusPercent:0.#}%",
+        ItemType.DamageBonus => $"Attack damage +{bonusPercent:0.#}%",
+        ItemType.CriticalRate => $"Critical chance +{bonusPercent:0.#}%",
+        _ => string.Empty
+    };
     
     public bool IsStackable => maxCount > 1 && !IsWeapon;
 }

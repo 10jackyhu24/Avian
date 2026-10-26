@@ -37,6 +37,16 @@ public class EnemyHealthDrop : NetworkBehaviour {
         localHealth = maxHealth;
     }
 
+    public void ApplyArchetype(EnemyArchetypeStats stats) {
+        if (stats == null) return;
+        maxHealth = stats.MaxHealth;
+        displayName = stats.Name;
+        healthBarOffset = new Vector3(0f, 1.5f + (stats.ColliderScale - 1f) * 2f, 0f);
+        minCoinsDropped = stats.MinCoins;
+        maxCoinsDropped = stats.MaxCoins;
+        if (!IsSpawned) localHealth = maxHealth;
+    }
+
     public override void OnNetworkSpawn() {
         if (IsServer) {
             networkHealth.Value = maxHealth;
@@ -79,8 +89,19 @@ public class EnemyHealthDrop : NetworkBehaviour {
             return;
         }
 
-        GetComponent<EnemyAttackController>()?.InterruptAttack();
-        GetComponent<EnemyController>()?.ApplyKnockback(attackerPosition ?? transform.position - transform.forward);
+        EnemyController controller = GetComponent<EnemyController>();
+        if (controller == null || !controller.IsBossType) {
+            GetComponent<EnemyAttackController>()?.InterruptAttack();
+            controller?.ApplyKnockback(attackerPosition ?? transform.position - transform.forward);
+        }
+    }
+
+    // Environmental damage does not interrupt attacks or knock enemies back.
+    public void TakeZoneDamageOnServer(float damage) {
+        if (!CanServerTakeDamage() || isDead || damage <= 0f) return;
+        float newHealth = Mathf.Max(0f, CurrentHealth - damage);
+        SetCurrentHealth(newHealth);
+        if (newHealth <= 0f) Die(Unity.Netcode.NetworkManager.ServerClientId);
     }
 
     private void SetCurrentHealth(float value) {

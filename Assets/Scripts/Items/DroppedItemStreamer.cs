@@ -21,6 +21,7 @@ public class DroppedItemStreamer : MonoBehaviour {
         }
 
         streamer.Initialize(networkManager);
+        WorldItemSpawner.EnsureExists(networkManager);
     }
 
     private void Initialize(NetworkManager value) {

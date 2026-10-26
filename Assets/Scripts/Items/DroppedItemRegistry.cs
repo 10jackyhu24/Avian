@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 public sealed class DroppedItemRecord {
-    public InventoryItemState ItemState { get; }
+    public InventoryItemState ItemState { get; private set; }
     public Vector3 Position { get; private set; }
     public NetworkDroppedItem SpawnedItem { get; private set; }
 
@@ -19,6 +19,10 @@ public sealed class DroppedItemRecord {
         SpawnedItem = spawnedItem;
     }
 
+    public void SetItemState(InventoryItemState itemState) {
+        ItemState = itemState;
+    }
+
     public void SetPosition(Vector3 position) {
         Position = position;
     }
@@ -29,10 +33,12 @@ public static class DroppedItemRegistry {
         new Dictionary<ulong, DroppedItemRecord>();
 
     public static int Count => records.Count;
+    public static uint WorldGeneration { get; private set; }
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
     public static void Reset() {
         records.Clear();
+        unchecked { WorldGeneration++; }
     }
 
     public static bool TryRegister(
@@ -86,6 +92,21 @@ public static class DroppedItemRegistry {
         }
 
         record.SetPosition(position);
+        return true;
+    }
+
+    public static bool TryUpdateItemState(
+        ulong instanceId,
+        NetworkDroppedItem expectedSpawnedItem,
+        InventoryItemState itemState) {
+        if (!itemState.IsValid || itemState.InstanceId != instanceId ||
+            !records.TryGetValue(instanceId, out DroppedItemRecord record) ||
+            record.SpawnedItem != expectedSpawnedItem ||
+            !record.ItemState.ItemId.Equals(itemState.ItemId)) {
+            return false;
+        }
+
+        record.SetItemState(itemState);
         return true;
     }
 

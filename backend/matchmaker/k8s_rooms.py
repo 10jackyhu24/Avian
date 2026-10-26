@@ -19,6 +19,12 @@ class K8sRoomSettings:
     namespace: str
     image: str
     game_port: int
+    transport: str = "websocket"
+    tls_secret_name: str = "avian-game-tls"
+
+    @property
+    def protocol(self):
+        return "TCP" if self.transport == "websocket" else "UDP"
 
 
 @dataclass
@@ -192,8 +198,8 @@ def create_service(server_name, node_port, settings, labels):
             },
             ports=[
                 client.V1ServicePort(
-                    name="udp-game",
-                    protocol="UDP",
+                    name="game",
+                    protocol=settings.protocol,
                     port=settings.game_port,
                     target_port=settings.game_port,
                     node_port=node_port,
@@ -216,21 +222,36 @@ def create_job(server_name, room_id, room_seed, settings, labels):
         ports=[
             client.V1ContainerPort(
                 container_port=settings.game_port,
-                protocol="UDP",
+                protocol=settings.protocol,
             )
         ],
         env=[
             client.V1EnvVar(name="ROOM_ID", value=room_id),
             client.V1EnvVar(name="MAP_SEED", value=str(room_seed)),
             client.V1EnvVar(name="GAME_PORT", value=str(settings.game_port)),
+            client.V1EnvVar(name="GAME_TRANSPORT", value=settings.transport),
         ],
     )
+
+    volumes = []
+    if settings.transport == "websocket":
+        container.env.extend([
+            client.V1EnvVar(name="GAME_TLS_CERT_FILE", value="/run/avian-tls/tls.crt"),
+            client.V1EnvVar(name="GAME_TLS_KEY_FILE", value="/run/avian-tls/tls.key"),
+        ])
+        container.volume_mounts = [client.V1VolumeMount(
+            name="game-tls", mount_path="/run/avian-tls", read_only=True,
+        )]
+        volumes = [client.V1Volume(name="game-tls", secret=client.V1SecretVolumeSource(
+            secret_name=settings.tls_secret_name, default_mode=0o400,
+        ))]
 
     pod_template = client.V1PodTemplateSpec(
         metadata=client.V1ObjectMeta(labels=labels),
         spec=client.V1PodSpec(
             restart_policy="Never",
             containers=[container],
+            volumes=volumes,
         ),
     )
 

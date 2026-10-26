@@ -48,7 +48,8 @@ public class PlayerController : NetworkBehaviour {
     [Header("Ranged Weapon Visual")]
     [Min(0f)] [SerializeField] private float bowSideOffset = 0.55f;
     [Min(0f)] [SerializeField] private float bowForwardOffset = 0.25f;
-    [SerializeField] private float bowHeightOffset;
+    [Tooltip("World-space height offset from the character center for the bow and arrow flight.")]
+    [SerializeField] private float bowHeightOffset = -0.4f;
     [Range(-180f, 180f)] [SerializeField] private float bowPlanarAngle = -135f;
     [SerializeField] private Color arrowTrailColor = new Color(1f, 0.75f, 0.15f, 0.95f);
     [Min(0.01f)] [SerializeField] private float minimumArrowVisibleDuration = 0.2f;
@@ -120,8 +121,8 @@ public class PlayerController : NetworkBehaviour {
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
-        spriteRenderer = GetComponent<SpriteRenderer>();
-        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponentInChildren<SpriteRenderer>(true);
+        animator = GetComponentInChildren<Animator>(true);
         playerInventory = GetComponent<PlayerInventory>();
         inputActions = new GameInput();
         KeyBinding.LoadBindingOverrides(inputActions);
@@ -133,6 +134,7 @@ public class PlayerController : NetworkBehaviour {
         if (combatController == null) {
             combatController = GetComponent<CombatController>();
         }
+        SetUnarmedAttack(default);
         bagManager = FindFirstObjectByType<UI_BagManager>();
     }
 
@@ -240,6 +242,8 @@ public class PlayerController : NetworkBehaviour {
         );
     }
 
+    private float nextMovementSendTime;
+
     private void SendInputToServer() {
         Vector2 moveInput = inputActions.Player.Move.ReadValue<Vector2>();
         bool runPressed = inputActions.Player.Run.IsPressed();
@@ -247,7 +251,7 @@ public class PlayerController : NetworkBehaviour {
 
         if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen ||
             MerchantMenu.IsOpen || !IsAlive) {
-            SubmitMovementServerRpc(0f, 0f, false);
+            SendMovementAtNetworkRate(0f, 0f, false);
             CancelPreparedAttack();
             return;
         }
@@ -261,11 +265,20 @@ public class PlayerController : NetworkBehaviour {
         }
 
         bool isMovementLocked = Time.time < nextLocalAttackTime;
-        SubmitMovementServerRpc(
+        SendMovementAtNetworkRate(
             isMovementLocked ? 0f : moveInput.x,
             isMovementLocked ? 0f : moveInput.y,
             !isMovementLocked && runPressed
         );
+    }
+
+    private void SendMovementAtNetworkRate(float horizontal, float vertical, bool runPressed) {
+        if (Time.unscaledTime < nextMovementSendTime) {
+            return;
+        }
+        float tickRate = NetworkManager != null ? NetworkManager.NetworkConfig.TickRate : 30f;
+        nextMovementSendTime = Time.unscaledTime + 1f / Mathf.Max(1f, tickRate);
+        SubmitMovementServerRpc(horizontal, vertical, runPressed);
     }
 
     private void BeginPreparingAttack() {
@@ -284,10 +297,6 @@ public class PlayerController : NetworkBehaviour {
         preparedAttackDirection = isFacingLeftVisual.Value ? Vector3.left : Vector3.right;
         UpdatePreparedAttackDirection();
         ShowAttackRangePreview();
-
-        if (!currentAttackUsesWeapon) {
-            PlayPreparedUnarmedAttackServerRpc(preparedAttackDirection.x, preparedAttackDirection.z);
-        }
     }
 
     private void ReleasePreparedAttack() {
@@ -317,7 +326,8 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        nextLocalAttackTime = Time.time + Mathf.Max(0f, currentAttackData.cooldown);
+        float attackDuration = GetEquippedAttachmentBonuses().GetCooldown(currentAttackData.cooldown);
+        nextLocalAttackTime = Time.time + attackDuration;
         if (IsCurrentAttackRanged() &&
             ItemManager.TryGetWeaponById(
                 selectedItemId.ToString(),
@@ -329,7 +339,8 @@ public class PlayerController : NetworkBehaviour {
             StartWeaponSwingVisual(
                 rangedWeapon.itemObject,
                 rangedAttackData,
-                attackDirection
+                attackDirection,
+                attackDuration
             );
         }
 
@@ -548,20 +559,8 @@ public class PlayerController : NetworkBehaviour {
         runRequested = runPressed;
     }
 
-    [ServerRpc]
-    private void PlayPreparedUnarmedAttackServerRpc(float aimDirectionX, float aimDirectionZ) {
-        if (currentHealth.Value <= 0 || currentAttackUsesWeapon || currentAttackData == null ||
-            Time.time < nextServerAttackTime) {
-            return;
-        }
-
-        Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        Vector3 effectPosition = GetUnarmedAttackEffectPosition(currentAttackData, attackDirection);
-        PlayPreparedUnarmedAttackClientRpc(effectPosition, attackDirection.x < 0f);
-    }
-
     [ClientRpc]
-    private void PlayPreparedUnarmedAttackClientRpc(Vector3 effectPosition, bool facingLeft) {
+    private void PlayUnarmedAttackClientRpc(Vector3 effectPosition, bool facingLeft) {
         PlayUnarmedEffect(effectPosition, facingLeft);
     }
 
@@ -578,7 +577,7 @@ public class PlayerController : NetworkBehaviour {
         }
 
         if (currentAttackData == null) {
-            Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no supported weapon is equipped.", this);
+            Debug.LogWarning($"[Combat] Server rejected attack from client {OwnerClientId}: no attack data is available.", this);
             RejectAttackClientRpc(predictedProjectileId);
             return;
         }
@@ -602,7 +601,14 @@ public class PlayerController : NetworkBehaviour {
         }
         if (usesWeapon) {
             attackData = weaponAttackData;
+            if (playerInventory == null || !playerInventory.TryGetItem(selectedItemInstanceId, out InventoryItemState equipped) ||
+                !equipped.ItemId.Equals(attackItemId)) {
+                RejectAttackClientRpc(predictedProjectileId);
+                return;
+            }
         }
+
+        AttachmentBonuses bonuses = usesWeapon ? GetEquippedAttachmentBonuses() : default;
 
         bool isRangedAttack = usesWeapon && attackData.attackmode == AttackMode.WeaponRanged;
         if (isRangedAttack) {
@@ -632,7 +638,7 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        float attackDuration = Mathf.Max(0f, attackData.cooldown);
+        float attackDuration = bonuses.GetCooldown(attackData.cooldown);
         if (isRangedAttack) {
             nextAcceptedClientRangedAttackTime = clientAttackTime + attackDuration;
         }
@@ -641,21 +647,25 @@ public class PlayerController : NetworkBehaviour {
         StopMovementOnServer();
 
         Vector3 attackDirection = GetValidatedAttackDirection(aimDirectionX, aimDirectionZ);
-        PlayAttackVisualClientRpc(attackItemId, attackDirection, usesWeapon);
 
         if (usesWeapon) {
+            float attackDamage = bonuses.GetDamage(attackData.damage, Random.value);
+            PlayAttackVisualClientRpc(attackItemId, attackDirection, attackDuration);
             if (weaponAttackData.attackmode == AttackMode.WeaponRanged) {
                 StartCoroutine(RangedProjectileRoutine(
                     weaponAttackData,
                     attackDirection,
-                    predictedProjectileId
+                    predictedProjectileId,
+                    attackDamage
                 ));
             }
             else if (weaponItem.itemObject.icon != null) {
                 StartCoroutine(WeaponDamageSweepRoutine(
                     weaponItem.itemObject,
                     weaponAttackData,
-                    attackDirection
+                    attackDirection,
+                    attackDuration,
+                    attackDamage
                 ));
             }
             else {
@@ -667,6 +677,8 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
+        Vector3 effectPosition = GetUnarmedAttackEffectPosition(attackData, attackDirection);
+        PlayUnarmedAttackClientRpc(effectPosition, attackDirection.x < 0f);
         ApplyAreaAttackDamage(attackData, attackDirection);
     }
 
@@ -689,6 +701,12 @@ public class PlayerController : NetworkBehaviour {
 
     private bool HasArrowAmmo() {
         return playerInventory != null && playerInventory.HasItem(ArrowProjectileItemId, 1);
+    }
+
+    private AttachmentBonuses GetEquippedAttachmentBonuses() {
+        return currentAttackUsesWeapon && playerInventory != null &&
+            playerInventory.TryGetItem(selectedItemInstanceId, out InventoryItemState item) &&
+            item.ItemId.Equals(selectedItemId) ? AttachmentBonuses.FromWeapon(item) : default;
     }
 
     private void ApplyAreaAttackDamage(AttackData attackData, Vector3 attackDirection) {
@@ -736,8 +754,10 @@ public class PlayerController : NetworkBehaviour {
         Collider hit,
         AttackData attackData,
         HashSet<PlayerController> damagedPlayers,
-        HashSet<EnemyHealthDrop> damagedEnemies
+        HashSet<EnemyHealthDrop> damagedEnemies,
+        float damageOverride = -1f
     ) {
+        float damage = damageOverride >= 0f ? damageOverride : attackData.damage;
         PlayerController target = hit.GetComponentInParent<PlayerController>();
         if (target != null) {
             if (target == this || !target.IsSpawned || !target.IsAlive ||
@@ -745,9 +765,9 @@ public class PlayerController : NetworkBehaviour {
                 return false;
             }
 
-            target.TakeDamage(attackData.damage, OwnerClientId);
+            target.TakeDamage(damage, OwnerClientId);
             Debug.Log(
-                $"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {attackData.damage}.",
+                $"[PlayerController] Client {OwnerClientId} hit client {target.OwnerClientId} for {damage}.",
                 this
             );
             return true;
@@ -759,9 +779,9 @@ public class PlayerController : NetworkBehaviour {
         }
 
         string enemyName = enemy.name;
-        enemy.TakeDamage(attackData.damage, OwnerClientId, transform.position);
+        enemy.TakeDamage(damage, OwnerClientId, transform.position);
         Debug.Log(
-            $"[PlayerController] Client {OwnerClientId} hit enemy {enemyName} for {attackData.damage}.",
+            $"[PlayerController] Client {OwnerClientId} hit enemy {enemyName} for {damage}.",
             this
         );
         return true;
@@ -796,19 +816,13 @@ public class PlayerController : NetworkBehaviour {
     private void PlayAttackVisualClientRpc(
         FixedString64Bytes itemId,
         Vector3 attackDirection,
-        bool usesWeapon
+        float duration
     ) {
-        // Unarmed visuals start on button press. The release RPC only executes
-        // damage and weapon swing visuals, preventing a second Punch animation.
-        if (!usesWeapon) {
-            return;
-        }
-
         if (ItemManager.TryGetWeaponById(itemId.ToString(), out ItemData weaponItem, out AttackData attackData)) {
             if (IsOwner && attackData.attackmode == AttackMode.WeaponRanged) {
                 return;
             }
-            StartWeaponSwingVisual(weaponItem.itemObject, attackData, attackDirection);
+            StartWeaponSwingVisual(weaponItem.itemObject, attackData, attackDirection, duration);
         }
     }
 
@@ -828,7 +842,7 @@ public class PlayerController : NetworkBehaviour {
         Destroy(effect, Mathf.Max(0.01f, unarmedAttackData.effectLifetime));
     }
 
-    private void StartWeaponSwingVisual(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection) {
+    private void StartWeaponSwingVisual(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection, float duration) {
         if (weaponItem == null || attackData == null) {
             return;
         }
@@ -840,7 +854,8 @@ public class PlayerController : NetworkBehaviour {
                 weaponSwingCoroutine = StartCoroutine(BowVisualRoutine(
                     weaponItem,
                     attackData,
-                    attackDirection
+                    attackDirection,
+                    duration
                 ));
             }
             return;
@@ -850,7 +865,7 @@ public class PlayerController : NetworkBehaviour {
             return;
         }
 
-        weaponSwingCoroutine = StartCoroutine(WeaponSwingRoutine(weaponItem, attackData, attackDirection));
+        weaponSwingCoroutine = StartCoroutine(WeaponSwingRoutine(weaponItem, attackData, attackDirection, duration));
     }
 
     private void StopActiveWeaponVisual() {
@@ -864,7 +879,7 @@ public class PlayerController : NetworkBehaviour {
         }
     }
 
-    private IEnumerator WeaponSwingRoutine(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection) {
+    private IEnumerator WeaponSwingRoutine(ItemObject weaponItem, AttackData attackData, Vector3 attackDirection, float attackDuration) {
         activeWeaponVisual = new GameObject($"{weaponItem.itemName}_AttackVisual");
         activeWeaponVisual.transform.SetParent(transform, false);
         Vector3 playerScale = transform.lossyScale;
@@ -897,7 +912,7 @@ public class PlayerController : NetworkBehaviour {
         weaponObject.transform.localScale = Vector3.one * scale;
         weaponObject.transform.localPosition = -(skyFacingRotation * (handlePoint * scale));
 
-        float duration = Mathf.Max(0.01f, attackData.cooldown);
+        float duration = Mathf.Max(0.01f, attackDuration);
         float startedAt = Time.time;
 
         while (activeWeaponVisual != null) {
@@ -925,7 +940,8 @@ public class PlayerController : NetworkBehaviour {
     private IEnumerator BowVisualRoutine(
         ItemObject bowItem,
         AttackData attackData,
-        Vector3 attackDirection
+        Vector3 attackDirection,
+        float attackDuration
     ) {
         activeWeaponVisual = new GameObject("Bow_AttackVisual") {
             hideFlags = HideFlags.DontSave
@@ -954,7 +970,7 @@ public class PlayerController : NetworkBehaviour {
         bowObject.transform.localScale = Vector3.one *
             (Mathf.Max(0.1f, attackData.weaponVisualScale) / longestSide);
 
-        float duration = Mathf.Max(0.01f, attackData.cooldown);
+        float duration = Mathf.Max(0.01f, attackDuration);
         float startedAt = Time.time;
         while (activeWeaponVisual != null && Time.time - startedAt < duration) {
             activeWeaponVisual.transform.position = GetBowWorldPosition(attackDirection);
@@ -1026,7 +1042,8 @@ public class PlayerController : NetworkBehaviour {
     private IEnumerator RangedProjectileRoutine(
         AttackData attackData,
         Vector3 attackDirection,
-        ulong predictedProjectileId
+        ulong predictedProjectileId,
+        float attackDamage
     ) {
         Vector3 direction = attackDirection;
         direction.y = 0f;
@@ -1079,7 +1096,8 @@ public class PlayerController : NetworkBehaviour {
                         closestHit.collider,
                         attackData,
                         damagedPlayers,
-                        damagedEnemies
+                        damagedEnemies,
+                        attackDamage
                     );
                 }
 
@@ -1481,7 +1499,9 @@ public class PlayerController : NetworkBehaviour {
     private IEnumerator WeaponDamageSweepRoutine(
         ItemObject weaponItem,
         AttackData attackData,
-        Vector3 attackDirection
+        Vector3 attackDirection,
+        float attackDuration,
+        float attackDamage
     ) {
         GetWeaponGeometry(
             weaponItem,
@@ -1496,7 +1516,7 @@ public class PlayerController : NetworkBehaviour {
 
         HashSet<PlayerController> damagedPlayers = new HashSet<PlayerController>();
         HashSet<EnemyHealthDrop> damagedEnemies = new HashSet<EnemyHealthDrop>();
-        float duration = Mathf.Max(0.01f, attackData.cooldown);
+        float duration = Mathf.Max(0.01f, attackDuration);
         float startedAt = Time.time;
         float previousAngle = GetWeaponSwingAngle(attackData, attackDirection, 0f);
         int damagedTargetCount = DamageTargetsAtWeaponAngle(
@@ -1509,7 +1529,8 @@ public class PlayerController : NetworkBehaviour {
             attackData,
             previousAngle,
             damagedPlayers,
-            damagedEnemies
+            damagedEnemies,
+            attackDamage
         );
 
         while (IsServer && currentHealth.Value > 0f) {
@@ -1537,7 +1558,8 @@ public class PlayerController : NetworkBehaviour {
                     attackData,
                     angle,
                     damagedPlayers,
-                    damagedEnemies
+                    damagedEnemies,
+                    attackDamage
                 );
             }
 
@@ -1571,7 +1593,8 @@ public class PlayerController : NetworkBehaviour {
         AttackData attackData,
         float angle,
         HashSet<PlayerController> damagedPlayers,
-        HashSet<EnemyHealthDrop> damagedEnemies
+        HashSet<EnemyHealthDrop> damagedEnemies,
+        float attackDamage
     ) {
         Quaternion pivotRotation = Quaternion.Euler(0f, angle, 0f);
         Vector3 pivotPosition = GetAttackVisualWorldPosition(attackData);
@@ -1626,7 +1649,8 @@ public class PlayerController : NetworkBehaviour {
                 hit,
                 attackData,
                 damagedPlayers,
-                damagedEnemies
+                damagedEnemies,
+                attackDamage
             ) ? 1 : 0;
         }
 
@@ -1897,6 +1921,10 @@ public class PlayerController : NetworkBehaviour {
         ApplyDamage(amount, "enemy");
     }
 
+    public void TakeZoneDamageOnServer(float amount) {
+        if (amount > 0f) ApplyDamage(amount, "safe zone");
+    }
+
     private void TakeDamage(float amount, ulong attackerClientId) {
         ApplyDamage(amount, $"client {attackerClientId}");
     }
@@ -2051,7 +2079,7 @@ public class PlayerController : NetworkBehaviour {
 
         FixedString64Bytes newSelectedItemId = default;
         ulong newSelectedItemInstanceId = 0;
-        AttackData localAttackData = null;
+        AttackData localAttackData = unarmedAttackData;
         bool localUsesWeapon = false;
         string selectedItemName = "Empty";
 
@@ -2067,12 +2095,14 @@ public class PlayerController : NetworkBehaviour {
                 newSelectedItemId = new FixedString64Bytes(item.itemId);
             }
 
-            if (item.IsWeapon && ItemManager.TryGetWeaponById(item.itemId, out _, out AttackData attackData)) {
-                localAttackData = attackData;
-                localUsesWeapon = true;
-            }
-            else if (!item.IsWeapon) {
-                localAttackData = unarmedAttackData;
+            if (item.IsWeapon) {
+                if (ItemManager.TryGetWeaponById(item.itemId, out _, out AttackData attackData)) {
+                    localAttackData = attackData;
+                    localUsesWeapon = true;
+                }
+                else {
+                    localAttackData = null;
+                }
             }
         }
 
@@ -2081,7 +2111,7 @@ public class PlayerController : NetworkBehaviour {
         currentAttackData = localAttackData;
         currentAttackUsesWeapon = localUsesWeapon;
         combatController?.SetAttackData(localAttackData);
-        SetSelectedAttackServerRpc(newSelectedItemId);
+        SetSelectedAttackServerRpc(newSelectedItemId, newSelectedItemInstanceId);
 
         if (localAttackData != null) {
             string attackType = localUsesWeapon ? "weapon" : "unarmed";
@@ -2093,8 +2123,27 @@ public class PlayerController : NetworkBehaviour {
     }
 
     [ServerRpc]
-    private void SetSelectedAttackServerRpc(FixedString64Bytes newSelectedItemId) {
+    private void SetSelectedAttackServerRpc(FixedString64Bytes newSelectedItemId, ulong newSelectedItemInstanceId) {
+        if (newSelectedItemId.Length == 0) {
+            selectedItemInstanceId = 0;
+            SetUnarmedAttack(default);
+            if (unarmedAttackData != null) {
+                combatController?.EntryCombat();
+            }
+            else {
+                combatController?.ExitCombat();
+            }
+            Debug.Log($"[Combat] Client {OwnerClientId} selected an empty slot; using unarmed attack.", this);
+            return;
+        }
+
         string itemId = newSelectedItemId.ToString();
+        if (playerInventory == null || !playerInventory.TryGetItem(newSelectedItemInstanceId, out InventoryItemState selectedState) ||
+            !selectedState.ItemId.Equals(newSelectedItemId)) {
+            ClearEquippedWeapon();
+            return;
+        }
+        selectedItemInstanceId = newSelectedItemInstanceId;
         if (ItemManager.TryGetItemById(itemId, out ItemData selectedItem) && selectedItem.itemObject != null) {
             if (selectedItem.IsWeapon && selectedItem.itemObject.attackData != null) {
                 selectedItemId = newSelectedItemId;
@@ -2107,10 +2156,7 @@ public class PlayerController : NetworkBehaviour {
             }
 
             if (!selectedItem.IsWeapon && unarmedAttackData != null) {
-                selectedItemId = newSelectedItemId;
-                currentAttackData = unarmedAttackData;
-                currentAttackUsesWeapon = false;
-                combatController?.SetAttackData(unarmedAttackData);
+                SetUnarmedAttack(newSelectedItemId);
                 combatController?.EntryCombat();
                 Debug.Log($"[Combat] Client {OwnerClientId} selected non-weapon {selectedItem.itemObject.itemName}; using unarmed attack.", this);
                 return;
@@ -2124,6 +2170,13 @@ public class PlayerController : NetworkBehaviour {
         combatController?.ExitCombat();
 
         Debug.Log($"[Combat] Client {OwnerClientId} cleared its selected attack.", this);
+    }
+
+    private void SetUnarmedAttack(FixedString64Bytes itemId) {
+        selectedItemId = itemId;
+        currentAttackData = unarmedAttackData;
+        currentAttackUsesWeapon = false;
+        combatController?.SetAttackData(unarmedAttackData);
     }
 
     public void UnequipDroppedWeaponOnServer(string droppedItemId) {
@@ -2155,12 +2208,14 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void ClearEquippedWeapon() {
-        selectedItemId = default;
         selectedItemInstanceId = 0;
-        currentAttackUsesWeapon = false;
-        currentAttackData = null;
-        combatController?.SetAttackData(null);
-        combatController?.ExitCombat();
+        SetUnarmedAttack(default);
+        if (unarmedAttackData == null) {
+            combatController?.ExitCombat();
+        }
+        else if (IsServer) {
+            combatController?.EntryCombat();
+        }
     }
 
     private void OnDestroy() {

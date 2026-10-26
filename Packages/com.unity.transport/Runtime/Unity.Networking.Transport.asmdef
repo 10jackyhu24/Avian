@@ -1,0 +1,41 @@
+{
+    "name": "Unity.Networking.Transport",
+    "rootNamespace": "",
+    "references": [
+        "Unity.Burst",
+        "Unity.Collections",
+        "Unity.Mathematics",
+        "Unity.Services.Relay",
+        "Unity.Logging"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": true,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.services.relay",
+            "expression": "1.0",
+            "define": "RELAY_SDK_INSTALLED"
+        },
+        {
+            "name": "Unity",
+            "expression": "6000.1.0a1",
+            "define": "HOSTNAME_RESOLUTION_AVAILABLE"
+        },
+        {
+            "name": "Unity",
+            "expression": "6000.2.0a5",
+            "define": "DONT_FRAGMENT_BIT_AVAILABLE"
+        },
+        {
+            "name": "com.unity.transport.tests",
+            "expression": "0.0",
+            "define": "UNITY_TRANSPORT_TESTS_INSTALLED"
+        }
+    ],
+    "noEngineReferences": false
+}

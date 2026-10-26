@@ -28,6 +28,9 @@ public class WorldMapUI : MonoBehaviour {
     private RectTransform playerMarker;
     private RectTransform markerLayer;
     private Image panelImage;
+    private SafeZoneMapGraphic zoneGraphic;
+    private GameObject zoneLegend;
+    private Text zoneStatusText;
     private Texture2D mapTexture;
     private Color32[] biomePixels;
     private Color32[] displayPixels;
@@ -133,6 +136,7 @@ public class WorldMapUI : MonoBehaviour {
         }
 
         EnsureMapForSeed(GameState.currentSeed);
+        UpdateZoneOverlay();
 
         Transform localPlayer = FindLocalPlayer();
         if (localPlayer == null) {
@@ -199,6 +203,15 @@ public class WorldMapUI : MonoBehaviour {
         mapRect.anchoredPosition = Vector2.zero;
         mapRect.sizeDelta = new Vector2(minimapSize - 12f, minimapSize - 12f);
 
+        GameObject zoneObject = new GameObject("SafeZone_Map", typeof(RectTransform), typeof(CanvasRenderer));
+        zoneObject.transform.SetParent(mapRect, false);
+        zoneGraphic = zoneObject.AddComponent<SafeZoneMapGraphic>();
+        zoneGraphic.raycastTarget = false;
+        zoneGraphic.rectTransform.anchorMin = Vector2.zero;
+        zoneGraphic.rectTransform.anchorMax = Vector2.one;
+        zoneGraphic.rectTransform.offsetMin = Vector2.zero;
+        zoneGraphic.rectTransform.offsetMax = Vector2.zero;
+
         GameObject markerLayerObject = new GameObject("Dynamic_Markers");
         markerLayerObject.transform.SetParent(panelObject.transform, false);
         markerLayer = markerLayerObject.AddComponent<RectTransform>();
@@ -217,6 +230,28 @@ public class WorldMapUI : MonoBehaviour {
         playerMarker.pivot = new Vector2(0.5f, 0.5f);
         playerMarker.sizeDelta = new Vector2(8f, 8f);
 
+        zoneLegend = new GameObject("SafeZone_Legend", typeof(RectTransform));
+        zoneLegend.transform.SetParent(panelRect, false);
+        zoneLegend.AddComponent<Image>().color = new Color(0.02f, 0.025f, 0.03f, 0.85f);
+        RectTransform legendRect = (RectTransform)zoneLegend.transform;
+        legendRect.anchorMin = new Vector2(0f, 0f);
+        legendRect.anchorMax = new Vector2(1f, 0f);
+        legendRect.pivot = new Vector2(0.5f, 1f);
+        legendRect.sizeDelta = new Vector2(0f, 52f);
+        GameObject textObject = new GameObject("Status", typeof(RectTransform));
+        textObject.transform.SetParent(legendRect, false);
+        zoneStatusText = textObject.AddComponent<Text>();
+        zoneStatusText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        zoneStatusText.alignment = TextAnchor.MiddleCenter;
+        zoneStatusText.color = Color.white;
+        zoneStatusText.raycastTarget = false;
+        RectTransform textRect = zoneStatusText.rectTransform;
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(3f, 1f);
+        textRect.offsetMax = new Vector2(-3f, -1f);
+        zoneLegend.SetActive(false);
+        zoneObject.SetActive(false);
         ApplyMapLayout();
     }
 
@@ -270,6 +305,7 @@ public class WorldMapUI : MonoBehaviour {
         mapRect.sizeDelta = new Vector2(currentSize - 12f, currentSize - 12f);
         markerLayer.sizeDelta = mapRect.sizeDelta;
         playerMarker.sizeDelta = isLargeMapOpen ? new Vector2(12f, 12f) : new Vector2(8f, 8f);
+        if (zoneStatusText != null) zoneStatusText.fontSize = isLargeMapOpen ? 15 : 10;
 
         if (panelImage != null) {
             panelImage.color = isLargeMapOpen
@@ -323,6 +359,23 @@ public class WorldMapUI : MonoBehaviour {
                 $"[WorldMapUI] Generated biome map texture. seed={seed}, resolution={mapResolution}, worldSize={worldSize}.",
                 this
             );
+        }
+    }
+
+    private void UpdateZoneOverlay() {
+        ZoneManager zone = ZoneManager.Instance;
+        bool available = zone != null && zone.TryGetSnapshot(out _);
+        zoneGraphic.gameObject.SetActive(available);
+        zoneLegend.SetActive(available);
+        if (!available || !zone.TryGetSnapshot(out ZoneSnapshot snapshot)) return;
+        zoneGraphic.SetZone(snapshot, worldSize, isLargeMapOpen, zone.OutsideColor, zone.EdgeColor);
+        if (snapshot.Phase == ZonePhase.Complete) {
+            zoneStatusText.text = "Final safe zone - fixed\nSOLID: safe boundary\nTINT: outside damage";
+        } else {
+            int seconds = Mathf.CeilToInt(snapshot.SecondsRemaining);
+            string action = snapshot.Phase == ZonePhase.Waiting ? "Waiting" : "Shrinking";
+            zoneStatusText.text = $"Stage {snapshot.StageIndex + 1}/3 | {action} {seconds / 60:00}:{seconds % 60:00}\n" +
+                                  "SOLID: current / DASHED: next\nTINT: outside damage";
         }
     }
 

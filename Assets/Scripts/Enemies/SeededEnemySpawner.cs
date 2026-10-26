@@ -15,6 +15,7 @@ public class SeededEnemySpawner : MonoBehaviour {
     private class EnemySpawnRecord {
         public string ruleName;
         public TerrainBiomeMask biomeMask;
+        public EnemyArchetype archetype;
         public Vector3 position;
         public GameObject activeEnemy;
         public bool isDefeated;
@@ -105,6 +106,8 @@ public class SeededEnemySpawner : MonoBehaviour {
                     spawnRecords.Add(new EnemySpawnRecord {
                         ruleName = rule.name,
                         biomeMask = rule.biomeMask,
+                        archetype = EnemyArchetypes.ForBiomeSpawn(rule.biomeMask, i,
+                            CreateRandom(mapSeed, spawnIndex, rule.biomeMask).Next(100)),
                         position = spawnPosition
                     });
                 }
@@ -223,6 +226,7 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     private void SpawnEnemy(EnemySpawnRecord record) {
         GameObject enemyInstance = Instantiate(enemyPrefab, record.position, Quaternion.identity);
+        enemyInstance.GetComponent<EnemyController>()?.ConfigureArchetype(record.archetype);
         record.activeEnemy = enemyInstance;
 
         EnemyHealthDrop enemyHealth = enemyInstance.GetComponent<EnemyHealthDrop>();

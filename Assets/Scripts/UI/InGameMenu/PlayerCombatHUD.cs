@@ -42,7 +42,7 @@ public class PlayerCombatHUD : MonoBehaviour {
         player = GetComponent<PlayerController>();
         sensor = GetComponent<PlayerEnemySensor>();
         characterVisual = GetComponent<PlayerCharacterVisual>();
-        playerRenderer = GetComponent<SpriteRenderer>();
+        playerRenderer = GetComponentInChildren<SpriteRenderer>(true);
     }
 
     private void LateUpdate() {

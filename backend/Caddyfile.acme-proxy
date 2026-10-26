@@ -1,0 +1,10 @@
+# Import this from an existing host Caddy when another app already owns port 80.
+# Set these variables in that Caddy process; it does not read backend/.env.
+http://{$AVIAN_API_HOST:140.136.151.88} {
+    handle /.well-known/acme-challenge/* {
+        reverse_proxy 127.0.0.1:{$AVIAN_HTTP_PORT:8000}
+    }
+    handle {
+        redir https://{host}{uri} 308
+    }
+}

@@ -91,6 +91,7 @@ public class CharacterSelectionMenu : MonoBehaviour
     }
 
     private void UnlockSelection() {
+        FindFirstObjectByType<MatchmakingMenu>()?.CancelPendingWorldConnection();
         string previousCharacterId = selectedCharacterId;
         selectedCharacterId = string.Empty;
         selectionLocked = false;
@@ -135,6 +136,9 @@ public class CharacterSelectionMenu : MonoBehaviour
             NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
 
             if (!NetworkManager.Singleton.IsListening) {
+                if (NetworkManager.Singleton.NetworkConfig.NetworkTransport is Unity.Netcode.Transports.UTP.UnityTransport transport) {
+                    GameConnectionSettings.ConfigureSinglePlayer(transport);
+                }
                 NetworkManager.Singleton.StartHost();
             }
         }
@@ -253,5 +257,17 @@ public class CharacterSelectionMenu : MonoBehaviour
         if (descriptionText != null) {
             descriptionText.text = message;
         }
+    }
+
+    public void ShowConnectionProgress(string message) {
+        SetDescription($"{message}\nPress Esc to cancel.");
+    }
+
+    public void ShowConnectionFailure(string message) {
+        StopMatchReadyCoroutine();
+        selectionLocked = false;
+        selectedCharacterId = string.Empty;
+        GameState.SetSelectedCharacter(string.Empty);
+        SetDescription($"{message}\nSelect a character to retry.");
     }
 }

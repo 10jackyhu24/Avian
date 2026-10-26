@@ -116,10 +116,13 @@ InitTestScene*.unity*
 
 # python
 __pycache__/
+/.utmp/
 
 # backend
 secret.yaml
 .env
+# Locally generated internal CA and service private keys. Never commit these.
+/backend/.tls/
 
 # Client API address for this machine or build
 /network-config.json
@@ -127,3 +130,8 @@ secret.yaml
 # unity
 /Assets/_Recovery/
 _Recovery.meta
+
+# Standalone attachment checks (keep the hand-written project, omit build output).
+!Tools/ItemAttachments/Tests/AttachmentChecks.csproj
+/Tools/ItemAttachments/Tests/bin/
+/Tools/ItemAttachments/Tests/obj/

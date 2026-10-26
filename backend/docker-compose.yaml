@@ -33,32 +33,50 @@ services:
     depends_on:
       avian-postgres:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.tls/lobby
+        target: /run/avian-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://avian-lobby:8000/health', context=ssl.create_default_context(cafile='/run/avian-tls/ca.crt'), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
   avian-caddy:
-    image: caddy:2
+    image: caddy:2.11.7
     container_name: avian_caddy
     restart: unless-stopped
     depends_on:
-      - avian-lobby
-      - avian-matchmaker
+      avian-lobby:
+        condition: service_healthy
+      avian-matchmaker:
+        condition: service_healthy
+    environment:
+      AVIAN_API_HOST: ${AVIAN_API_HOST:?Set AVIAN_API_HOST to the host public IP or domain}
+      AVIAN_HTTPS_PORT: ${AVIAN_HTTPS_PORT:-8443}
+      AVIAN_GAME_GATEWAY_HOST: ${AVIAN_GAME_GATEWAY_HOST:-avian-cluster-control-plane}
+      AVIAN_ACME_CA: ${AVIAN_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
     ports:
-      - "${AVIAN_HTTP_PORT:-8000}:8000"
+      - "127.0.0.1:${AVIAN_HTTP_PORT:-8000}:8000"
+      - "${AVIAN_HTTPS_PORT:-8443}:${AVIAN_HTTPS_PORT:-8443}"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-
-  avian-ngrok:
-    image: ngrok/ngrok:latest
-    container_name: avian_ngrok
-    restart: unless-stopped
-    depends_on:
-      - avian-caddy
-    environment:
-      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
-    ports:
-      - "${AVIAN_NGROK_INSPECTOR_PORT:-4040}:4040"
-    command:
-      - http
-      - avian-caddy:8000
+      - caddy_data:/data
+      - caddy_config:/config
+      - type: bind
+        source: ./.tls/ca.crt
+        target: /etc/avian-tls/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - kind
 
   avian-matchmaker:
     build:
@@ -69,8 +87,10 @@ services:
       - .env
     environment:
       ROOM_MODE: ${ROOM_MODE:-static}
-      WORLD_ENDPOINT: ${WORLD_ENDPOINT:-127.0.0.1:30080}
-      STATIC_ROOM_SEED: ${STATIC_ROOM_SEED:-}
+      WORLD_ENDPOINT: ${WORLD_ENDPOINT:-wss://${AVIAN_API_HOST}:${AVIAN_HTTPS_PORT:-8443}/game/30080}
+      STATIC_ROOM_SEED: ${STATIC_ROOM_SEED:-100000}
+      GAME_TRANSPORT: ${GAME_TRANSPORT:-websocket}
+      ROOM_PUBLIC_BASE_URL: ${ROOM_PUBLIC_BASE_URL:-wss://${AVIAN_API_HOST}:${AVIAN_HTTPS_PORT:-8443}/game}
       ROOM_ENDPOINT_HOST: ${ROOM_ENDPOINT_HOST:-127.0.0.1}
       ROOM_NODE_PORT_START: ${ROOM_NODE_PORT_START:-30081}
       ROOM_NODE_PORT_END: ${ROOM_NODE_PORT_END:-30084}
@@ -83,10 +103,29 @@ services:
       KUBERNETES_API_HOST: ${KUBERNETES_API_HOST:-}
       KUBERNETES_VERIFY_SSL: ${KUBERNETES_VERIFY_SSL:-true}
     ports:
-      - "${AVIAN_MATCHMAKER_PORT:-8080}:8080"
+      - "127.0.0.1:${AVIAN_MATCHMAKER_PORT:-8080}:8080"
     volumes:
       - ${KUBECONFIG_HOST_PATH:-${USERPROFILE}/.kube/config}:/kube/config:ro
+      - type: bind
+        source: ./.tls/matchmaker
+        target: /run/avian-tls
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import ssl, urllib.request; urllib.request.urlopen('https://avian-matchmaker:8080/health', context=ssl.create_default_context(cafile='/run/avian-tls/ca.crt'), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
 
 volumes:
   pgdata:
     driver: local
+  caddy_data:
+  caddy_config:
+
+networks:
+  kind:
+    external: true
+    name: kind

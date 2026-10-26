@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using Unity.Netcode;
 using Unity.Netcode.Transports.UTP;
 using UnityEngine;
@@ -45,7 +46,9 @@ public class ServerBootstrap : MonoBehaviour {
         }
 
         LoadRoomSettings();
-        ConfigureTransport();
+        if (!ConfigureTransport()) {
+            return;
+        }
         NetworkUtility.DisableSceneManagement(NetworkManager.Singleton);
 
         if (!NetworkManager.Singleton.IsListening) {
@@ -99,6 +102,9 @@ public class ServerBootstrap : MonoBehaviour {
     }
 
     private void LoadRoomSettings() {
+        if (bool.TryParse(Environment.GetEnvironmentVariable("QUIT_WHEN_EMPTY"), out bool configuredQuitWhenEmpty)) {
+            quitWhenEmpty = configuredQuitWhenEmpty;
+        }
         activeRoomId = Environment.GetEnvironmentVariable("ROOM_ID");
         if (string.IsNullOrWhiteSpace(activeRoomId)) {
             activeRoomId = string.IsNullOrWhiteSpace(GameState.currentRoomId)
@@ -121,7 +127,7 @@ public class ServerBootstrap : MonoBehaviour {
             Debug.LogError("[ServerBootstrap] TerrainController not found. Dedicated server will have no collidable world.", this);
         }
 
-        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Loaded seed={activeSeed}", this);
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Loaded seed={activeSeed}, quitWhenEmpty={quitWhenEmpty}", this);
     }
 
     private TerrainController ResolveTerrainController() {
@@ -137,10 +143,10 @@ public class ServerBootstrap : MonoBehaviour {
         return terrainController;
     }
 
-    private void ConfigureTransport() {
+    private bool ConfigureTransport() {
         if (NetworkManager.Singleton.NetworkConfig.NetworkTransport is not UnityTransport unityTransport) {
             Debug.LogWarning("[ServerBootstrap] NetworkManager transport is not UnityTransport.", this);
-            return;
+            return false;
         }
 
         ushort port = defaultPort;
@@ -149,8 +155,23 @@ public class ServerBootstrap : MonoBehaviour {
             port = parsedPort;
         }
 
-        unityTransport.SetConnectionData(listenAddress, port, listenAddress);
-        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}", this);
+        string mode = (Environment.GetEnvironmentVariable("GAME_TRANSPORT") ?? "websocket").Trim().ToLowerInvariant();
+        try {
+            string certificate = null;
+            string privateKey = null;
+            if (mode == "websocket") {
+                string certificateFile = Environment.GetEnvironmentVariable("GAME_TLS_CERT_FILE") ?? "/run/avian-tls/tls.crt";
+                string privateKeyFile = Environment.GetEnvironmentVariable("GAME_TLS_KEY_FILE") ?? "/run/avian-tls/tls.key";
+                certificate = File.ReadAllText(certificateFile);
+                privateKey = File.ReadAllText(privateKeyFile);
+            }
+            GameConnectionSettings.ConfigureServer(unityTransport, listenAddress, port, mode, certificate, privateKey);
+        } catch (Exception error) when (error is ArgumentException || error is IOException || error is UnauthorizedAccessException) {
+            Debug.LogError($"[ServerBootstrap] {error.Message}", this);
+            return false;
+        }
+        Debug.Log($"[ServerBootstrap] room={ActiveRoomLabel} Listening on {listenAddress}:{port}, transport={mode}, encrypted={unityTransport.UseEncryption}", this);
+        return true;
     }
 
     private void SpawnEnemies() {
@@ -167,6 +188,7 @@ public class ServerBootstrap : MonoBehaviour {
         for (int i = 0; i < enemyCount; i++) {
             Vector3 enemySpawnPosition = GetEnemySpawnPosition(i);
             GameObject enemyInstance = Instantiate(enemyPrefab, enemySpawnPosition, Quaternion.identity);
+            enemyInstance.GetComponent<EnemyController>()?.ConfigureArchetype(EnemyArchetypes.ForDemoIndex(i));
             spawnedEnemies.Add(enemyInstance);
 
             NetworkObject networkObject = enemyInstance.GetComponent<NetworkObject>();

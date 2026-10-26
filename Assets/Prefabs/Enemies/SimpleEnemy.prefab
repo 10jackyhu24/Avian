@@ -11,6 +11,7 @@ GameObject:
   - component: {fileID: 5674464431572529575}
   - component: {fileID: 3941648843019705873}
   - component: {fileID: 6227102569084453923}
+  - component: {fileID: 6227102569084453924}
   m_Layer: 0
   m_Name: SimpleEnemy
   m_TagString: Untagged
@@ -26,7 +27,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 578714151865313282}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.39126006, y: 0, z: 0, w: 0.92028016}
   m_LocalPosition: {x: 32.938198, y: 49.525013, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -114,3 +115,15 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &6227102569084453924
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 578714151865313282}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 82e9ab0367e84d2f9f34e5514e6710a2, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::CameraFacingSpriteVisual

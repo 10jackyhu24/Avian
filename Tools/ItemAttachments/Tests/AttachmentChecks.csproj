@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <NuGetAudit>false</NuGetAudit>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../Assets/Scripts/Items/AttachmentBonuses.cs" Link="AttachmentBonuses.cs" />
+    <Compile Include="../../../Assets/Scripts/Items/Item.cs" Link="Item.cs" />
+  </ItemGroup>
+</Project>
