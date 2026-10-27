@@ -3,12 +3,6 @@ using Unity.Netcode;
 
 [RequireComponent(typeof(CharacterController), typeof(NetworkObject))]
 public class EnemyController : NetworkBehaviour {
-    private enum EnemyState {
-        Patrol,
-        Chase,
-        Cooldown
-    }
-
     [Header("Patrol")]
     [SerializeField] private float patrolSpeed = 2.5f;
     [SerializeField] private float patrolRadius = 8f;
@@ -16,10 +10,7 @@ public class EnemyController : NetworkBehaviour {
     [SerializeField] private float patrolPauseDuration = 0.75f;
 
     [Header("Chase")]
-    [SerializeField] private float detectionRange = 12f;
     [SerializeField] private float chaseSpeed = 4.5f;
-    [SerializeField] private float chaseDuration = 5f;
-    [SerializeField] private float chaseCooldown = 3f;
     [SerializeField] private float targetRefreshInterval = 0.25f;
 
     [Header("Movement")]
@@ -30,9 +21,10 @@ public class EnemyController : NetworkBehaviour {
     [Min(0.01f)] [SerializeField] private float knockbackDuration = 0.2f;
     [Range(0.05f, 0.95f)] [SerializeField] private float firstStageDistanceShare = 0.6f;
     [Range(0.05f, 0.95f)] [SerializeField] private float firstStageTimeShare = 0.35f;
-    [Min(0f)] [SerializeField] private float firstStageLiftHeight = 0.25f;
+    [Min(0f)] [SerializeField] private float firstStageLiftHeight;
 
     [Header("Camera Culling")]
+    [Tooltip("Hide offscreen renderers without stopping movement, collisions or attacks.")]
     [SerializeField] private bool disableWhenOutOfView = true;
     [SerializeField] private Vector3 visibilityBoundsSize = new Vector3(2f, 3f, 2f);
     [SerializeField] private float visibilityCheckInterval = 0.2f;
@@ -69,7 +61,8 @@ public class EnemyController : NetworkBehaviour {
     private Transform visualTransform;
     private Vector3 initialVisualScale;
     private SpriteRenderer visualSpriteRenderer;
-    private bool customSpriteFacesLeft;
+    private bool visualSpriteFacesLeft;
+    private bool usesMovementAnimations;
     private bool usesArchetypeAnimations;
     private Vector3 previousAnimationPosition;
     private float movingAnimationUntil;
@@ -84,28 +77,26 @@ public class EnemyController : NetworkBehaviour {
     private Vector3 initialColliderCenter;
     private Vector3 initialVisibilityBoundsSize;
     private Renderer[] cachedRenderers;
-    private Collider[] cachedColliders;
     private bool[] rendererEnabledStates;
-    private bool[] colliderEnabledStates;
-    private Transform playerTarget;
-    private EnemyState currentState = EnemyState.Patrol;
+    private PlayerController playerTarget;
     private Vector3 patrolCenter;
     private Vector3 currentPatrolPoint;
     private float verticalVelocity;
-    private float chaseTimer;
-    private float cooldownTimer;
     private float patrolPauseTimer;
     private float nextTargetSearchTime;
     private float nextVisibilityCheckTime;
-    private bool isSuspendedByCamera;
+    private bool visualsHiddenByCamera;
     private Vector3 knockbackDirection;
     private int knockbackStage;
     private float stageRemainingDistance;
     private float stageRemainingTime;
     private float secondStageDistance;
     private float secondStageDuration;
+    private float avoidanceSide = 1f;
+    private float avoidanceUntil;
 
     public bool IsBossType => (IsSpawned ? networkArchetype.Value : pendingArchetype) >= EnemyArchetype.MiniBoss;
+    public bool IsPursuingPlayer => IsValidTarget(playerTarget);
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -133,16 +124,10 @@ public class EnemyController : NetworkBehaviour {
         }
         initialVisibilityBoundsSize = visibilityBoundsSize;
         cachedRenderers = GetComponentsInChildren<Renderer>(true);
-        cachedColliders = GetComponentsInChildren<Collider>(true);
         rendererEnabledStates = new bool[cachedRenderers.Length];
-        colliderEnabledStates = new bool[cachedColliders.Length];
 
         for (int i = 0; i < cachedRenderers.Length; i++) {
             rendererEnabledStates[i] = cachedRenderers[i].enabled;
-        }
-
-        for (int i = 0; i < cachedColliders.Length; i++) {
-            colliderEnabledStates[i] = cachedColliders[i].enabled;
         }
 
         patrolCenter = transform.position;
@@ -184,7 +169,6 @@ public class EnemyController : NetworkBehaviour {
         EnemyArchetypeStats stats = EnemyArchetypes.Get(archetype);
         patrolSpeed = stats.PatrolSpeed;
         chaseSpeed = stats.ChaseSpeed;
-        detectionRange = stats.DetectionRange;
         visibilityBoundsSize = initialVisibilityBoundsSize * stats.ColliderScale;
 
         if (visualTransform != null) {
@@ -199,6 +183,9 @@ public class EnemyController : NetworkBehaviour {
         };
         usesArchetypeAnimations = controller != null &&
             (archetype == EnemyArchetype.Raider || archetype == EnemyArchetype.Spitter || archetype == EnemyArchetype.MiniBoss);
+        // Medusa has idle/move states but no attack animation parameters.
+        usesMovementAnimations = controller != null &&
+            (usesArchetypeAnimations || archetype == EnemyArchetype.Boss);
         if (controller == null) controller = initialAnimatorController;
         if (visualAnimator != null) {
             bool changed = !visualAnimator.enabled || visualAnimator.runtimeAnimatorController != controller;
@@ -214,7 +201,7 @@ public class EnemyController : NetworkBehaviour {
                 visualAnimator.SetFloat(AttackSpeedParameter, 0.6f / Mathf.Max(0.05f, duration));
             }
         }
-        customSpriteFacesLeft = usesArchetypeAnimations;
+        visualSpriteFacesLeft = stats.SpriteFacesLeft;
         ApplyFacing(localFacingLeft);
 
         float heightIncrease = initialControllerHeight * (stats.ColliderScale - 1f);
@@ -239,8 +226,9 @@ public class EnemyController : NetworkBehaviour {
         localFacingLeft = isFacingLeft;
         for (int i = 0; i < spriteRenderers.Length; i++) {
             if (spriteRenderers[i] != null) {
-                spriteRenderers[i].flipX = initialSpriteFlipX[i] ^ isFacingLeft ^
-                    (customSpriteFacesLeft && spriteRenderers[i] == visualSpriteRenderer);
+                spriteRenderers[i].flipX = spriteRenderers[i] == visualSpriteRenderer
+                    ? isFacingLeft ^ visualSpriteFacesLeft
+                    : initialSpriteFlipX[i] ^ isFacingLeft;
             }
         }
     }
@@ -265,41 +253,27 @@ public class EnemyController : NetworkBehaviour {
             return;
         }
 
-        RefreshVisibilityState();
-
-        if (isSuspendedByCamera) return;
         if (!GameState.isPlaying) return;
+
+        ResolvePlayerTarget();
+        if (playerTarget != null) {
+            UpdateFacing(playerTarget.transform.position - transform.position);
+        }
 
         if (knockbackStage != 0 && Time.deltaTime > 0f) {
             UpdateKnockback(Time.deltaTime);
             return;
         }
 
-        ResolvePlayerTarget();
-
-        switch (currentState) {
-            case EnemyState.Patrol:
-                if (CanStartChase()) {
-                    BeginChase();
-                    UpdateChase();
-                    return;
-                }
-
-                UpdatePatrol();
-                break;
-
-            case EnemyState.Chase:
-                UpdateChase();
-                break;
-
-            case EnemyState.Cooldown:
-                UpdateCooldown();
-                UpdatePatrol();
-                break;
+        if (playerTarget != null) {
+            UpdateChase();
+        } else {
+            UpdatePatrol();
         }
     }
 
     private void LateUpdate() {
+        RefreshVisibilityState();
         bool localAttack = GameState.isPlaying && attackController != null && attackController.IsAttacking;
         if (IsSpawned && IsServer && networkIsAttacking.Value != localAttack) {
             networkIsAttacking.Value = localAttack;
@@ -307,7 +281,7 @@ public class EnemyController : NetworkBehaviour {
 
         Vector3 displacement = transform.position - previousAnimationPosition;
         previousAnimationPosition = transform.position;
-        if (!usesArchetypeAnimations || visualAnimator == null || !visualAnimator.enabled) return;
+        if (!usesMovementAnimations || visualAnimator == null || !visualAnimator.enabled) return;
 
         displacement.y = 0f;
         float minimumStep = 0.1f * Time.deltaTime;
@@ -315,18 +289,20 @@ public class EnemyController : NetworkBehaviour {
             // A short hold prevents idle/move flicker between NetworkTransform updates.
             movingAnimationUntil = Time.time + 0.12f;
         }
-        bool attacking = IsSpawned ? networkIsAttacking.Value : localAttack;
         visualAnimator.SetBool(IsMovingParameter, GameState.isPlaying && Time.time < movingAnimationUntil);
-        visualAnimator.SetBool(IsAttackingParameter, attacking);
+        if (usesArchetypeAnimations) {
+            bool attacking = IsSpawned ? networkIsAttacking.Value : localAttack;
+            visualAnimator.SetBool(IsAttackingParameter, attacking);
+        }
     }
 
     private void RefreshVisibilityState() {
-        /*if (!disableWhenOutOfView) {
-            if (isSuspendedByCamera) {
-                SetCameraSuspended(false);
+        if (!disableWhenOutOfView) {
+            if (visualsHiddenByCamera) {
+                SetVisualsHidden(false);
             }
             return;
-        }*/
+        }
 
         if (Time.time < nextVisibilityCheckTime) return;
         nextVisibilityCheckTime = Time.time + visibilityCheckInterval;
@@ -345,21 +321,21 @@ public class EnemyController : NetworkBehaviour {
         );
         bool isVisible = GeometryUtility.TestPlanesAABB(cameraPlanes, visibilityBounds);
 
-        if (isVisible == isSuspendedByCamera) {
-            SetCameraSuspended(!isVisible);
+        if (isVisible == visualsHiddenByCamera) {
+            SetVisualsHidden(!isVisible);
         }
     }
 
     private void ResolvePlayerTarget() {
-        if (Time.time < nextTargetSearchTime) return;
-        nextTargetSearchTime = Time.time + targetRefreshInterval;
+        if (Time.time < nextTargetSearchTime && (playerTarget == null || IsValidTarget(playerTarget))) return;
+        nextTargetSearchTime = Time.time + Mathf.Max(0.05f, targetRefreshInterval);
 
         PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        Transform closestTarget = null;
+        PlayerController closestTarget = null;
         float closestDistanceSquared = float.MaxValue;
 
         foreach (PlayerController player in players) {
-            if (player == null || !player.IsSpawned || !player.IsAlive) {
+            if (!IsValidTarget(player)) {
                 continue;
             }
 
@@ -371,20 +347,14 @@ public class EnemyController : NetworkBehaviour {
             }
 
             closestDistanceSquared = distanceSquared;
-            closestTarget = player.transform;
+            closestTarget = player;
         }
 
         playerTarget = closestTarget;
     }
 
-    private bool CanStartChase() {
-        if (playerTarget == null) return false;
-        return GetHorizontalDistanceTo(playerTarget.position) <= detectionRange;
-    }
-
-    private void BeginChase() {
-        currentState = EnemyState.Chase;
-        chaseTimer = chaseDuration;
+    private static bool IsValidTarget(PlayerController player) {
+        return player != null && player.isActiveAndEnabled && player.IsSpawned && player.IsAlive;
     }
 
     private void UpdatePatrol() {
@@ -408,14 +378,7 @@ public class EnemyController : NetworkBehaviour {
     }
 
     private void UpdateChase() {
-        if (playerTarget == null) {
-            BeginCooldown();
-            return;
-        }
-
-        chaseTimer -= Time.deltaTime;
-
-        Vector3 toPlayer = playerTarget.position - transform.position;
+        Vector3 toPlayer = playerTarget.transform.position - transform.position;
         toPlayer.y = 0f;
 
         if (attackController != null && attackController.IsAttacking) {
@@ -423,14 +386,9 @@ public class EnemyController : NetworkBehaviour {
             return;
         }
 
-        PlayerController targetPlayer = playerTarget.GetComponent<PlayerController>();
-        if (attackController != null && targetPlayer != null &&
-            toPlayer.magnitude <= attackController.AttackRange) {
+        if (attackController != null && attackController.CanReachTarget(playerTarget)) {
             MoveCharacter(Vector3.zero, 0f);
-            attackController.TryAttack(targetPlayer);
-            if (chaseTimer <= 0f) {
-                BeginCooldown();
-            }
+            attackController.TryAttack(playerTarget);
             return;
         }
 
@@ -439,24 +397,6 @@ public class EnemyController : NetworkBehaviour {
         } else {
             MoveCharacter(Vector3.zero, 0f);
         }
-
-        if (chaseTimer <= 0f) {
-            BeginCooldown();
-        }
-    }
-
-    private void UpdateCooldown() {
-        cooldownTimer -= Time.deltaTime;
-        if (cooldownTimer <= 0f) {
-            currentState = EnemyState.Patrol;
-        }
-    }
-
-    private void BeginCooldown() {
-        currentState = EnemyState.Cooldown;
-        cooldownTimer = chaseCooldown;
-        patrolPauseTimer = 0f;
-        PickNextPatrolPoint();
     }
 
     public void ApplyKnockback(Vector3 attackerPosition) {
@@ -510,12 +450,18 @@ public class EnemyController : NetworkBehaviour {
             }
         }
 
+        horizontalDistance = Mathf.Min(horizontalDistance, GetObstacleDistance(knockbackDirection, horizontalDistance));
+        if (horizontalDistance <= 0.001f) knockbackStage = 0;
+        if (characterController.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f;
         float verticalDistance = verticalVelocity * deltaTime +
             0.5f * gravity * deltaTime * deltaTime;
         verticalVelocity += gravity * deltaTime;
+        float previousStepOffset = characterController.stepOffset;
+        characterController.stepOffset = 0f;
         CollisionFlags collisions = characterController.Move(
             knockbackDirection * horizontalDistance + Vector3.up * verticalDistance
         );
+        characterController.stepOffset = previousStepOffset;
         if ((collisions & CollisionFlags.Below) != 0 && verticalVelocity < 0f) {
             verticalVelocity = -2f;
         } else if ((collisions & CollisionFlags.Above) != 0 && verticalVelocity > 0f) {
@@ -528,26 +474,13 @@ public class EnemyController : NetworkBehaviour {
         currentPatrolPoint = patrolCenter + new Vector3(randomOffset.x, 0f, randomOffset.y);
     }
 
-    private void SetCameraSuspended(bool shouldSuspend) {
-        isSuspendedByCamera = shouldSuspend;
-
-        if (characterController != null) {
-            characterController.enabled = !shouldSuspend;
-        }
+    private void SetVisualsHidden(bool shouldHide) {
+        visualsHiddenByCamera = shouldHide;
 
         for (int i = 0; i < cachedRenderers.Length; i++) {
             if (cachedRenderers[i] != null) {
-                cachedRenderers[i].enabled = shouldSuspend ? false : rendererEnabledStates[i];
+                cachedRenderers[i].enabled = shouldHide ? false : rendererEnabledStates[i];
             }
-        }
-
-        for (int i = 0; i < cachedColliders.Length; i++) {
-            Collider collider = cachedColliders[i];
-            if (collider == null || collider == characterController) {
-                continue;
-            }
-
-            collider.enabled = shouldSuspend ? false : colliderEnabledStates[i];
         }
     }
 
@@ -556,7 +489,8 @@ public class EnemyController : NetworkBehaviour {
             verticalVelocity = -2f;
         }
 
-        UpdateFacing(direction);
+        direction = AvoidObstacles(direction, moveSpeed);
+        if (playerTarget == null) UpdateFacing(direction);
 
         verticalVelocity += gravity * Time.deltaTime;
 
@@ -565,16 +499,42 @@ public class EnemyController : NetworkBehaviour {
         characterController.Move(velocity * Time.deltaTime);
     }
 
-    private float GetHorizontalDistanceTo(Vector3 targetPosition) {
-        Vector3 offset = targetPosition - transform.position;
-        offset.y = 0f;
-        return offset.magnitude;
+    private Vector3 AvoidObstacles(Vector3 direction, float speed) {
+        if (speed <= 0f || direction.sqrMagnitude < 0.0001f) return direction;
+        float lookAhead = Mathf.Max(0.6f, speed * 0.3f);
+        if (GetObstacleDistance(direction, lookAhead) >= lookAhead) return direction;
+
+        if (Time.time >= avoidanceUntil) {
+            Vector3 left = Quaternion.AngleAxis(-65f, Vector3.up) * direction;
+            Vector3 right = Quaternion.AngleAxis(65f, Vector3.up) * direction;
+            avoidanceSide = GetObstacleDistance(left, lookAhead) > GetObstacleDistance(right, lookAhead) ? -1f : 1f;
+            avoidanceUntil = Time.time + 0.8f;
+        }
+        for (int angle = 45; angle <= 135; angle += 30) {
+            Vector3 candidate = Quaternion.AngleAxis(angle * avoidanceSide, Vector3.up) * direction;
+            if (GetObstacleDistance(candidate, lookAhead) >= lookAhead) return candidate;
+        }
+        return Vector3.zero;
+    }
+
+    private float GetObstacleDistance(Vector3 direction, float distance) {
+        if (distance <= 0f) return 0f;
+        Vector3 scale = transform.lossyScale;
+        float radius = characterController.radius * Mathf.Max(Mathf.Abs(scale.x), Mathf.Abs(scale.z));
+        float halfHeight = Mathf.Max(radius, characterController.height * Mathf.Abs(scale.y) * 0.5f);
+        Vector3 center = transform.TransformPoint(characterController.center);
+        Vector3 capOffset = Vector3.up * (halfHeight - radius);
+        float skin = Mathf.Max(0.02f, characterController.skinWidth);
+        float nearest = distance;
+        foreach (RaycastHit hit in Physics.CapsuleCastAll(center + capOffset, center - capOffset,
+                     Mathf.Max(0.01f, radius - skin), direction, distance + skin, ~0, QueryTriggerInteraction.Ignore)) {
+            if (!GroundPlacement.IsEnvironment(hit.collider) || hit.normal.y > 0.9f) continue;
+            nearest = Mathf.Min(nearest, Mathf.Max(0f, hit.distance - skin));
+        }
+        return nearest;
     }
 
     private void OnDrawGizmosSelected() {
-        Gizmos.color = Color.yellow;
-        Gizmos.DrawWireSphere(transform.position, detectionRange);
-
         Gizmos.color = Color.cyan;
         Gizmos.DrawWireSphere(transform.position, patrolRadius);
     }
