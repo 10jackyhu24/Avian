@@ -2,7 +2,7 @@ name: Unity 6 Tests
 
 on:
   push:
-    branches: ["main", "Unity-CI-Testing"]
+    branches: ["main"]
   pull_request:
     branches: [main]
 
