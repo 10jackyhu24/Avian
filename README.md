@@ -79,27 +79,34 @@ python -m pip install -r backend/tls/requirements.txt
 
    The exporter verifies API TLS, the advertised endpoint, and a real WebSocket upgrade through Caddy before writing the file. This checks the proxy path; a full match additionally checks Netcode and player spawning. Copy the entire Windows client folder to each player.
 
-## Public certificate and sharing this IP
+## Public HTTPS and certificate renewal
 
 Public TCP **80** must reach Caddy's ACME HTTP challenge for certificate issuance and renewal. Public TCP **8443** must reach Avian for HTTPS and WSS. Certificates and keys persist in the `caddy_data` and `caddy_config` Docker volumes. Caddy renews the public IP certificate automatically; keep the challenge route working.
 
-This computer already runs another Caddy for File-Converter on ports 80/443. Its `C:\D\Programing\File-Converter\Caddyfile` imports:
-
-```caddyfile
-import C:/D/Unity_project/Avian/backend/Caddyfile.acme-proxy
-```
-
-This forwards only IP HTTP ACME challenge requests to `127.0.0.1:8000`. File-Converter continues using its existing HTTPS 443 routes. Use `https://140.136.151.88:8443/health` for Avian; omitting `:8443` reaches the existing service.
-
-On a new host with port 80 free, expose the challenge listener directly:
+`backend/docker-compose.yaml` directly publishes host TCP **80** to Caddy's
+container port **8000**, together with public HTTPS/WSS on **8443**. Both
+`python compose.py --all` and the direct Compose command include these mappings:
 
 ```powershell
-docker compose --env-file backend/.env -f backend/docker-compose.yaml -f backend/docker-compose.public.yaml up -d
+docker compose --env-file backend/.env -f backend/docker-compose.yaml up -d
 ```
 
-If another Caddy owns port 80 on the new host, import the ACME proxy there and update its path and process environment instead. The host Caddy does not read Avian's `.env` automatically. Preserve its existing environment when reloading it.
+Keep host TCP **80** available for Avian and allow inbound TCP **80** and **8443**
+through the host firewall and router. Another application cannot bind the same
+host address and TCP port 80 at the same time. The optional `AVIAN_HTTP_PORT`
+mapping is bound to `127.0.0.1` for local diagnostics; changing it does not change
+the public certificate validation port.
 
-Moving the backend requires updating `AVIAN_API_HOST`, the certificate challenge route, and clients' `apiBaseUrl`. The default game URL references follow the host IP and HTTPS port; update `WORLD_ENDPOINT` and `ROOM_PUBLIC_BASE_URL` too if you replaced them with literal overrides. If using a domain, point its DNS to the new host. Caddy does not open firewall/router ports automatically.
+Players use `https://140.136.151.88:8443`; normal HTTPS/WSS gameplay uses 8443.
+Port 80 serves certificate validation and redirects other HTTP requests to the
+configured HTTPS address. Keep this listener reachable for automatic renewal.
+
+Moving the backend requires updating `AVIAN_API_HOST` and clients' `apiBaseUrl`,
+and making TCP 80 and the configured HTTPS port reachable on the new host. The
+default game URL references follow the host IP and HTTPS port; update
+`WORLD_ENDPOINT` and `ROOM_PUBLIC_BASE_URL` too if you replaced them with literal
+overrides. If using a domain, point its DNS to the new host. Caddy does not open
+firewall/router ports automatically.
 
 ## Dynamic rooms
 
