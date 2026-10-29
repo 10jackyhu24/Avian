@@ -13,17 +13,19 @@ public enum EnemyAttackPattern : byte {
     Bite,
     Projectile,
     Charge,
-    Slam
+    Slam,
+    DroppingProjectile
 }
 
 public sealed class EnemyArchetypeStats {
     public string Name;
+    // All current enemy sheets are authored facing left before SpriteRenderer.flipX.
+    public bool SpriteFacesLeft = true;
     public int MaxHealth;
     public float VisualScale;
     public float ColliderScale;
     public float PatrolSpeed;
     public float ChaseSpeed;
-    public float DetectionRange;
     public float AttackRange;
     public float Damage;
     public float Cooldown;
@@ -61,23 +63,23 @@ public static class EnemyArchetypes {
 
     private static readonly EnemyArchetypeStats Grunt = new EnemyArchetypeStats {
         Name = "Grunt", MaxHealth = 30, VisualScale = 1f, ColliderScale = 1f,
-        PatrolSpeed = 2.5f, ChaseSpeed = 4.5f, DetectionRange = 12f,
-        AttackRange = 1.8f, Damage = 8f, Cooldown = 1.3f, Windup = 0.35f,
+        PatrolSpeed = 2.5f, ChaseSpeed = 4.5f,
+        AttackRange = 3f, Damage = 5f, Cooldown = 2f, Windup = 0.25f,
         SectorAngle = 360f, MinCoins = 1, MaxCoins = 3,
-        Pattern = EnemyAttackPattern.Swipe
+        ProjectileSpeed = 5f, Pattern = EnemyAttackPattern.DroppingProjectile
     };
 
     private static readonly EnemyArchetypeStats Raider = new EnemyArchetypeStats {
-        Name = "Raider", MaxHealth = 22, VisualScale = 0.82f, ColliderScale = 0.85f,
-        PatrolSpeed = 3.4f, ChaseSpeed = 6.2f, DetectionRange = 15f,
+        Name = "Raider", MaxHealth = 80, VisualScale = 0.82f, ColliderScale = 0.85f,
+        PatrolSpeed = 3.4f, ChaseSpeed = 6.2f,
         AttackRange = 2.1f, Damage = 9f, Cooldown = 0.85f, Windup = 0.2f,
         SectorAngle = 85f, MinCoins = 1, MaxCoins = 2,
         Pattern = EnemyAttackPattern.Bite
     };
 
     private static readonly EnemyArchetypeStats Spitter = new EnemyArchetypeStats {
-        Name = "Spitter", MaxHealth = 24, VisualScale = 0.95f, ColliderScale = 0.95f,
-        PatrolSpeed = 2f, ChaseSpeed = 3.2f, DetectionRange = 18f,
+        Name = "Spitter", MaxHealth = 50, VisualScale = 0.95f, ColliderScale = 0.95f,
+        PatrolSpeed = 2f, ChaseSpeed = 3.2f,
         AttackRange = 13f, Damage = 7f, Cooldown = 2.1f, Windup = 0.65f,
         SectorAngle = 8f, ProjectileSpeed = 12f, MinCoins = 2, MaxCoins = 4,
         Pattern = EnemyAttackPattern.Projectile
@@ -85,7 +87,7 @@ public static class EnemyArchetypes {
 
     private static readonly EnemyArchetypeStats MiniBoss = new EnemyArchetypeStats {
         Name = "Charging Warden", MaxHealth = 130, VisualScale = 1.2f, ColliderScale = 1.35f,
-        PatrolSpeed = 2.2f, ChaseSpeed = 4.2f, DetectionRange = 18f,
+        PatrolSpeed = 2.2f, ChaseSpeed = 4.2f,
         AttackRange = 7f, Damage = 20f, Cooldown = 4.5f, Windup = 0.85f,
         SectorAngle = 22f, ChargeSpeed = 12f, ChargeDuration = 0.55f,
         MinCoins = 8, MaxCoins = 15,
@@ -95,7 +97,7 @@ public static class EnemyArchetypes {
     private static readonly EnemyArchetypeStats Boss = new EnemyArchetypeStats {
         // Medusa sprites use 100 PPU; the bird enemy sprites use 36 PPU.
         Name = "Medusa", MaxHealth = 500, VisualScale = 6f, ColliderScale = 1.85f,
-        PatrolSpeed = 1.6f, ChaseSpeed = 3f, DetectionRange = 24f,
+        PatrolSpeed = 1.6f, ChaseSpeed = 3f,
         AttackRange = 5.5f, Damage = 28f, Cooldown = 5.5f, Windup = 1.2f,
         SectorAngle = 360f, ProjectileSpeed = 9f, MinCoins = 30, MaxCoins = 50,
         Pattern = EnemyAttackPattern.Slam

@@ -33,7 +33,6 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     [Header("Population")]
     [SerializeField] private float activationRadius = 80f;
-    [SerializeField] private float deactivationRadius = 110f;
     [SerializeField] private float populationTickInterval = 0.75f;
     [Min(0)] [SerializeField] private int maxActiveEnemies = 20;
 
@@ -125,6 +124,7 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     private void RefreshPopulation() {
         PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
+        bool hasSpawnedPlayer = Array.Exists(players, player => player != null && player.IsSpawned);
         int activeEnemyCount = CountActiveEnemies();
         int activatedCount = 0;
         int deactivatedCount = 0;
@@ -135,7 +135,9 @@ public class SeededEnemySpawner : MonoBehaviour {
             }
 
             if (record.activeEnemy != null) {
-                if (!IsAnyAlivePlayerWithin(players, record.activeEnemy.transform.position, deactivationRadius)) {
+                // Dead players remain spawned during the respawn delay. Keep the same
+                // enemies until all players leave, even before AI reacquires a target.
+                if (!hasSpawnedPlayer) {
                     DeactivateEnemy(record);
                     activeEnemyCount = Mathf.Max(0, activeEnemyCount - 1);
                     deactivatedCount++;

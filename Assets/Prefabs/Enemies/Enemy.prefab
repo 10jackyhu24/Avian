@@ -189,17 +189,14 @@ MonoBehaviour:
   patrolRadius: 8
   patrolPointReachedDistance: 0.75
   patrolPauseDuration: 0.75
-  detectionRange: 12
   chaseSpeed: 4.5
-  chaseDuration: 5
-  chaseCooldown: 3
   targetRefreshInterval: 0.25
   gravity: -20
   knockbackDistance: 3
   knockbackDuration: 1
   firstStageDistanceShare: 0.6
   firstStageTimeShare: 0.35
-  firstStageLiftHeight: 0.5
+  firstStageLiftHeight: 0
   disableWhenOutOfView: 1
   visibilityBoundsSize: {x: 2, y: 3, z: 2}
   visibilityCheckInterval: 0.2
@@ -313,6 +310,11 @@ MonoBehaviour:
   defaultWindup: 0.3
   hitStunDuration: 0.4
   defaultCenterOffset: {x: 0, y: 1, z: 0}
+  simpleEnemyProjectilePrefab: {fileID: 6030480073088594671, guid: 583ec581efeac1649ae9a19462f1559a, type: 3}
+  simpleEnemyProjectileOffset: {x: 0, y: -0.35, z: -0.8}
+  simpleEnemyProjectileDistance: 4
+  simpleEnemyProjectileRadius: 0.18
+  simpleEnemyProjectileScale: 2
   warningColor: {r: 1, g: 0.15, b: 0.05, a: 0.35}
   warningSegments: 32
   warningHeight: 0.12

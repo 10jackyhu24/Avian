@@ -61,9 +61,12 @@ public class EnemyHealthDrop : NetworkBehaviour {
             return;
         }
 
+        SpriteRenderer visual = GetComponentInChildren<SpriteRenderer>();
+        Vector3 barPosition = transform.position + healthBarOffset;
+        if (visual != null) barPosition.y = Mathf.Max(barPosition.y, visual.bounds.max.y + 0.2f);
         WorldHealthBarGUI.Draw(
             this,
-            transform.position + healthBarOffset,
+            barPosition,
             CurrentHealth,
             maxHealth,
             new Color(0.9f, 0.15f, 0.12f),
@@ -145,20 +148,10 @@ public class EnemyHealthDrop : NetworkBehaviour {
             Mathf.Max(minCoinsDropped, maxCoinsDropped) + 1
         );
 
-        for (int i = 0; i < coinCount; i++) {
-            Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
-            Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
-            GameObject coin = Instantiate(coinPickupPrefab, spawnPosition, Quaternion.identity);
-
-            NetworkObject coinNetworkObject = coin.GetComponent<NetworkObject>();
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-                if (coinNetworkObject != null) {
-                    coinNetworkObject.Spawn(true);
-                }
-                else {
-                    Debug.LogWarning("[EnemyHealthDrop] Coin prefab is missing NetworkObject, so multiplayer clients will not see the spawned coin.", coin);
-                }
-            }
+        Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
+        Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
+        if (coinCount > 0 && !CoinPickup.SpawnStack(coinPickupPrefab, spawnPosition, coinCount)) {
+            Debug.LogWarning("[EnemyHealthDrop] Could not create coin stack.", this);
         }
     }
 

@@ -14,6 +14,13 @@ public class EnemyAttackController : NetworkBehaviour {
     [Min(0f)] [SerializeField] private float hitStunDuration = 0.4f;
     [SerializeField] private Vector3 defaultCenterOffset = new Vector3(0f, 1f, 0f);
 
+    [Header("SimpleEnemy Projectile")]
+    [SerializeField] private GameObject simpleEnemyProjectilePrefab;
+    [SerializeField] private Vector3 simpleEnemyProjectileOffset = new Vector3(0f, -0.35f, -0.8f);
+    [Min(0.1f)] [SerializeField] private float simpleEnemyProjectileDistance = 4f;
+    [Min(0.01f)] [SerializeField] private float simpleEnemyProjectileRadius = 0.18f;
+    [Min(0.01f)] [SerializeField] private float simpleEnemyProjectileScale = 2f;
+
     [Header("Windup Warning")]
     [SerializeField] private Color warningColor = new Color(1f, 0.15f, 0.05f, 0.35f);
     [Range(8, 64)] [SerializeField] private int warningSegments = 32;
@@ -32,19 +39,58 @@ public class EnemyAttackController : NetworkBehaviour {
     public float AttackRange => archetypeStats != null ? archetypeStats.AttackRange :
         attackData != null ? Mathf.Max(0f, attackData.radius) : defaultRadius;
     public bool IsAttacking => attackRoutine != null;
+    private bool UsesDroppingProjectile => archetypeStats != null && archetypeStats.Pattern == EnemyAttackPattern.DroppingProjectile;
+    private bool UsesRangedAttack => archetypeStats != null &&
+        (archetypeStats.Pattern == EnemyAttackPattern.Projectile || UsesDroppingProjectile);
 
     public void ApplyArchetype(EnemyArchetypeStats stats) {
         archetypeStats = stats;
     }
 
+    // Movement and attack startup must agree on whether the target is in reach.
+    public bool CanReachTarget(PlayerController target) {
+        if (target == null || !target.isActiveAndEnabled || !target.IsSpawned || !target.IsAlive || AttackRange <= 0f) return false;
+
+        Vector3 direction = GetTargetDirection(target);
+        bool ranged = archetypeStats != null ? UsesRangedAttack :
+            attackData != null && attackData.attackmode == AttackMode.WeaponRanged;
+        if (ranged) {
+            return direction.sqrMagnitude <= AttackRange * AttackRange && HasClearAttackPath(target);
+        }
+        if (direction.sqrMagnitude < 0.0001f) direction = transform.forward;
+        return IsInsideAttackArea(target.GetComponent<CharacterController>(), GetAttackCenter(), direction.normalized, AttackRange) &&
+            HasClearAttackPath(target);
+    }
+
+    private bool HasClearAttackPath(PlayerController target) {
+        Vector3 origin = UsesDroppingProjectile ? GetProjectileOrigin(GetTargetDirection(target).normalized) : transform.position;
+        CharacterController targetBody = target.GetComponent<CharacterController>();
+        Vector3 destination = targetBody != null ? targetBody.bounds.center : target.transform.position;
+        Vector3 path = destination - origin;
+        float radius = UsesDroppingProjectile ? simpleEnemyProjectileRadius : UsesRangedAttack ? 0.23f : 0.1f;
+        foreach (Collider overlap in Physics.OverlapSphere(origin, radius, ~0, QueryTriggerInteraction.Ignore)) {
+            if (GroundPlacement.IsEnvironment(overlap)) return false;
+        }
+        foreach (RaycastHit hit in Physics.SphereCastAll(origin, radius, path.normalized, path.magnitude, ~0, QueryTriggerInteraction.Ignore)) {
+            if (GroundPlacement.IsEnvironment(hit.collider)) return false;
+        }
+        return true;
+    }
+
+    private Vector3 GetTargetDirection(PlayerController target) {
+        Vector3 direction = target.transform.position - transform.position;
+        direction.y = 0f;
+        return direction;
+    }
+
     public bool TryAttack(PlayerController target) {
-        if (target == null || !target.IsSpawned || !target.IsAlive ||
+        if (!CanReachTarget(target) ||
             !GameState.isPlaying || !CanAttackOnServer() || attackRoutine != null ||
             Time.time < nextAttackTime || Time.time < stunnedUntil) {
             return false;
         }
 
-        if (archetypeStats != null && archetypeStats.Pattern == EnemyAttackPattern.Projectile) {
+        if (UsesRangedAttack) {
             return TryRangedAttack(target);
         }
 
@@ -53,19 +99,11 @@ public class EnemyAttackController : NetworkBehaviour {
             return TryRangedAttack(target);
         }
 
-        Vector3 direction = target.transform.position - transform.position;
-        direction.y = 0f;
+        Vector3 direction = GetTargetDirection(target);
         if (direction.sqrMagnitude < 0.0001f) {
             direction = transform.forward;
         }
         direction.Normalize();
-
-        Vector3 center = GetAttackCenter();
-        float radius = AttackRange;
-        if (radius <= 0f || (archetypeStats == null || archetypeStats.Pattern != EnemyAttackPattern.Slam) &&
-            !IsInsideAttackArea(target.GetComponent<CharacterController>(), center, direction, radius)) {
-            return false;
-        }
 
         nextAttackTime = Time.time + (archetypeStats != null ? archetypeStats.Cooldown :
             Mathf.Max(0f, attackData != null ? attackData.cooldown : defaultCooldown));
@@ -85,7 +123,7 @@ public class EnemyAttackController : NetworkBehaviour {
 
         HideWarning();
         attackRoutine = null;
-        if (target == null || !target.IsSpawned || !GameState.isPlaying ||
+        if (target == null || !target.IsSpawned || !target.IsAlive || !HasClearAttackPath(target) || !GameState.isPlaying ||
             !CanAttackOnServer() || Time.time < stunnedUntil) {
             yield break;
         }
@@ -318,55 +356,76 @@ public class EnemyAttackController : NetworkBehaviour {
 
         Vector3 direction = target.transform.position - transform.position;
         direction.y = 0f;
-        if (direction.sqrMagnitude < 0.01f || direction.sqrMagnitude > AttackRange * AttackRange) return false;
+        if (direction.sqrMagnitude > AttackRange * AttackRange) return false;
+        if (direction.sqrMagnitude < 0.0001f) direction = transform.forward;
         direction.Normalize();
         nextAttackTime = Time.time + archetypeStats.Cooldown;
-        attackRoutine = StartCoroutine(RangedAttackRoutine(direction));
-        ShowWarning(direction);
+        attackRoutine = StartCoroutine(RangedAttackRoutine(direction, target.transform.position));
+        if (!UsesDroppingProjectile) ShowWarning(direction);
         return true;
     }
 
-    private IEnumerator RangedAttackRoutine(Vector3 direction) {
+    private IEnumerator RangedAttackRoutine(Vector3 direction, Vector3 targetPosition) {
         yield return new WaitForSeconds(GetWindup());
         HideWarning();
         if (GameState.isPlaying && CanAttackOnServer() && Time.time >= stunnedUntil) {
-            LaunchProjectile(direction, archetypeStats.Damage, archetypeStats.ProjectileSpeed, AttackRange);
+            if (UsesDroppingProjectile) {
+                // Aim from below the bird at the position selected for this shot.
+                direction = targetPosition - GetProjectileOrigin(direction);
+                direction.y = 0f;
+                direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : transform.forward;
+            }
+            float distance = UsesDroppingProjectile ? simpleEnemyProjectileDistance : AttackRange;
+            LaunchProjectile(direction, archetypeStats.Damage, archetypeStats.ProjectileSpeed, distance);
         }
         attackRoutine = null;
     }
 
+    private Vector3 GetProjectileOrigin(Vector3 direction) {
+        return UsesDroppingProjectile ? transform.position + simpleEnemyProjectileOffset :
+            transform.position + Vector3.up * 1.05f + direction * 0.35f;
+    }
+
     private void LaunchProjectile(Vector3 direction, float damage, float speed, float distance) {
-        Vector3 origin = transform.position + Vector3.up * 1.05f + direction * 0.35f;
+        Vector3 origin = GetProjectileOrigin(direction);
         int id = ++nextProjectileId;
         float lifetime = distance / Mathf.Max(0.1f, speed);
-        if (IsSpawned) LaunchProjectileClientRpc(id, origin, direction, speed, lifetime);
-        else CreateProjectileVisual(id, origin, direction, speed, lifetime);
-        StartCoroutine(ProjectileRoutine(id, origin, direction, damage, speed, distance));
+        bool useDroppingSprite = UsesDroppingProjectile;
+        float radius = useDroppingSprite ? simpleEnemyProjectileRadius : 0.23f;
+        if (IsSpawned) LaunchProjectileClientRpc(id, origin, direction, speed, lifetime, useDroppingSprite);
+        else CreateProjectileVisual(id, origin, direction, speed, lifetime, useDroppingSprite);
+        StartCoroutine(ProjectileRoutine(id, origin, direction, damage, speed, distance, radius));
     }
 
     private IEnumerator ProjectileRoutine(int id, Vector3 origin, Vector3 direction,
-        float damage, float speed, float distance) {
+        float damage, float speed, float distance, float radius) {
         Vector3 position = origin;
         float traveled = 0f;
-        while (traveled < distance && GameState.isPlaying) {
+        while (traveled < distance && GameState.isPlaying && CanAttackOnServer()) {
             float step = Mathf.Min(speed * Time.deltaTime, distance - traveled);
-            RaycastHit[] hits = Physics.SphereCastAll(position, 0.23f, direction, step,
-                ~0, QueryTriggerInteraction.Ignore);
             float nearest = float.MaxValue;
             Collider collided = null;
+            // Sphere casts omit colliders already overlapping the starting sphere.
+            foreach (Collider candidate in Physics.OverlapSphere(position, radius, ~0, QueryTriggerInteraction.Ignore)) {
+                if (!IsProjectileObstacle(candidate)) continue;
+                collided = candidate;
+                nearest = 0f;
+                break;
+            }
+            RaycastHit[] hits = Physics.SphereCastAll(position, radius, direction, step,
+                ~0, QueryTriggerInteraction.Ignore);
             foreach (RaycastHit hit in hits) {
                 Collider candidate = hit.collider;
-                if (candidate == null || candidate.transform.IsChildOf(transform) ||
-                    candidate.GetComponentInParent<EnemyController>() != null) continue;
+                if (!IsProjectileObstacle(candidate)) continue;
                 // Ground is below projectile height; its collider must not hide the shot.
-                if (hit.normal.y > 0.7f) continue;
+                if (hit.normal.y > 0.7f && candidate.GetComponentInParent<PlayerController>() == null) continue;
                 if (hit.distance >= nearest) continue;
                 nearest = hit.distance;
                 collided = candidate;
             }
             if (collided != null) {
                 PlayerController player = collided.GetComponentInParent<PlayerController>();
-                if (player != null && player.IsSpawned && player.IsAlive) player.TakeDamageFromEnemy(damage);
+                if (player != null && player.isActiveAndEnabled && player.IsSpawned && player.IsAlive) player.TakeDamageFromEnemy(damage);
                 break;
             }
             position += direction * step;
@@ -378,11 +437,16 @@ public class EnemyAttackController : NetworkBehaviour {
         else RemoveProjectileVisual(id);
     }
 
+    private bool IsProjectileObstacle(Collider candidate) {
+        return candidate != null && !candidate.isTrigger &&
+            !candidate.transform.IsChildOf(transform) && candidate.GetComponentInParent<EnemyController>() == null;
+    }
+
     [ClientRpc]
     private void LaunchProjectileClientRpc(int id, Vector3 origin, Vector3 direction,
-        float speed, float lifetime) {
+        float speed, float lifetime, bool useDroppingSprite) {
         if (NetworkManager.Singleton != null && !NetworkManager.Singleton.IsClient) return;
-        CreateProjectileVisual(id, origin, direction, speed, lifetime);
+        CreateProjectileVisual(id, origin, direction, speed, lifetime, useDroppingSprite);
     }
 
     [ClientRpc]
@@ -391,10 +455,11 @@ public class EnemyAttackController : NetworkBehaviour {
     }
 
     private void CreateProjectileVisual(int id, Vector3 origin, Vector3 direction,
-        float speed, float lifetime) {
+        float speed, float lifetime, bool useDroppingSprite) {
         Color color = archetypeStats != null && archetypeStats.Pattern == EnemyAttackPattern.Slam
             ? new Color(0.8f, 0.38f, 1f) : new Color(0.35f, 1f, 0.45f);
-        EnemyProjectileVisual visual = EnemyProjectileVisual.Create(origin, direction, speed, lifetime, color);
+        EnemyProjectileVisual visual = EnemyProjectileVisual.Create(origin, direction, speed, lifetime, color,
+            useDroppingSprite ? simpleEnemyProjectilePrefab : null, simpleEnemyProjectileScale);
         projectileVisuals[id] = visual;
     }
 

@@ -6,13 +6,12 @@ using UnityEngine;
 [RequireComponent(typeof(Pickupable))]
 [RequireComponent(typeof(Rigidbody))]
 public class NetworkDroppedItem : NetworkBehaviour {
-    private static readonly Quaternion GroundRotation = Quaternion.Euler(-90f, 180f, 0f);
-
     [SerializeField] private SpriteRenderer itemRenderer;
     [SerializeField] private Pickupable pickupable;
 
     private Rigidbody itemRigidbody;
     private bool hasSettled;
+    private WorldLootVisual lootVisual;
 
     private readonly NetworkVariable<InventoryItemState> itemState =
         new NetworkVariable<InventoryItemState>(
@@ -92,6 +91,9 @@ public class NetworkDroppedItem : NetworkBehaviour {
                 childRenderer.enabled = false;
             }
         }
+        lootVisual = WorldLootVisual.Ensure(gameObject, itemRenderer, value.Count, 0.6f, 2f);
+        lootVisual?.SetSprite(itemIcon, value.Count);
+        if (lootVisual != null) itemRenderer.enabled = false;
     }
 
     private void ResolveReferences() {
@@ -109,7 +111,12 @@ public class NetworkDroppedItem : NetworkBehaviour {
     }
 
     public static bool TrySpawnOnServer(InventoryItemState state, Vector3 playerFootPosition) {
+        if (NetworkManager.Singleton == null || !NetworkManager.Singleton.IsServer ||
+            !state.IsValid || DroppedItemRegistry.TryGet(state.InstanceId, out _)) return false;
+        if (!ItemManager.TryGetItemById(state.ItemId.ToString(), out ItemData item) || item.itemObject == null ||
+            state.Count > Mathf.Max(1, item.itemObject.maxCount)) return false;
         Vector3 spawnPosition = GetFootSpawnPosition(playerFootPosition);
+        if (TryMergeOnServer(state, spawnPosition)) return true;
         if (!TryCreateOnServer(state, spawnPosition, out NetworkDroppedItem droppedItem)) {
             return false;
         }
@@ -122,6 +129,32 @@ public class NetworkDroppedItem : NetworkBehaviour {
 
         Debug.Log($"[NetworkDroppedItem] Spawned {state.ItemId} x{state.Count} at {spawnPosition}.");
         return true;
+    }
+
+    private static bool TryMergeOnServer(InventoryItemState incoming, Vector3 position) {
+        if (!ItemManager.TryGetItemById(incoming.ItemId.ToString(), out ItemData data) ||
+            !data.itemObject.IsStackable || HasAttachments(incoming)) return false;
+
+        foreach (DroppedItemRecord record in DroppedItemRegistry.GetRecordsSnapshot()) {
+            NetworkDroppedItem existing = record.SpawnedItem;
+            InventoryItemState current = record.ItemState;
+            if (existing == null || !existing.IsSpawned || !current.ItemId.Equals(incoming.ItemId) ||
+                HasAttachments(current) || current.Count > data.itemObject.maxCount - incoming.Count) continue;
+            Vector3 delta = existing.transform.position - position;
+            if (Mathf.Abs(delta.y) > 0.75f) continue;
+            delta.y = 0f;
+            if (delta.sqrMagnitude > 2.25f) continue;
+            current.Count += incoming.Count;
+            if (!DroppedItemRegistry.TryUpdateItemState(current.InstanceId, existing, current)) continue;
+            existing.SetItemStateOnServer(current);
+            return true;
+        }
+        return false;
+    }
+
+    private static bool HasAttachments(InventoryItemState state) {
+        return state.AttackSpeedAttachmentId.Length > 0 || state.DamageBonusAttachmentId.Length > 0 ||
+            state.CriticalRateAttachmentId.Length > 0;
     }
 
     public static bool TryRespawnOnServer(DroppedItemRecord record) {
@@ -158,7 +191,7 @@ public class NetworkDroppedItem : NetworkBehaviour {
             return false;
         }
 
-        GameObject instance = Instantiate(prefab, position, GroundRotation);
+        GameObject instance = Instantiate(prefab, position, Quaternion.identity);
         if (!instance.TryGetComponent(out NetworkObject networkObject) ||
             !instance.TryGetComponent(out droppedItem)) {
             Debug.LogError("[NetworkDroppedItem] Prefab is missing required network components.", instance);
@@ -173,8 +206,7 @@ public class NetworkDroppedItem : NetworkBehaviour {
     }
 
     private static Vector3 GetFootSpawnPosition(Vector3 playerFootPosition) {
-        // Keep the same X/Z as the player. The small vertical offset places the
-        // dropped item's collider just above the feet so gravity can settle it.
+        if (GroundPlacement.TryFindDropGround(playerFootPosition, out Vector3 ground)) playerFootPosition = ground;
         return playerFootPosition + Vector3.up * 0.55f;
     }
 }
