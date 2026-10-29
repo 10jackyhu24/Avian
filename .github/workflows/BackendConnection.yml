@@ -1,0 +1,25 @@
+name: Backend connection test
+
+on:
+  push:
+    paths:
+      - "tests/test_backend_connection.py"
+      - ".github/workflows/BackendConnection.yml"
+  pull_request:
+    paths:
+      - "tests/test_backend_connection.py"
+      - ".github/workflows/BackendConnection.yml"
+  workflow_dispatch:
+
+jobs:
+  backend-connection:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check backend connection
+        run: python -m unittest discover -s tests -p 'test_backend_connection.py'
