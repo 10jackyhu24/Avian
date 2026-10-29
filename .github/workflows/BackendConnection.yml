@@ -15,7 +15,7 @@ jobs:
   backend-connection:
     runs-on: ubuntu-latest
     env:
-      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL || secrets.BACKEND_HEALTH_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

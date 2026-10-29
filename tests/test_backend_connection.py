@@ -21,7 +21,7 @@ class BackendConnectionTests(unittest.TestCase):
 
         request = Request(url, headers={"Accept": "application/json"})
         try:
-            with urlopen(request, timeout=5) as response:
+            with urlopen(request, timeout=15) as response:
                 self.assertGreaterEqual(response.status, 200)
                 self.assertLess(response.status, 300)
         except HTTPError as error:
