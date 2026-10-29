@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
 [System.Flags]
@@ -611,7 +612,21 @@ public class TerrainController : MonoBehaviour {
         structure.transform.parent = structureParent.transform;
         structure.name = $"{option.structureName}_{cell.x}_{cell.y}";
         spawnedStructurePositions.Add(worldPosition);
+        TrySpawnStructureMerchant(structure);
         return structure;
+    }
+
+    private void TrySpawnStructureMerchant(GameObject structure) {
+        Transform spawnPoint = structure.transform.Find("MerchantSpawnPoint");
+        if (spawnPoint == null) {
+            return;
+        }
+
+        MerchantSpawner.TrySpawnMerchantAt(
+            NetworkManager.Singleton,
+            spawnPoint.position,
+            this
+        );
     }
 
     private Vector3 GridToWorldPosition(int x, int z) {

@@ -190,6 +190,24 @@ public class PlayerController : NetworkBehaviour {
         }
     }
 
+    public void SetSpawnPositionOnServer(Vector3 position) {
+        if (!IsServer) {
+            return;
+        }
+
+        spawnPosition = position;
+        bool controllerWasEnabled = characterController != null && characterController.enabled;
+        if (controllerWasEnabled) {
+            characterController.enabled = false;
+        }
+
+        transform.position = position;
+
+        if (controllerWasEnabled) {
+            characterController.enabled = true;
+        }
+    }
+
     public override void OnNetworkDespawn() {
         currentHealth.OnValueChanged -= OnHealthChanged;
         isMovingVisual.OnValueChanged -= OnIsMovingVisualChanged;

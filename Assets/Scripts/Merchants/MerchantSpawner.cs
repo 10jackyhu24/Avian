@@ -6,13 +6,15 @@ public static class MerchantSpawner {
     private static readonly Vector3 OriginMerchantPosition = new Vector3(3f, 0.25f, 10f);
 
     public static bool TrySpawnOriginMerchant(NetworkManager networkManager, MonoBehaviour context = null) {
+        return TrySpawnMerchantAt(networkManager, OriginMerchantPosition, context);
+    }
+
+    public static bool TrySpawnMerchantAt(
+        NetworkManager networkManager,
+        Vector3 position,
+        MonoBehaviour context = null) {
         if (networkManager == null || !networkManager.IsServer) {
             return false;
-        }
-
-        Merchant existingMerchant = Object.FindFirstObjectByType<Merchant>();
-        if (existingMerchant != null && existingMerchant.IsSpawned) {
-            return true;
         }
 
         GameObject merchantPrefab = Resources.Load<GameObject>(MerchantPrefabPath);
@@ -23,7 +25,7 @@ public static class MerchantSpawner {
 
         GameObject merchantObject = Object.Instantiate(
             merchantPrefab,
-            OriginMerchantPosition,
+            position,
             Quaternion.identity
         );
 

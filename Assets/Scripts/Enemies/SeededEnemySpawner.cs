@@ -33,6 +33,7 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     [Header("Population")]
     [SerializeField] private float activationRadius = 80f;
+    [SerializeField] private float deactivationRadius = 100f;
     [SerializeField] private float populationTickInterval = 0.75f;
     [Min(0)] [SerializeField] private int maxActiveEnemies = 20;
 
@@ -51,6 +52,30 @@ public class SeededEnemySpawner : MonoBehaviour {
     private NetworkManager activeNetworkManager;
     private bool hasInitialized;
     private float nextPopulationTickTime;
+
+    public void ConfigurePopulation(
+        GameObject prefab,
+        int enemyCountPerBiome,
+        float activationDistance,
+        float deactivationDistance,
+        int activeLimit) {
+        if (hasInitialized) {
+            return;
+        }
+
+        enemyPrefab = prefab;
+        activationRadius = Mathf.Max(0f, activationDistance);
+        deactivationRadius = Mathf.Max(activationRadius, deactivationDistance);
+        maxActiveEnemies = Mathf.Max(0, activeLimit);
+
+        int count = Mathf.Max(0, enemyCountPerBiome);
+        biomeSpawnRules = new[] {
+            CreateSpawnRule("Grassland", TerrainBiomeMask.Grassland, count),
+            CreateSpawnRule("Desert", TerrainBiomeMask.Desert, count),
+            CreateSpawnRule("Rainforest", TerrainBiomeMask.Rainforest, count),
+            CreateSpawnRule("Mountain", TerrainBiomeMask.Mountain, count)
+        };
+    }
 
     public void SpawnEnemies(NetworkManager networkManager, int mapSeed) {
         if (hasInitialized) {
@@ -124,10 +149,10 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     private void RefreshPopulation() {
         PlayerController[] players = FindObjectsByType<PlayerController>(FindObjectsSortMode.None);
-        bool hasSpawnedPlayer = Array.Exists(players, player => player != null && player.IsSpawned);
         int activeEnemyCount = CountActiveEnemies();
         int activatedCount = 0;
         int deactivatedCount = 0;
+        float effectiveDeactivationRadius = Mathf.Max(activationRadius, deactivationRadius);
 
         foreach (EnemySpawnRecord record in spawnRecords) {
             if (record.isDefeated) {
@@ -135,9 +160,10 @@ public class SeededEnemySpawner : MonoBehaviour {
             }
 
             if (record.activeEnemy != null) {
-                // Dead players remain spawned during the respawn delay. Keep the same
-                // enemies until all players leave, even before AI reacquires a target.
-                if (!hasSpawnedPlayer) {
+                if (!IsAnyAlivePlayerWithin(
+                    players,
+                    record.activeEnemy.transform.position,
+                    effectiveDeactivationRadius)) {
                     DeactivateEnemy(record);
                     activeEnemyCount = Mathf.Max(0, activeEnemyCount - 1);
                     deactivatedCount++;
@@ -165,6 +191,17 @@ public class SeededEnemySpawner : MonoBehaviour {
                 this
             );
         }
+    }
+
+    private static BiomeEnemySpawnRule CreateSpawnRule(
+        string ruleName,
+        TerrainBiomeMask biomeMask,
+        int enemyCount) {
+        return new BiomeEnemySpawnRule {
+            name = ruleName,
+            biomeMask = biomeMask,
+            enemyCount = enemyCount
+        };
     }
 
     private int CountActiveEnemies() {

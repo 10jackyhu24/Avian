@@ -4,6 +4,12 @@ using Unity.Netcode;
 
 public class PlayerSpawner : NetworkBehaviour {
     public static readonly Vector3 DefaultSpawnPosition = new Vector3(0f, 5f, 10f);
+    private static readonly Vector3[] PlayerSpawnPositions = {
+        new Vector3(0f, 5f, 400f),
+        new Vector3(400f, 5f, 0f),
+        new Vector3(0f, 5f, -400f),
+        new Vector3(-400f, 5f, 0f)
+    };
 
     [Header("Player Spawn")]
     [SerializeField] private GameObject playerPrefab;
@@ -13,14 +19,16 @@ public class PlayerSpawner : NetworkBehaviour {
 
     [Header("Enemy Spawn")]
     [SerializeField] private GameObject enemyPrefab;
-    [SerializeField] private int enemyCount = 3;
-    [SerializeField] private float enemySpawnDistance = 18f;
+    private const int SinglePlayerEnemyCountPerBiome = 200;
+    private const int SinglePlayerMaxActiveEnemies = 20;
+    private const float SinglePlayerEnemyActivationRadius = 80f;
+    private const float SinglePlayerEnemyDeactivationRadius = 100f;
 
-    private readonly List<GameObject> spawnedEnemies = new List<GameObject>();
     private bool serverSpawnInitialized;
-    private readonly Color fallbackEnemyColor = new Color(0.85f, 0.2f, 0.2f);
     private static readonly Dictionary<NetworkManager, System.Action<ulong>> playerSpawnCallbacks =
         new Dictionary<NetworkManager, System.Action<ulong>>();
+    private static readonly Dictionary<NetworkManager, Queue<Vector3>> playerSpawnPointPools =
+        new Dictionary<NetworkManager, Queue<Vector3>>();
 
     private void Start() {
         if (NetworkManager.Singleton == null) {
@@ -65,6 +73,7 @@ public class PlayerSpawner : NetworkBehaviour {
         }
 
         UnregisterPlayerSpawning(networkManager);
+        playerSpawnPointPools[networkManager] = CreateShuffledSpawnPointPool();
 
         System.Action<ulong> callback = clientId => SpawnPlayerForClient(networkManager, playerPrefab, spawnPosition, clientId, context);
         playerSpawnCallbacks[networkManager] = callback;
@@ -80,12 +89,12 @@ public class PlayerSpawner : NetworkBehaviour {
             return;
         }
 
-        if (!playerSpawnCallbacks.TryGetValue(networkManager, out System.Action<ulong> callback)) {
-            return;
+        if (playerSpawnCallbacks.TryGetValue(networkManager, out System.Action<ulong> callback)) {
+            networkManager.OnClientConnectedCallback -= callback;
+            playerSpawnCallbacks.Remove(networkManager);
         }
 
-        networkManager.OnClientConnectedCallback -= callback;
-        playerSpawnCallbacks.Remove(networkManager);
+        playerSpawnPointPools.Remove(networkManager);
     }
 
     public static void SpawnPlayerForClient(NetworkManager networkManager, GameObject playerPrefab, Vector3 spawnPosition, ulong clientId, MonoBehaviour context = null) {
@@ -95,9 +104,18 @@ public class PlayerSpawner : NetworkBehaviour {
 
         if (networkManager.ConnectedClients.TryGetValue(clientId, out var connectedClient) &&
             connectedClient.PlayerObject != null) {
+            Vector3 assignedSpawnPosition = GetNextSpawnPosition(networkManager, spawnPosition);
+            PlayerController playerController = connectedClient.PlayerObject.GetComponent<PlayerController>();
+            if (playerController != null) {
+                playerController.SetSpawnPositionOnServer(assignedSpawnPosition);
+            }
+            else {
+                connectedClient.PlayerObject.transform.position = assignedSpawnPosition;
+            }
+
             ZoneManager.EnsureServerZone(networkManager);
             if (context != null) {
-                Debug.Log($"[PlayerSpawner] Client {clientId} already has a player object.", context);
+                Debug.Log($"[PlayerSpawner] Placed existing player for client {clientId} at {assignedSpawnPosition}.", context);
             }
 
             return;
@@ -108,7 +126,8 @@ public class PlayerSpawner : NetworkBehaviour {
             return;
         }
 
-        GameObject spawnedPlayerInstance = Object.Instantiate(playerPrefab, spawnPosition, Quaternion.identity);
+        Vector3 selectedSpawnPosition = GetNextSpawnPosition(networkManager, spawnPosition);
+        GameObject spawnedPlayerInstance = Object.Instantiate(playerPrefab, selectedSpawnPosition, Quaternion.identity);
         NetworkObject networkObject = spawnedPlayerInstance.GetComponent<NetworkObject>();
         if (networkObject == null) {
             Debug.LogError("[PlayerSpawner] Player prefab is missing NetworkObject.", context);
@@ -120,7 +139,7 @@ public class PlayerSpawner : NetworkBehaviour {
         ZoneManager.EnsureServerZone(networkManager);
 
         if (context != null) {
-            Debug.Log($"[PlayerSpawner] Spawned player for client {clientId}.", context);
+            Debug.Log($"[PlayerSpawner] Spawned player for client {clientId} at {selectedSpawnPosition}.", context);
         }
 
         if (clientId == networkManager.LocalClientId) {
@@ -131,32 +150,47 @@ public class PlayerSpawner : NetworkBehaviour {
         }
     }
 
+    private static Vector3 GetNextSpawnPosition(NetworkManager networkManager, Vector3 fallbackPosition) {
+        if (!playerSpawnPointPools.TryGetValue(networkManager, out Queue<Vector3> spawnPoints) ||
+            spawnPoints.Count == 0) {
+            spawnPoints = CreateShuffledSpawnPointPool();
+            playerSpawnPointPools[networkManager] = spawnPoints;
+        }
+
+        return spawnPoints.Count > 0 ? spawnPoints.Dequeue() : fallbackPosition;
+    }
+
+    private static Queue<Vector3> CreateShuffledSpawnPointPool() {
+        List<Vector3> spawnPoints = new List<Vector3>(PlayerSpawnPositions);
+        for (int i = spawnPoints.Count - 1; i > 0; i--) {
+            int swapIndex = Random.Range(0, i + 1);
+            (spawnPoints[i], spawnPoints[swapIndex]) = (spawnPoints[swapIndex], spawnPoints[i]);
+        }
+
+        return new Queue<Vector3>(spawnPoints);
+    }
+
     private void SpawnEnemies() {
-        if (enemyPrefab == null || enemyCount <= 0) {
+        if (enemyPrefab == null || NetworkManager.Singleton == null) {
             return;
         }
 
-        for (int i = 0; i < enemyCount; i++) {
-            Vector3 enemySpawnPosition = GetEnemySpawnPosition(i);
-            GameObject enemyInstance = Instantiate(enemyPrefab, enemySpawnPosition, Quaternion.identity);
-            enemyInstance.GetComponent<EnemyController>()?.ConfigureArchetype(EnemyArchetypes.ForDemoIndex(i));
-            spawnedEnemies.Add(enemyInstance);
-
-            NetworkObject networkObject = enemyInstance.GetComponent<NetworkObject>();
-            if (networkObject != null) {
-                networkObject.Spawn(true);
-            }
-            else {
-                Debug.LogWarning("[PlayerSpawner] Enemy prefab is missing NetworkObject. Multiplayer clients will not see this enemy.", this);
-            }
+        SeededEnemySpawner seededSpawner = GetComponent<SeededEnemySpawner>();
+        if (seededSpawner == null) {
+            seededSpawner = gameObject.AddComponent<SeededEnemySpawner>();
         }
 
-        Debug.Log($"[PlayerSpawner] Spawned {spawnedEnemies.Count} enemy/enemies.", this);
-    }
+        seededSpawner.ConfigurePopulation(
+            enemyPrefab,
+            SinglePlayerEnemyCountPerBiome,
+            SinglePlayerEnemyActivationRadius,
+            SinglePlayerEnemyDeactivationRadius,
+            SinglePlayerMaxActiveEnemies
+        );
 
-    private Vector3 GetEnemySpawnPosition(int index) {
-        float angle = enemyCount <= 0 ? 0f : (Mathf.PI * 2f * index) / enemyCount;
-        Vector3 offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * enemySpawnDistance;
-        return spawnPosition + offset;
+        int seed = TerrainController.Instance != null
+            ? TerrainController.Instance.WorldSeed
+            : GameState.currentSeed;
+        seededSpawner.SpawnEnemies(NetworkManager.Singleton, seed);
     }
 }
