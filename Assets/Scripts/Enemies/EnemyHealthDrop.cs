@@ -32,6 +32,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
     public Sprite Portrait => portrait != null ? portrait : GetComponentInChildren<SpriteRenderer>()?.sprite;
     public bool IsAlive => !isDead && CurrentHealth > 0f;
     public event Action<EnemyHealthDrop> Died;
+    public static event Action<EnemyHealthDrop, ulong, bool> EnemyDefeated;
 
     private void Awake() {
         localHealth = maxHealth;
@@ -88,7 +89,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
         Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={newHealth}/{maxHealth}", this);
 
         if (newHealth <= 0f) {
-            Die(attackerClientId);
+            Die(attackerClientId, awardsScore: true);
             return;
         }
 
@@ -104,7 +105,9 @@ public class EnemyHealthDrop : NetworkBehaviour {
         if (!CanServerTakeDamage() || isDead || damage <= 0f) return;
         float newHealth = Mathf.Max(0f, CurrentHealth - damage);
         SetCurrentHealth(newHealth);
-        if (newHealth <= 0f) Die(Unity.Netcode.NetworkManager.ServerClientId);
+        if (newHealth <= 0f) {
+            Die(Unity.Netcode.NetworkManager.ServerClientId, awardsScore: false);
+        }
     }
 
     private void SetCurrentHealth(float value) {
@@ -114,13 +117,14 @@ public class EnemyHealthDrop : NetworkBehaviour {
         }
     }
 
-    private void Die(ulong attackerClientId) {
+    private void Die(ulong attackerClientId, bool awardsScore) {
         if (isDead) {
             return;
         }
 
         isDead = true;
         Died?.Invoke(this);
+        EnemyDefeated?.Invoke(this, attackerClientId, awardsScore);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
 

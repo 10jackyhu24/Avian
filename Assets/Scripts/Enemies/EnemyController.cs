@@ -96,6 +96,7 @@ public class EnemyController : NetworkBehaviour {
     private float avoidanceUntil;
 
     public bool IsBossType => (IsSpawned ? networkArchetype.Value : pendingArchetype) >= EnemyArchetype.MiniBoss;
+    public EnemyArchetype Archetype => IsSpawned ? networkArchetype.Value : pendingArchetype;
     public bool IsPursuingPlayer => IsValidTarget(playerTarget);
 
     private void Awake() {

@@ -118,6 +118,7 @@ public class PlayerController : NetworkBehaviour {
     public float CurrentHealth => currentHealth.Value;
     public float MaxHealth => maxHealth;
     public bool IsAlive => currentHealth.Value > 0;
+    public Vector3 SpawnPosition => spawnPosition;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -268,7 +269,9 @@ public class PlayerController : NetworkBehaviour {
         InputAction attackAction = inputActions.Player.Attack;
 
         if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen ||
-            MerchantMenu.IsOpen || !IsAlive) {
+            MerchantMenu.IsOpen || !IsAlive ||
+            (SinglePlayerMatchController.Instance != null &&
+             SinglePlayerMatchController.Instance.IsMatchOver)) {
             SendMovementAtNetworkRate(0f, 0f, false);
             CancelPreparedAttack();
             return;
@@ -1964,14 +1967,29 @@ public class PlayerController : NetworkBehaviour {
             StopCoroutine(respawnCoroutine);
         }
 
-        respawnCoroutine = StartCoroutine(RespawnAfterDelay());
+        Vector3 respawnPosition = spawnPosition;
+        SinglePlayerMatchController matchController = SinglePlayerMatchController.Instance;
+        if (matchController != null &&
+            matchController.ControlsRespawning &&
+            !matchController.TryHandlePlayerDefeat(this, out respawnPosition)) {
+            return;
+        }
+
+        respawnCoroutine = StartCoroutine(RespawnAfterDelay(respawnPosition));
     }
 
-    private IEnumerator RespawnAfterDelay() {
+    private IEnumerator RespawnAfterDelay(Vector3 respawnPosition) {
         yield return new WaitForSeconds(respawnDelaySeconds);
 
+        if (SinglePlayerMatchController.Instance != null &&
+            SinglePlayerMatchController.Instance.ControlsRespawning &&
+            SinglePlayerMatchController.Instance.IsMatchOver) {
+            respawnCoroutine = null;
+            yield break;
+        }
+
         characterController.enabled = false;
-        transform.position = spawnPosition;
+        transform.position = respawnPosition;
         verticalVelocity = 0f;
         moveInputX = 0f;
         moveInputZ = 0f;

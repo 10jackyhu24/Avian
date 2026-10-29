@@ -71,7 +71,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ZoneManager
   ShowTopMostFoldoutHeaderGroup: 1
-  totalMatchTime: 480
+  totalMatchTime: 150
   finalRadius: 25
   outsideDamagePerSecond: {x: 2, y: 5, z: 10}
   damageTickInterval: 1

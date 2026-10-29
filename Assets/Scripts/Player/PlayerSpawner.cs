@@ -19,10 +19,11 @@ public class PlayerSpawner : NetworkBehaviour {
 
     [Header("Enemy Spawn")]
     [SerializeField] private GameObject enemyPrefab;
-    private const int SinglePlayerEnemyCountPerBiome = 200;
-    private const int SinglePlayerMaxActiveEnemies = 20;
-    private const float SinglePlayerEnemyActivationRadius = 80f;
-    private const float SinglePlayerEnemyDeactivationRadius = 100f;
+    private const int SinglePlayerEnemyCountPerBiome = 1500;
+    private const int SinglePlayerGraceActiveEnemies = 5;
+    private const int SinglePlayerWaveActiveEnemies = 20;
+    private const float SinglePlayerEnemyActivationRadius = 42f;
+    private const float SinglePlayerEnemyDeactivationRadius = 45f;
 
     private bool serverSpawnInitialized;
     private static readonly Dictionary<NetworkManager, System.Action<ulong>> playerSpawnCallbacks =
@@ -185,12 +186,19 @@ public class PlayerSpawner : NetworkBehaviour {
             SinglePlayerEnemyCountPerBiome,
             SinglePlayerEnemyActivationRadius,
             SinglePlayerEnemyDeactivationRadius,
-            SinglePlayerMaxActiveEnemies
+            SinglePlayerGraceActiveEnemies
         );
 
         int seed = TerrainController.Instance != null
             ? TerrainController.Instance.WorldSeed
             : GameState.currentSeed;
         seededSpawner.SpawnEnemies(NetworkManager.Singleton, seed);
+        SinglePlayerMatchController.EnsureExists(
+            gameObject,
+            seededSpawner,
+            enemyPrefab,
+            SinglePlayerGraceActiveEnemies,
+            SinglePlayerWaveActiveEnemies
+        );
     }
 }
