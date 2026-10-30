@@ -37,15 +37,27 @@ class AccountDeletionTests(unittest.TestCase):
         self.assertEqual(response.json(), {"detail": "Invalid or expired session"})
 
     def test_deletion_uses_session_owner_instead_of_supplied_username(self):
-        self.cursor.fetchone.return_value = (7, "user1")
+        self.cursor.fetchone.side_effect = [(7, "user1"), (0,)]
         response = self.client.request(
             "DELETE", "/auth/account",
             headers={"Authorization": "Bearer user1-session-token"},
             json={"username": "user2", "user_id": 8},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"deleted": True, "user_id": 7, "username": "user1"})
-        self.assertEqual(self.cursor.execute.call_args.args[1], ("user1-session-token",))
+        self.assertEqual(response.json(), {"deleted": True, "user_id": 7, "username": "user1", "remaining_sessions": 0})
+        self.assertEqual(self.cursor.execute.call_args_list[0].args[1], ("user1-session-token",))
+        self.assertEqual(self.cursor.execute.call_args_list[1].args[1], (7,))
+
+    def test_remaining_sessions_cause_failure_inside_transaction(self):
+        self.cursor.fetchone.side_effect = [(7, "user1"), (1,)]
+        response = self.client.delete(
+            "/auth/account", headers={"Authorization": "Bearer user1-session-token"},
+        )
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.json(), {"detail": "Account deletion did not remove all sessions"})
+        connection = self.connect.return_value
+        self.assertIs(connection.__exit__.call_args.args[0], lobby.HTTPException)
+        connection.commit.assert_not_called()
 
 
 if __name__ == "__main__":

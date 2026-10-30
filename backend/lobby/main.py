@@ -110,6 +110,17 @@ def health():
     return {"ok": True}
 
 
+@app.get("/auth/health/database")
+def database_health():
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except psycopg2.Error:
+        raise HTTPException(status_code=503, detail="Database unavailable") from None
+    return {"ok": True, "database": "ok"}
+
+
 @app.post("/auth/register")
 def register(payload: RegisterRequest):
     if get_user_by_username(payload.username):
@@ -200,6 +211,11 @@ def delete_account(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    user_id, username = user
-    return {"deleted": True, "user_id": user_id, "username": username}
+        user_id, username = user
+        cursor.execute(load_sql("count_user_sessions.sql"), (user_id,))
+        remaining_sessions = cursor.fetchone()[0]
+        if remaining_sessions != 0:
+            raise HTTPException(status_code=500, detail="Account deletion did not remove all sessions")
+
+    return {"deleted": True, "user_id": user_id, "username": username, "remaining_sessions": remaining_sessions}
 

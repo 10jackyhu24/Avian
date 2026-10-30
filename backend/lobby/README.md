@@ -19,7 +19,7 @@ curl.exe --request DELETE "https://140.136.151.88:8443/auth/account" --header "A
 Successful response (HTTP 200):
 
 ```json
-{"deleted": true, "user_id": 1, "username": "user1"}
+{"deleted": true, "user_id": 1, "username": "user1", "remaining_sessions": 0}
 ```
 
 This removes that user's row from `users`, including the password salt and hash.
@@ -32,6 +32,14 @@ Token expiry and account selection are checked in the same SQL statement that
 deletes the account. A missing, invalid or expired bearer token returns HTTP 401.
 Reusing any token after its account is deleted also fails authentication.
 The client should clear its stored session token after a successful deletion.
+
+Before committing, the API queries the number of remaining sessions for the
+deleted user. If the count is nonzero, it returns HTTP 500 and rolls back the
+transaction. `remaining_sessions: 0` reports this database check to API callers.
+
+`GET /auth/health/database` checks the lobby's PostgreSQL connection using
+`SELECT 1`. It returns HTTP 200 with `{"ok": true, "database": "ok"}` on success,
+or HTTP 503 if the database query fails.
 
 ## In-game account deletion
 
