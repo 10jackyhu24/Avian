@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg2
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +22,7 @@ PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_HASH_ITERATIONS", "210000"))
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 app = FastAPI(title="Avian Lobby", version="1.0.0")
+session_bearer = HTTPBearer(auto_error=False)
 
 
 class RegisterRequest(BaseModel):
@@ -175,4 +177,29 @@ def validate(token: str):
 @app.get("/me")
 def me(token: str):
     return validate(token)
+
+
+@app.delete("/auth/account")
+def delete_account(
+    credentials: HTTPAuthorizationCredentials | None = Depends(session_bearer),
+):
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Bearer session token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(load_sql("delete_user_by_session.sql"), (credentials.credentials,))
+        user = cursor.fetchone()
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired session",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    user_id, username = user
+    return {"deleted": True, "user_id": user_id, "username": username}
 

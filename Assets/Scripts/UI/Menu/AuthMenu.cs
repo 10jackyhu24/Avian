@@ -58,6 +58,11 @@ public class AuthMenu : MonoBehaviour {
         RefreshSessionStatus();
     }
 
+    public void ClearCredentials() {
+        usernameInput?.SetTextWithoutNotify(string.Empty);
+        passwordInput?.SetTextWithoutNotify(string.Empty);
+    }
+
     private bool TryGetCredentials(out string username, out string password) {
         username = usernameInput != null ? usernameInput.text.Trim() : string.Empty;
         password = passwordInput != null ? passwordInput.text : string.Empty;
