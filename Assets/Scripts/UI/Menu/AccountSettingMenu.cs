@@ -23,6 +23,10 @@ public class AccountSettingMenu : MonoBehaviour {
         }
     }
 
+    public void SwitchToChangePassward() {
+        menuManager.SwitchToPanel(PanelType.ChangePassward);
+    }
+
     public void Logout() {
         if (isDeletingAccount) {
             return;

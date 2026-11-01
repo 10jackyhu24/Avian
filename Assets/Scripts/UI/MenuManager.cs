@@ -18,6 +18,7 @@ public enum PanelType {
     ScoreBoard,
     AccountSetting,
     Auth_Register,
+    ChangePassward,
 }
 
 public class MenuManager : MonoBehaviour {
