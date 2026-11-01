@@ -34,6 +34,23 @@ public class MainMenu : MonoBehaviour {
         menuManager.SwitchToPanel(PanelType.Options);
     }
 
+    public void SwitchToProfile() {
+        if (backendAuthClient != null && backendAuthClient.HasStoredSessionToken()) {
+            backendAuthClient.ValidateCurrentSession(
+                _ => {
+                    menuManager.SwitchToPanel(PanelType.Profile);
+                },
+                _ => {
+                    backendAuthClient.ClearSession();
+                    menuManager.SwitchToPanel(PanelType.Auth);
+                }
+            );
+            return;
+        }
+
+        menuManager.SwitchToPanel(PanelType.Auth);
+    }
+
     public void QuitGame() {
         Debug.Log("Quit Game");
         #if UNITY_EDITOR

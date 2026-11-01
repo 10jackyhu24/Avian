@@ -14,6 +14,9 @@ public enum PanelType {
     BagMenu,
     GameMenu,
     CharacterSelection,
+    Profile,
+    ScoreBoard,
+    AccountSetting,
 }
 
 public class MenuManager : MonoBehaviour {

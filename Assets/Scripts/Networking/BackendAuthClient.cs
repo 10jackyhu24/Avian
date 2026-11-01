@@ -45,6 +45,8 @@ public class BackendAuthClient : MonoBehaviour {
     public string SessionToken { get; private set; }
     public int CachedUserId { get; private set; }
     public string CachedUsername { get; private set; } = string.Empty;
+    public bool IsLoggedIn => HasStoredSessionToken() && CachedUserId > 0 && !string.IsNullOrWhiteSpace(CachedUsername);
+    public string CurrentUsername => IsLoggedIn ? CachedUsername : string.Empty;
     public bool IsDeletingAccount { get; private set; }
 
     private const string SessionTokenKey = "";
