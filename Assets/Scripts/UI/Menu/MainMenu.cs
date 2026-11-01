@@ -21,13 +21,13 @@ public class MainMenu : MonoBehaviour {
                 },
                 _ => {
                     backendAuthClient.ClearSession();
-                    menuManager.SwitchToPanel(PanelType.Auth_LogIn);
+                    SwitchToLogin(PanelType.Multiplayer);
                 }
             );
             return;
         }
 
-        menuManager.SwitchToPanel(PanelType.Auth_LogIn);
+        SwitchToLogin(PanelType.Multiplayer);
     }
 
     public void SwitchToOptions() {
@@ -42,12 +42,17 @@ public class MainMenu : MonoBehaviour {
                 },
                 _ => {
                     backendAuthClient.ClearSession();
-                    menuManager.SwitchToPanel(PanelType.Auth_LogIn);
+                    SwitchToLogin(PanelType.Profile);
                 }
             );
             return;
         }
 
+        SwitchToLogin(PanelType.Profile);
+    }
+
+    private void SwitchToLogin(PanelType targetPanel) {
+        FindFirstObjectByType<AuthLogInMenu>(FindObjectsInactive.Include)?.SetSuccessPanel(targetPanel);
         menuManager.SwitchToPanel(PanelType.Auth_LogIn);
     }
 

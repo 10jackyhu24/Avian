@@ -22,11 +22,16 @@ public class AuthLogInMenu : MonoBehaviour {
         authMenu = FindFirstObjectByType<AuthMenu>();
     }
 
-    public void Login() {
+    public void SetSuccessPanel(PanelType targetPanel) {
+        successPanel = targetPanel;
+    }
+
+    public void DoLogin() {
         authMenu.SetInput(usernameInput, passwordInput, successPanel);
         authMenu.Login();
     }
     public void SwitchToRegister() {
+        FindFirstObjectByType<AuthRegisterMenu>(FindObjectsInactive.Include)?.SetSuccessPanel(successPanel);
         menuManager.SwitchToPanel(PanelType.Auth_Register);
     }
 }
