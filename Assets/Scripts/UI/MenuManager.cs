@@ -8,7 +8,7 @@ public enum PanelType {
     MultiplayerRoomList,
     CreateWorldOptions,
     Options,
-    Auth,
+    Auth_LogIn,
     MultiplayerMatchmaking,
     PauseMenu,
     BagMenu,
@@ -17,6 +17,7 @@ public enum PanelType {
     Profile,
     ScoreBoard,
     AccountSetting,
+    Auth_Register,
 }
 
 public class MenuManager : MonoBehaviour {

@@ -4,7 +4,8 @@ using UnityEngine;
 public class AuthMenu : MonoBehaviour {
     [Header("Input")]
     [SerializeField] private TMP_InputField usernameInput;
-    [SerializeField] private TMP_InputField passwordInput;
+    [SerializeField] private TMP_InputField passwardInput;
+    [SerializeField] private TMP_InputField passwardCheck;
 
     [Header("Navigation")]
     [SerializeField] private PanelType successPanel = PanelType.Multiplayer;
@@ -18,6 +19,20 @@ public class AuthMenu : MonoBehaviour {
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         warningWindow = FindFirstObjectByType<WarningWindow>();
     }
+
+    public void SetInput(TMP_InputField name, TMP_InputField passward, PanelType targetPanel) {
+        usernameInput = name;
+        passwardInput = passward;
+        passwardCheck = null; //避免影響
+        successPanel = targetPanel;
+    }
+    public void SetInput(TMP_InputField name, TMP_InputField passward, TMP_InputField check, PanelType targetPanel) {
+        usernameInput = name;
+        passwardInput = passward;
+        passwardCheck = check;
+        successPanel = targetPanel;
+    }
+
 
     public void Register() {
         if (!TryGetCredentials(out string username, out string password)) {
@@ -60,12 +75,12 @@ public class AuthMenu : MonoBehaviour {
 
     public void ClearCredentials() {
         usernameInput?.SetTextWithoutNotify(string.Empty);
-        passwordInput?.SetTextWithoutNotify(string.Empty);
+        passwardInput?.SetTextWithoutNotify(string.Empty);
     }
 
     private bool TryGetCredentials(out string username, out string password) {
         username = usernameInput != null ? usernameInput.text.Trim() : string.Empty;
-        password = passwordInput != null ? passwordInput.text : string.Empty;
+        password = passwardInput != null ? passwardInput.text : string.Empty;
 
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) {
             SetStatus("Enter a username and password.");
@@ -79,6 +94,34 @@ public class AuthMenu : MonoBehaviour {
 
         if (password.Length < 6) {
             SetStatus("Password must be at least 6 characters.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool TryGetCredentials(out string username, out string password, out string check) {
+        username = usernameInput != null ? usernameInput.text.Trim() : string.Empty;
+        password = passwardInput != null ? passwardInput.text : string.Empty;
+        check    = passwardCheck != null ? passwardCheck.text : string.Empty;
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password)) {
+            SetStatus("Enter a username and password.");
+            return false;
+        }
+
+        if (username.Length < 3) {
+            SetStatus("Username must be at least 3 characters.");
+            return false;
+        }
+
+        if (password.Length < 6) {
+            SetStatus("Password must be at least 6 characters.");
+            return false;
+        }
+
+        if(!password.Equals(check)) {
+            SetStatus("CheckBox is not equals to Passward.");
             return false;
         }
 

@@ -107,7 +107,7 @@ public class AccountSettingMenu : MonoBehaviour {
         if (menuManager != null) {
             menuManager.ClearHistory();
             menuManager.SwitchToPanel(PanelType.MainMenu);
-            menuManager.SwitchToPanel(PanelType.Auth);
+            menuManager.SwitchToPanel(PanelType.Auth_LogIn);
         }
     }
 }

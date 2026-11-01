@@ -21,13 +21,13 @@ public class MainMenu : MonoBehaviour {
                 },
                 _ => {
                     backendAuthClient.ClearSession();
-                    menuManager.SwitchToPanel(PanelType.Auth);
+                    menuManager.SwitchToPanel(PanelType.Auth_LogIn);
                 }
             );
             return;
         }
 
-        menuManager.SwitchToPanel(PanelType.Auth);
+        menuManager.SwitchToPanel(PanelType.Auth_LogIn);
     }
 
     public void SwitchToOptions() {
@@ -42,13 +42,13 @@ public class MainMenu : MonoBehaviour {
                 },
                 _ => {
                     backendAuthClient.ClearSession();
-                    menuManager.SwitchToPanel(PanelType.Auth);
+                    menuManager.SwitchToPanel(PanelType.Auth_LogIn);
                 }
             );
             return;
         }
 
-        menuManager.SwitchToPanel(PanelType.Auth);
+        menuManager.SwitchToPanel(PanelType.Auth_LogIn);
     }
 
     public void QuitGame() {
