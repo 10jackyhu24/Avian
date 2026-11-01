@@ -1,9 +1,6 @@
 using UnityEngine;
-using UnityEngine.UI;
 
 public class AccountSettingMenu : MonoBehaviour {
-    [SerializeField] private Button deleteAccountButton;
-
     private MenuManager menuManager;
     private BackendAuthClient backendAuthClient;
     private WarningWindow warningWindow;
@@ -15,17 +12,28 @@ public class AccountSettingMenu : MonoBehaviour {
         menuManager = FindFirstObjectByType<MenuManager>();
         backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
         warningWindow = FindFirstObjectByType<WarningWindow>();
-        deleteAccountButton?.onClick.AddListener(RequestAccountDeletion);
     }
 
     private void OnDestroy() {
-        deleteAccountButton?.onClick.RemoveListener(RequestAccountDeletion);
         if (confirmationWindow != null) {
             Destroy(confirmationWindow);
         }
         if (progressWindow != null) {
             Destroy(progressWindow);
         }
+    }
+
+    public void Logout() {
+        if (isDeletingAccount) {
+            return;
+        }
+        if (backendAuthClient == null) {
+            Debug.LogError("Logout requires BackendAuthClient.", this);
+            return;
+        }
+
+        backendAuthClient.ClearSession();
+        ReturnToLogin();
     }
 
     public void RequestAccountDeletion() {
@@ -57,9 +65,6 @@ public class AccountSettingMenu : MonoBehaviour {
             },
             () => {
                 confirmationWindow = null;
-                if (deleteAccountButton != null && deleteAccountButton.isActiveAndEnabled) {
-                    deleteAccountButton.Select();
-                }
             },
             "Delete Account"
         );
@@ -90,9 +95,6 @@ public class AccountSettingMenu : MonoBehaviour {
 
     private void SetDeletingAccount(bool deleting) {
         isDeletingAccount = deleting;
-        if (deleteAccountButton != null) {
-            deleteAccountButton.interactable = !deleting;
-        }
     }
 
     private void CloseProgressWindow() {
