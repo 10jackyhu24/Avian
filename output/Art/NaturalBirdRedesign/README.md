@@ -1,0 +1,59 @@
+# Natural bird enemy redesign
+
+Created with the built-in image_gen tool, followed by nearest-neighbor packing and a fixed eight-color palette per bird. No CLI/API image generation fallback.
+
+## Designs
+
+- Raider: peregrine falcon (遊隼), slate-blue back, pale barred breast and dark cheek stripe.
+- Spitter: southern cassowary (食火雞), black body, blue neck, small natural casque and red wattle; no inflated sac or mutation.
+- Charging Warden: Eurasian eagle-owl (雕鴞), tawny feathers and feather ear tufts; no armor, horns or equipment.
+
+## Files and integration
+
+- `<role>_48px.png`: editable sheets at 192 x 144, with four columns and three rows of 48 x 48 cells. Actual character silhouettes fit within 46 x 46 pixels, leaving transparent margins.
+- `<role>_coarse.png`: runtime sheets at the original 1448 x 1086 size. Coarse frames are enlarged with nearest-neighbor sampling and fitted to the existing sprite rectangles, avoiding overlaps between neighboring slices.
+- Each bird uses at most eight flat colors shared across all twelve frames, without dithering, antialiasing or semi-transparent edge pixels. Species-specific accent colors are explicitly preserved.
+- Runtime destination: `Assets/Sprites/Characters/<role>/<role>_animations.png`.
+- Existing `.meta` files, GUIDs, sprite IDs, slice rectangles, pivots, PPU, Animator Controllers, animation clips, combat behavior and archetype stats are retained.
+- `BeforeRedesign/`: backups of the previous 80-pixel character sheets and matching metadata.
+- `Source/`: unprocessed image_gen results.
+- `RepackNaturalBirds.ps1`: reproducible packing script. Run from the project root, supplying `-EnemyName`, `-GeneratedPath`, and an `-OutputPath` ending in `_coarse.png`.
+
+## Final generation prompts
+
+### Raider
+
+Use case: style-transfer and character redesign.
+Asset: production Unity bird-enemy animation sheet.
+Input 1 is an EDIT TARGET used for 4x3 layout and action timing ONLY. Replace its character design completely with Peregrine falcon / 遊隼. Input 2 (user-drawn eagle) and input 3 (user-drawn Medusa) are simple retro drawing STYLE references only; never copy Medusa's anatomy or costume.
+NEW SUBJECT: A completely natural peregrine falcon: slate-blue back and pointed folded or flapping wings, pale cream breast with just two or three chunky dark bars, dark cap and one bold dark cheek/moustache stripe, small hooked beak, yellow feet. Compact recognizable falcon silhouette; no fantasy orange phoenix crest. Left-facing three-quarter side view in every frame.
+ANIMATION: Idle: perched alert, small body bob and blink. Movement: two alternating wing positions and foot movements. Attack: head leans forward, small beak opens and closes, then returns.
+ART STYLE: deliberately rudimentary hand-drawn low-resolution game sprites. Each character must be designed on a true 48x48 logical pixel cell, enlarged using exact nearest-neighbor chunky square pixels. Rough staircase / jagged edges MUST remain strongly visible. Use only EIGHT flat colors TOTAL across all twelve frames of this species, including a dark outline. One base plus at most one shadow per large body material. Tiny eyes should use just ONE or TWO pixels, beak only a few pixels, legs and talons extremely simple. No smooth face anatomy, no eyelashes or decorative facial detail. Simplify all plumage into broad solid shapes; only a few jagged wing/tail tips, NOT individual layered feathers. The goal is modest beginner-drawn 1990s game art fitting the user's own eagle and Medusa, with even larger pixels than the previous sheet, not sophisticated polished pixel art. Absolutely NO anti-aliasing, intermediate edge colors, gradients, soft shading, highlights, rim light, dithering, texture, decorative speckles or painterly illustration. DO NOT merely blur/downsample the original monster; draw the new real bird with far fewer marks.
+STRICT LAYOUT: 1448x1086 transparent canvas, exactly TWELVE fully visible separate complete birds arranged in FOUR columns by THREE rows. Row 1 four idle poses; row 2 four movement poses; row 3 four attack poses. Maintain original frame ordering. Each frame should sit near the corresponding input frame's normalized center, with ample genuinely transparent space between ALL frames, no silhouettes touching. Preserve the game-oriented overall apparent sizes and pose progression where compatible with the new bird's real anatomy, not the obsolete design. All frames depict the SAME bird species with the SAME colors and proportions, and face LEFT. No labels, text, grid, scenery, floor, shadow, held object, eggs, projectiles, sparkles or effects. No additional frames.
+BACKGROUND: genuine alpha transparency, clean binary transparent/opaque edges; no painted checkerboard. Full bodies and extremities remain inside canvas.
+PRIORITY: real pure biological bird species, extremely simple EIGHT-color 48-pixel design with visible blocky jagged contours, accurate 12-frame 4x3 layout.
+
+### Spitter
+
+Use case: style-transfer and character redesign.
+Asset: production Unity bird-enemy animation sheet.
+Input 1 is an EDIT TARGET used for 4x3 layout and action timing ONLY. Replace its character design completely with Southern cassowary / 食火雞. Input 2 (user-drawn eagle) and input 3 (user-drawn Medusa) are simple retro drawing STYLE references only; never copy Medusa's anatomy or costume.
+NEW SUBJECT: A completely natural southern cassowary: black feathered pear-shaped body, slim blue neck, very small natural brown keratin casque integrated into the top of the head (NOT a helmet or armor), tiny red wattle and small plain beak, two strong brown-gray legs with normal long toes. Its body and neck must be entirely natural bird anatomy. Absolutely NO bulbous throat sac, inflated crop, slime, tumors, mutation, armor or jewelry. Body remains compact enough for the existing sprite bounds. Left-facing three-quarter side view in every frame.
+ANIMATION: Idle: stands with small head bob, blink. Movement: distinct alternate left/right walking steps with wings kept small and tucked, since cassowaries are flightless. Attack: head and neck thrust forward, opens natural beak, lunges, returns; no inflated sac and no additional projectile drawn.
+ART STYLE: deliberately rudimentary hand-drawn low-resolution game sprites. Each character must be designed on a true 48x48 logical pixel cell, enlarged using exact nearest-neighbor chunky square pixels. Rough staircase / jagged edges MUST remain strongly visible. Use only EIGHT flat colors TOTAL across all twelve frames of this species, including a dark outline. One base plus at most one shadow per large body material. Tiny eyes should use just ONE or TWO pixels, beak only a few pixels, legs and talons extremely simple. No smooth face anatomy, no eyelashes or decorative facial detail. Simplify all plumage into broad solid shapes; only a few jagged wing/tail tips, NOT individual layered feathers. The goal is modest beginner-drawn 1990s game art fitting the user's own eagle and Medusa, with even larger pixels than the previous sheet, not sophisticated polished pixel art. Absolutely NO anti-aliasing, intermediate edge colors, gradients, soft shading, highlights, rim light, dithering, texture, decorative speckles or painterly illustration. DO NOT merely blur/downsample the original monster; draw the new real bird with far fewer marks.
+STRICT LAYOUT: 1448x1086 transparent canvas, exactly TWELVE fully visible separate complete birds arranged in FOUR columns by THREE rows. Row 1 four idle poses; row 2 four movement poses; row 3 four attack poses. Maintain original frame ordering. Each frame should sit near the corresponding input frame's normalized center, with ample genuinely transparent space between ALL frames, no silhouettes touching. Preserve the game-oriented overall apparent sizes and pose progression where compatible with the new bird's real anatomy, not the obsolete design. All frames depict the SAME bird species with the SAME colors and proportions, and face LEFT. No labels, text, grid, scenery, floor, shadow, held object, eggs, projectiles, sparkles or effects. No additional frames.
+BACKGROUND: genuine alpha transparency, clean binary transparent/opaque edges; no painted checkerboard. Full bodies and extremities remain inside canvas.
+PRIORITY: real pure biological bird species, extremely simple EIGHT-color 48-pixel design with visible blocky jagged contours, accurate 12-frame 4x3 layout.
+
+### ChargingWarden
+
+Use case: style-transfer and character redesign.
+Asset: production Unity bird-enemy animation sheet.
+Input 1 is an EDIT TARGET used for 4x3 layout and action timing ONLY. Replace its character design completely with Eurasian eagle-owl / 雕鴞. Input 2 (user-drawn eagle) and input 3 (user-drawn Medusa) are simple retro drawing STYLE references only; never copy Medusa's anatomy or costume.
+NEW SUBJECT: A completely natural Eurasian eagle-owl: broad tawny-brown feathered body, short hooked gray beak, tiny orange eyes represented by single pixels, two modest feather ear tufts, buff belly with only two or three coarse dark marks, two natural feathered legs with brown talons. Small bird head rather than expressive human face. Absolutely NO helmet, gold armor, breastplate, pauldrons, bracers, horns, blades, equipment or magical/monstrous features; ear tufts are feathers, not horns. Left-facing three-quarter side view in every frame.
+ANIMATION: Idle: upright owl stance and blink. Movement: alternating foot steps and modest wing lift. Attack: lean forward, sweep natural wings back, short talon lunge, then returns upright. Keep bird anatomy natural and consistent.
+ART STYLE: deliberately rudimentary hand-drawn low-resolution game sprites. Each character must be designed on a true 48x48 logical pixel cell, enlarged using exact nearest-neighbor chunky square pixels. Rough staircase / jagged edges MUST remain strongly visible. Use only EIGHT flat colors TOTAL across all twelve frames of this species, including a dark outline. One base plus at most one shadow per large body material. Tiny eyes should use just ONE or TWO pixels, beak only a few pixels, legs and talons extremely simple. No smooth face anatomy, no eyelashes or decorative facial detail. Simplify all plumage into broad solid shapes; only a few jagged wing/tail tips, NOT individual layered feathers. The goal is modest beginner-drawn 1990s game art fitting the user's own eagle and Medusa, with even larger pixels than the previous sheet, not sophisticated polished pixel art. Absolutely NO anti-aliasing, intermediate edge colors, gradients, soft shading, highlights, rim light, dithering, texture, decorative speckles or painterly illustration. DO NOT merely blur/downsample the original monster; draw the new real bird with far fewer marks.
+STRICT LAYOUT: 1448x1086 transparent canvas, exactly TWELVE fully visible separate complete birds arranged in FOUR columns by THREE rows. Row 1 four idle poses; row 2 four movement poses; row 3 four attack poses. Maintain original frame ordering. Each frame should sit near the corresponding input frame's normalized center, with ample genuinely transparent space between ALL frames, no silhouettes touching. Preserve the game-oriented overall apparent sizes and pose progression where compatible with the new bird's real anatomy, not the obsolete design. All frames depict the SAME bird species with the SAME colors and proportions, and face LEFT. No labels, text, grid, scenery, floor, shadow, held object, eggs, projectiles, sparkles or effects. No additional frames.
+BACKGROUND: genuine alpha transparency, clean binary transparent/opaque edges; no painted checkerboard. Full bodies and extremities remain inside canvas.
+PRIORITY: real pure biological bird species, extremely simple EIGHT-color 48-pixel design with visible blocky jagged contours, accurate 12-frame 4x3 layout.
+
