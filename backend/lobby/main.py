@@ -36,6 +36,7 @@ class LoginRequest(BaseModel):
 
 
 class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=6, max_length=128)
     new_password: str = Field(min_length=6, max_length=128)
 
 
@@ -232,14 +233,19 @@ def change_password(
     if credentials is None:
         raise HTTPException(status_code=401, detail="Bearer session token required")
 
-    salt_hex, hash_hex = _hash_password(payload.new_password)
     with db_cursor(commit=True) as cursor:
         cursor.execute(load_sql("select_user_by_valid_session_for_update.sql"), (credentials.credentials,))
         user = cursor.fetchone()
         if user is None:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-        user_id, username = user
+        user_id, username, old_salt_hex, old_hash_hex = user
+        if not _verify_password(payload.old_password, old_salt_hex, old_hash_hex):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if payload.old_password == payload.new_password:
+            raise HTTPException(status_code=400, detail="New password must be different from current password")
+
+        salt_hex, hash_hex = _hash_password(payload.new_password)
         cursor.execute(load_sql("update_user_password.sql"), (salt_hex, hash_hex, user_id))
         cursor.execute(load_sql("delete_user_sessions.sql"), (user_id,))
 

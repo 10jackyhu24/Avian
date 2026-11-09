@@ -3,71 +3,51 @@ using UnityEngine;
 
 public class AuthChangePassward : MonoBehaviour {
     [Header("Input")]
-    [SerializeField] private TMP_InputField passwordInput;
-    [SerializeField] private TMP_InputField passwardCheck;
+    [SerializeField] private TMP_InputField oldpasswordInput;
+    [SerializeField] private TMP_InputField newpasswordInput;
+    [SerializeField] private TMP_InputField newpasswardCheck;
 
     private MenuManager menuManager;
-    private BackendAuthClient backendAuthClient;
-    private WarningWindow warningWindow;
+    private AuthMenu authMenu;
 
     private void Awake() {
         menuManager = FindFirstObjectByType<MenuManager>();
-        backendAuthClient = FindFirstObjectByType<BackendAuthClient>();
-        warningWindow = FindFirstObjectByType<WarningWindow>();
-        if (passwordInput != null) passwordInput.contentType = TMP_InputField.ContentType.Password;
-        if (passwardCheck != null) passwardCheck.contentType = TMP_InputField.ContentType.Password;
+        authMenu = FindFirstObjectByType<AuthMenu>();
+        ResolveInputFields();
+        if (oldpasswordInput != null) oldpasswordInput.contentType = TMP_InputField.ContentType.Password;
+        if (newpasswordInput != null) newpasswordInput.contentType = TMP_InputField.ContentType.Password;
+        if (newpasswardCheck != null) newpasswardCheck.contentType = TMP_InputField.ContentType.Password;
     }
 
     private void OnDisable() {
-        passwordInput?.SetTextWithoutNotify(string.Empty);
-        passwardCheck?.SetTextWithoutNotify(string.Empty);
+        oldpasswordInput?.SetTextWithoutNotify(string.Empty);
+        newpasswordInput?.SetTextWithoutNotify(string.Empty);
+        newpasswardCheck?.SetTextWithoutNotify(string.Empty);
     }
 
     public void DoChangePassword() {
-        if (backendAuthClient == null || warningWindow == null || passwordInput == null || passwardCheck == null) {
-            Debug.LogError("Password change requires its input fields, BackendAuthClient and WarningWindow.", this);
+        ResolveInputFields();
+        if (authMenu == null) {
+            authMenu = FindFirstObjectByType<AuthMenu>(FindObjectsInactive.Include);
+        }
+        if (authMenu == null || oldpasswordInput == null || newpasswordInput == null || newpasswardCheck == null) {
+            Debug.LogError($"Password change setup is incomplete: AuthMenu={authMenu != null}, OldPassword_Input={oldpasswordInput != null}, NewPassword_Input={newpasswordInput != null}, NewPassword_Check={newpasswardCheck != null}.", this);
             return;
         }
-        if (backendAuthClient.IsChangingPassword) return;
-        if (!backendAuthClient.HasStoredSessionToken()) {
-            warningWindow.Show("Login Required", "Please log in before changing your password.");
-            ReturnToLogin();
-            return;
-        }
+        authMenu.SetChangePasswordInput(oldpasswordInput, newpasswordInput, newpasswardCheck);
+        authMenu.ChangePassward();
+    }
 
-        string newPassword = passwordInput.text;
-        if (newPassword.Length < 6 || newPassword.Length > 128) {
-            warningWindow.Show("Password Change", "Password must be 6 to 128 characters.");
-            return;
+    private void ResolveInputFields() {
+        if (oldpasswordInput != null && newpasswordInput != null && newpasswardCheck != null) return;
+        foreach (TMP_InputField field in GetComponentsInChildren<TMP_InputField>(true)) {
+            if (oldpasswordInput == null && field.name == "OldPassword_Input") oldpasswordInput = field;
+            if (newpasswordInput == null && field.name == "NewPassword_Input") newpasswordInput = field;
+            if (newpasswardCheck == null && field.name == "NewPassword_Check") newpasswardCheck = field;
         }
-        if (newPassword != passwardCheck.text) {
-            warningWindow.Show("Password Change", "Passwords do not match.");
-            return;
-        }
-
-        backendAuthClient.ChangePassword(newPassword,
-            _ => {
-                passwordInput.SetTextWithoutNotify(string.Empty);
-                passwardCheck.SetTextWithoutNotify(string.Empty);
-                ReturnToLogin();
-                warningWindow.Show("Password Changed", "Please log in with your new password.");
-            },
-            error => {
-                if (!backendAuthClient.HasStoredSessionToken()) ReturnToLogin();
-                warningWindow.Show("Password Change Failed", error);
-            });
     }
 
     public void Back() {
         menuManager?.Back();
-    }
-
-    private void ReturnToLogin() {
-        FindFirstObjectByType<AuthMenu>()?.ClearCredentials();
-        if (menuManager != null) {
-            menuManager.ClearHistory();
-            menuManager.SwitchToPanel(PanelType.MainMenu);
-            menuManager.SwitchToPanel(PanelType.Auth_LogIn);
-        }
     }
 }

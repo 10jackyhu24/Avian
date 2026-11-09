@@ -36,6 +36,7 @@ public class BackendAuthClient : MonoBehaviour {
 
     [Serializable]
     public class ChangePasswordRequest {
+        public string old_password;
         public string new_password;
     }
 
@@ -92,8 +93,8 @@ public class BackendAuthClient : MonoBehaviour {
         return StartCoroutine(DeleteAccountRoutine(onSuccess, onError));
     }
 
-    public Coroutine ChangePassword(string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
-        return StartCoroutine(ChangePasswordRoutine(newPassword, onSuccess, onError));
+    public Coroutine ChangePassword(string oldPassword, string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(ChangePasswordRoutine(oldPassword, newPassword, onSuccess, onError));
     }
 
     public bool HasStoredSessionToken() {
@@ -216,7 +217,7 @@ public class BackendAuthClient : MonoBehaviour {
         }
     }
 
-    private IEnumerator ChangePasswordRoutine(string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
+    private IEnumerator ChangePasswordRoutine(string oldPassword, string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
         if (IsChangingPassword) {
             onError?.Invoke("Password change is already in progress.");
             yield break;
@@ -228,7 +229,7 @@ public class BackendAuthClient : MonoBehaviour {
 
         string token = SessionToken;
         string url = $"{(string.IsNullOrWhiteSpace(baseUrl) ? URL.BaseUrl : baseUrl)}{URL.AuthChangePasswordPath}";
-        byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(new ChangePasswordRequest { new_password = newPassword }));
+        byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(new ChangePasswordRequest { old_password = oldPassword, new_password = newPassword }));
         IsChangingPassword = true;
         try {
             using UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
