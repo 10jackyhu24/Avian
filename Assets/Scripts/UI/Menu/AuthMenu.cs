@@ -33,9 +33,8 @@ public class AuthMenu : MonoBehaviour {
         successPanel = targetPanel;
     }
 
-
     public void Register() {
-        if (!TryGetCredentials(out string username, out string password)) {
+        if (!TryGetCredentials(out string username, out string password, out string check)) {
             return;
         }
 
@@ -43,6 +42,8 @@ public class AuthMenu : MonoBehaviour {
             SetStatus("BackendAuthClient not found in scene.");
             return;
         }
+
+
 
         SetStatus("Registering...");
         backendAuthClient.Register(username, password, HandleAuthSuccess, HandleAuthError);
