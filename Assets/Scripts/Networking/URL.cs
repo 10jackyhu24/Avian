@@ -14,6 +14,7 @@ public static class URL {
     public static string AuthLoginPath = "/auth/login";
     public static string AuthValidatePath = "/auth/validate";
     public static string AuthDeleteAccountPath = "/auth/account";
+    public static string AuthChangePasswordPath = "/auth/change-password";
 
     public static string MatchJoinPath = "/match/join";
     public static string MatchStatusPath = "/match/status";

@@ -1,3 +1,15 @@
+# Change password API
+
+`POST /auth/change-password` changes the password for the account identified by
+the bearer login session. Send JSON `{"new_password":"at-least-six-characters"}`
+and `Authorization: Bearer YOUR_SESSION_TOKEN`. The new password must contain
+6 to 128 characters. A missing, invalid, or expired session returns HTTP 401.
+
+On success the API returns `{"changed":true,"user_id":1,"username":"user1"}`.
+It stores a new PBKDF2 salt and hash and revokes all sessions for that account
+in the same database transaction. The client should then ask the user to log
+in with the new password.
+
 # Account deletion API
 
 `DELETE /auth/account` deletes the account identified by a valid login session.

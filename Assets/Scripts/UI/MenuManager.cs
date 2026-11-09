@@ -67,6 +67,12 @@ public class MenuManager : MonoBehaviour {
         SetActivePanelOnly(panelType);
     }
 
+    public void RegisterPanel(PanelType panelType, GameObject panelObject) {
+        if (panelObject != null && !panelDict.ContainsKey(panelType)) {
+            panelDict.Add(panelType, panelObject);
+        }
+    }
+
     public void SetActivePanelOnly(PanelType panelType) {
         if (panelType != PanelType.GameMenu) {
             if (GameState.isPlaying) {

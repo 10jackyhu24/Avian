@@ -1,11 +1,13 @@
 using UnityEngine;
 
 public class AccountSettingMenu : MonoBehaviour {
+    [SerializeField] private GameObject changePasswordPrefab;
     private MenuManager menuManager;
     private BackendAuthClient backendAuthClient;
     private WarningWindow warningWindow;
     private GameObject confirmationWindow;
     private GameObject progressWindow;
+    private GameObject changePasswordPanel;
     private bool isDeletingAccount;
 
     private void Awake() {
@@ -24,6 +26,14 @@ public class AccountSettingMenu : MonoBehaviour {
     }
 
     public void SwitchToChangePassward() {
+        if (menuManager == null || changePasswordPrefab == null) {
+            Debug.LogError("Change password panel is not configured.", this);
+            return;
+        }
+        if (changePasswordPanel == null) {
+            changePasswordPanel = Instantiate(changePasswordPrefab, menuManager.transform);
+            menuManager.RegisterPanel(PanelType.ChangePassward, changePasswordPanel);
+        }
         menuManager.SwitchToPanel(PanelType.ChangePassward);
     }
 

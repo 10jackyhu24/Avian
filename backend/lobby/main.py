@@ -35,6 +35,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=6, max_length=128)
 
 
+class ChangePasswordRequest(BaseModel):
+    new_password: str = Field(min_length=6, max_length=128)
+
+
 def load_sql(filename: str) -> str:
     return (SQL_DIR / filename).read_text(encoding="utf-8")
 
@@ -218,4 +222,26 @@ def delete_account(
             raise HTTPException(status_code=500, detail="Account deletion did not remove all sessions")
 
     return {"deleted": True, "user_id": user_id, "username": username, "remaining_sessions": remaining_sessions}
+
+
+@app.post("/auth/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(session_bearer),
+):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Bearer session token required")
+
+    salt_hex, hash_hex = _hash_password(payload.new_password)
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(load_sql("select_user_by_valid_session_for_update.sql"), (credentials.credentials,))
+        user = cursor.fetchone()
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        user_id, username = user
+        cursor.execute(load_sql("update_user_password.sql"), (salt_hex, hash_hex, user_id))
+        cursor.execute(load_sql("delete_user_sessions.sql"), (user_id,))
+
+    return {"changed": True, "user_id": user_id, "username": username}
 
