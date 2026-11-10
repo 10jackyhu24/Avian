@@ -135,3 +135,6 @@ _Recovery.meta
 !Tools/ItemAttachments/Tests/AttachmentChecks.csproj
 /Tools/ItemAttachments/Tests/bin/
 /Tools/ItemAttachments/Tests/obj/
+
+# draft
+docs/
