@@ -1,6 +1,8 @@
 using System;
 using Unity.Netcode;
 using UnityEngine;
+using System.Collections;
+using NUnit.Framework;
 
 public class EnemyHealthDrop : NetworkBehaviour {
     [Header("Health")]
@@ -25,6 +27,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
     );
     private float localHealth;
     private bool isDead;
+
 
     public float CurrentHealth => IsSpawned ? networkHealth.Value : localHealth;
     public float MaxHealth => maxHealth;
@@ -57,6 +60,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
 
     private void LateUpdate() {
         if (!IsAlive) {
+            ApplyDeathLocally();
             WorldHealthBarGUI.Remove(this);
             return;
         }
@@ -114,28 +118,50 @@ public class EnemyHealthDrop : NetworkBehaviour {
         }
     }
 
+    private void ApplyDeathLocally() {
+        if (isDead) return;
+        isDead = true;
+
+        EnemyAttackController attack = GetComponent<EnemyAttackController>();
+        if(attack != null) {
+            attack.StopAllCoroutines();
+            attack.enabled = false;
+        }
+
+        Animator animator = GetComponentInChildren<Animator>();
+        if(animator != null) {
+            animator.SetBool("IsDead", true);
+        }
+    }
+
     private void Die(ulong attackerClientId) {
         if (isDead) {
             return;
         }
-
-        isDead = true;
+        ApplyDeathLocally();
         Died?.Invoke(this);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
 
-        NetworkObject networkObject = GetComponent<NetworkObject>();
-        if (networkObject != null && networkObject.IsSpawned) {
-            networkObject.Despawn(true);
-            return;
-        }
-
-        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-            Debug.LogWarning("[EnemyHealthDrop] Enemy is not network-spawned. The server destroyed it locally, but clients may not see the enemy disappear.", this);
-        }
-
-        Destroy(gameObject);
+        StartCoroutine(RemoveAfterDeath());
+        
     }
+
+    private IEnumerator RemoveAfterDeath() {
+    yield return new WaitForSeconds(1.5f);
+
+    NetworkObject networkObject = GetComponent<NetworkObject>();
+    if (networkObject != null && networkObject.IsSpawned) {
+        networkObject.Despawn(true);
+        yield break;
+    }
+
+    if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
+        Debug.LogWarning("[EnemyHealthDrop] Enemy is not network-spawned. The server destroyed it locally, but clients may not see the enemy disappear.", this);
+    }
+
+    Destroy(gameObject);
+}
 
     private void DropCoins() {
         if (coinPickupPrefab == null) {

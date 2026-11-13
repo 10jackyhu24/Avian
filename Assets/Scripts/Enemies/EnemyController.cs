@@ -37,6 +37,8 @@ public class EnemyController : NetworkBehaviour {
 
     private CharacterController characterController;
     private EnemyAttackController attackController;
+
+    private EnemyHealthDrop healthDrop;
     private Camera mainCamera;
     private SpriteRenderer[] spriteRenderers;
     private bool[] initialSpriteFlipX;
@@ -101,6 +103,7 @@ public class EnemyController : NetworkBehaviour {
     private void Awake() {
         characterController = GetComponent<CharacterController>();
         attackController = GetComponent<EnemyAttackController>();
+        healthDrop = GetComponent<EnemyHealthDrop>();
         mainCamera = Camera.main;
         spriteRenderers = GetComponentsInChildren<SpriteRenderer>(true);
         initialSpriteFlipX = new bool[spriteRenderers.Length];
@@ -247,6 +250,8 @@ public class EnemyController : NetworkBehaviour {
     }
 
     private void Update() {
+        if (healthDrop != null && !healthDrop.IsAlive) return;
+
         if (NetworkManager.Singleton != null &&
             NetworkManager.Singleton.IsListening &&
             !NetworkManager.Singleton.IsServer) {
@@ -274,6 +279,8 @@ public class EnemyController : NetworkBehaviour {
 
     private void LateUpdate() {
         RefreshVisibilityState();
+
+        if (healthDrop != null && !healthDrop.IsAlive) return;
         bool localAttack = GameState.isPlaying && attackController != null && attackController.IsAttacking;
         if (IsSpawned && IsServer && networkIsAttacking.Value != localAttack) {
             networkIsAttacking.Value = localAttack;
