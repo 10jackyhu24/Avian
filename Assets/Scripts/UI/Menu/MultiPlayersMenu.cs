@@ -14,4 +14,9 @@ public class MultiPlayersMenu : MonoBehaviour {
     public void SwitchToMatchmaking() {
         menuManager.SwitchToPanel(PanelType.MultiplayerMatchmaking);
     }
+
+    public void Back() {
+        menuManager.ClearHistory();
+        menuManager.SwitchToPanel(PanelType.MainMenu);
+    }
 }

@@ -13,4 +13,9 @@ public class ProfileMenu : MonoBehaviour {
         menuManager.SwitchToPanel(PanelType.AccountSetting);
     }
 
+    public void Back() {
+        menuManager.ClearHistory();
+        menuManager.SwitchToPanel(PanelType.MainMenu);
+    }
+
 }
