@@ -1,8 +1,7 @@
 using System;
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
-using System.Collections;
-using NUnit.Framework;
 
 public class EnemyHealthDrop : NetworkBehaviour {
     [Header("Health")]
@@ -35,6 +34,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
     public Sprite Portrait => portrait != null ? portrait : GetComponentInChildren<SpriteRenderer>()?.sprite;
     public bool IsAlive => !isDead && CurrentHealth > 0f;
     public event Action<EnemyHealthDrop> Died;
+    public static event Action<EnemyHealthDrop, ulong, bool> EnemyDefeated;
 
     private void Awake() {
         localHealth = maxHealth;
@@ -92,7 +92,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
         Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={newHealth}/{maxHealth}", this);
 
         if (newHealth <= 0f) {
-            Die(attackerClientId);
+            Die(attackerClientId, awardsScore: true);
             return;
         }
 
@@ -108,7 +108,9 @@ public class EnemyHealthDrop : NetworkBehaviour {
         if (!CanServerTakeDamage() || isDead || damage <= 0f) return;
         float newHealth = Mathf.Max(0f, CurrentHealth - damage);
         SetCurrentHealth(newHealth);
-        if (newHealth <= 0f) Die(Unity.Netcode.NetworkManager.ServerClientId);
+        if (newHealth <= 0f) {
+            Die(Unity.Netcode.NetworkManager.ServerClientId, awardsScore: false);
+        }
     }
 
     private void SetCurrentHealth(float value) {
@@ -123,45 +125,45 @@ public class EnemyHealthDrop : NetworkBehaviour {
         isDead = true;
 
         EnemyAttackController attack = GetComponent<EnemyAttackController>();
-        if(attack != null) {
+        if (attack != null) {
             attack.StopAllCoroutines();
             attack.enabled = false;
         }
 
         Animator animator = GetComponentInChildren<Animator>();
-        if(animator != null) {
+        if (animator != null) {
             animator.SetBool("IsDead", true);
         }
     }
 
-    private void Die(ulong attackerClientId) {
+    private void Die(ulong attackerClientId, bool awardsScore) {
         if (isDead) {
             return;
         }
         ApplyDeathLocally();
         Died?.Invoke(this);
+        EnemyDefeated?.Invoke(this, attackerClientId, awardsScore);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
 
         StartCoroutine(RemoveAfterDeath());
-        
     }
 
     private IEnumerator RemoveAfterDeath() {
-    yield return new WaitForSeconds(1.5f);
+        yield return new WaitForSeconds(1.5f);
 
-    NetworkObject networkObject = GetComponent<NetworkObject>();
-    if (networkObject != null && networkObject.IsSpawned) {
-        networkObject.Despawn(true);
-        yield break;
+        NetworkObject networkObject = GetComponent<NetworkObject>();
+        if (networkObject != null && networkObject.IsSpawned) {
+            networkObject.Despawn(true);
+            yield break;
+        }
+
+        if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
+            Debug.LogWarning("[EnemyHealthDrop] Enemy is not network-spawned. The server destroyed it locally, but clients may not see the enemy disappear.", this);
+        }
+
+        Destroy(gameObject);
     }
-
-    if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-        Debug.LogWarning("[EnemyHealthDrop] Enemy is not network-spawned. The server destroyed it locally, but clients may not see the enemy disappear.", this);
-    }
-
-    Destroy(gameObject);
-}
 
     private void DropCoins() {
         if (coinPickupPrefab == null) {

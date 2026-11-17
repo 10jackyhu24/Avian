@@ -16,7 +16,6 @@ public class EnemyAttackController : NetworkBehaviour {
 
     [Header("SimpleEnemy Projectile")]
     [SerializeField] private GameObject simpleEnemyProjectilePrefab;
-    [SerializeField] private Vector3 simpleEnemyProjectileOffset = new Vector3(0f, -0.35f, -0.8f);
     [Min(0.1f)] [SerializeField] private float simpleEnemyProjectileDistance = 4f;
     [Min(0.01f)] [SerializeField] private float simpleEnemyProjectileRadius = 0.18f;
     [Min(0.01f)] [SerializeField] private float simpleEnemyProjectileScale = 2f;
@@ -63,7 +62,7 @@ public class EnemyAttackController : NetworkBehaviour {
     }
 
     private bool HasClearAttackPath(PlayerController target) {
-        Vector3 origin = UsesDroppingProjectile ? GetProjectileOrigin(GetTargetDirection(target).normalized) : transform.position;
+        Vector3 origin = UsesRangedAttack ? GetProjectileOrigin() : transform.position;
         CharacterController targetBody = target.GetComponent<CharacterController>();
         Vector3 destination = targetBody != null ? targetBody.bounds.center : target.transform.position;
         Vector3 path = destination - origin;
@@ -370,8 +369,8 @@ public class EnemyAttackController : NetworkBehaviour {
         HideWarning();
         if (GameState.isPlaying && CanAttackOnServer() && Time.time >= stunnedUntil) {
             if (UsesDroppingProjectile) {
-                // Aim from below the bird at the position selected for this shot.
-                direction = targetPosition - GetProjectileOrigin(direction);
+                // Aim from the shared projectile origin at the position selected for this shot.
+                direction = targetPosition - GetProjectileOrigin();
                 direction.y = 0f;
                 direction = direction.sqrMagnitude > 0.0001f ? direction.normalized : transform.forward;
             }
@@ -381,13 +380,12 @@ public class EnemyAttackController : NetworkBehaviour {
         attackRoutine = null;
     }
 
-    private Vector3 GetProjectileOrigin(Vector3 direction) {
-        return UsesDroppingProjectile ? transform.position + simpleEnemyProjectileOffset :
-            transform.position + Vector3.up * 1.05f + direction * 0.35f;
+    private Vector3 GetProjectileOrigin() {
+        return transform.position + new Vector3(0f, 0.15f, 0f);
     }
 
     private void LaunchProjectile(Vector3 direction, float damage, float speed, float distance) {
-        Vector3 origin = GetProjectileOrigin(direction);
+        Vector3 origin = GetProjectileOrigin();
         int id = ++nextProjectileId;
         float lifetime = distance / Mathf.Max(0.1f, speed);
         bool useDroppingSprite = UsesDroppingProjectile;
