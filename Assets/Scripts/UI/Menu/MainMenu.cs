@@ -21,17 +21,39 @@ public class MainMenu : MonoBehaviour {
                 },
                 _ => {
                     backendAuthClient.ClearSession();
-                    menuManager.SwitchToPanel(PanelType.Auth);
+                    SwitchToLogin(PanelType.Multiplayer);
                 }
             );
             return;
         }
 
-        menuManager.SwitchToPanel(PanelType.Auth);
+        SwitchToLogin(PanelType.Multiplayer);
     }
 
     public void SwitchToOptions() {
         menuManager.SwitchToPanel(PanelType.Options);
+    }
+
+    public void SwitchToProfile() {
+        if (backendAuthClient != null && backendAuthClient.HasStoredSessionToken()) {
+            backendAuthClient.ValidateCurrentSession(
+                _ => {
+                    menuManager.SwitchToPanel(PanelType.Profile);
+                },
+                _ => {
+                    backendAuthClient.ClearSession();
+                    SwitchToLogin(PanelType.Profile);
+                }
+            );
+            return;
+        }
+
+        SwitchToLogin(PanelType.Profile);
+    }
+
+    private void SwitchToLogin(PanelType targetPanel) {
+        FindFirstObjectByType<AuthLogInMenu>(FindObjectsInactive.Include)?.SetSuccessPanel(targetPanel);
+        menuManager.SwitchToPanel(PanelType.Auth_LogIn);
     }
 
     public void QuitGame() {
