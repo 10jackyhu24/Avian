@@ -34,9 +34,9 @@ public class AuthMenu : MonoBehaviour {
         successPanel = targetPanel;
     }
 
-    public void SetChangePasswordInput(TMP_InputField oldPassword, TMP_InputField password, TMP_InputField check) {
+    public void SetChangePasswordInput(TMP_InputField oldpassword, TMP_InputField password, TMP_InputField check) {
         usernameInput = null;
-        oldPasswordInput = oldPassword;
+        oldPasswordInput = oldpassword;
         passwardInput = password;
         passwardCheck = check;
     }
@@ -51,9 +51,6 @@ public class AuthMenu : MonoBehaviour {
             return;
         }
 
-
-
-        SetStatus("Registering...");
         backendAuthClient.Register(username, password, HandleAuthSuccess, HandleAuthError);
     }
 
@@ -67,7 +64,6 @@ public class AuthMenu : MonoBehaviour {
             return;
         }
 
-        SetStatus("Logging in...");
         backendAuthClient.Login(username, password, HandleAuthSuccess, HandleAuthError);
     }
 
@@ -86,7 +82,7 @@ public class AuthMenu : MonoBehaviour {
         if (backendAuthClient == null) backendAuthClient = FindFirstObjectByType<BackendAuthClient>(FindObjectsInactive.Include);
         if (warningWindow == null) warningWindow = FindFirstObjectByType<WarningWindow>(FindObjectsInactive.Include);
         if (backendAuthClient == null || warningWindow == null || oldPasswordInput == null || passwardInput == null || passwardCheck == null) {
-            Debug.LogError($"Password change setup is incomplete: BackendAuthClient={backendAuthClient != null}, WarningWindow={warningWindow != null}, OldPassword_Input={oldPasswordInput != null}, NewPassword_Input={passwardInput != null}, NewPassword_Check={passwardCheck != null}.", this);
+            Debug.LogError($"Password change setup is incomplete: BackendAuthClient={backendAuthClient != null}, WarningWindow={warningWindow != null}, OldPassword_Input={oldPasswordInput != null}, Password_Input={passwardInput != null}, Password_Check={passwardCheck != null}.", this);
             return;
         }
         if (backendAuthClient.IsChangingPassword) return;
@@ -99,19 +95,19 @@ public class AuthMenu : MonoBehaviour {
         string oldPassword = oldPasswordInput.text;
         string newPassword = passwardInput.text;
         if (oldPassword.Length < 6 || oldPassword.Length > 128) {
-            warningWindow.Show("Password Change", "Enter your current password.");
+            warningWindow.Show("Password Change Error", "Enter your current password.");
             return;
         }
         if (newPassword.Length < 6 || newPassword.Length > 128) {
-            warningWindow.Show("Password Change", "Password must be 6 to 128 characters.");
+            warningWindow.Show("Password Change Error", "Password must be 6 to 128 characters.");
             return;
         }
         if (newPassword != passwardCheck.text) {
-            warningWindow.Show("Password Change", "Passwords do not match.");
+            warningWindow.Show("Password Change Error", "Passwords do not match.");
             return;
         }
         if (newPassword == oldPassword) {
-            warningWindow.Show("Password Change", "New password must be different from current password.");
+            warningWindow.Show("Password Change Error", "New password must be different from current password.");
             return;
         }
 
@@ -199,7 +195,6 @@ public class AuthMenu : MonoBehaviour {
     }
 
     private void HandleAuthSuccess(BackendAuthClient.AuthResponse response) {
-        SetStatus($"Authenticated as {response.username}.");
         RefreshSessionStatus();
         if (menuManager != null) {
             menuManager.SwitchToPanel(successPanel);
@@ -216,7 +211,6 @@ public class AuthMenu : MonoBehaviour {
             warningWindow.Show("Session Status", "No active session.");
             return;
         }
-        warningWindow.Show("Session Status", $"Active session for user ID: {backendAuthClient.CachedUserId}, Username: {backendAuthClient.CachedUsername}");
     }
 
     private void SetStatus(string message) {
