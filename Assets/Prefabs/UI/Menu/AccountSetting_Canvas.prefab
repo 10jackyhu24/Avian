@@ -1121,7 +1121,7 @@ Canvas:
   m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
-  m_SortingOrder: 0
+  m_SortingOrder: 1
   m_TargetDisplay: 0
 --- !u!114 &3206664772190944729
 MonoBehaviour:
@@ -1175,6 +1175,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 86514883b2a98fc4794aa2b42c93aed3, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  changePasswordPrefab: {fileID: 0}
 --- !u!1 &8119579483984757895
 GameObject:
   m_ObjectHideFlags: 0
