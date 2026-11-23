@@ -132,6 +132,8 @@ MonoBehaviour:
   moveSpeed: 6.5
   runSpeedMultiplier: 1.3
   gravity: -20
+  sprintDurationSeconds: 3
+  staminaRecoverySeconds: 8
   maxHealth: 100
   respawnDelaySeconds: 2
   combatController: {fileID: 0}
@@ -344,6 +346,8 @@ MonoBehaviour:
   portraitSize: 220
   playerHealthBarHeight: 440
   playerHealthBarWidth: 56
+  playerStaminaBarWidth: 18
+  playerStaminaBarGap: 12
   enemyPanelSize: {x: 580, y: 116}
   enemyPanelTopOffset: 30
 --- !u!1 &5279530500253440966

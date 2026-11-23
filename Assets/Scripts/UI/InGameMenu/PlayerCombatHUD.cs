@@ -10,11 +10,14 @@ public class PlayerCombatHUD : MonoBehaviour {
     [Min(80f)] [SerializeField] private float portraitSize = 220f;
     [Min(80f)] [SerializeField] private float playerHealthBarHeight = 440f;
     [Min(24f)] [SerializeField] private float playerHealthBarWidth = 56f;
+    [Min(8f)] [SerializeField] private float playerStaminaBarWidth = 18f;
+    [Min(0f)] [SerializeField] private float playerStaminaBarGap = 12f;
     [SerializeField] private Vector2 enemyPanelSize = new Vector2(580f, 116f);
     [Min(0f)] [SerializeField] private float enemyPanelTopOffset = 30f;
 
     private static readonly Color PanelColor = new Color(0.06f, 0.07f, 0.12f, 0.93f);
     private static readonly Color PlayerAccent = new Color(0.25f, 0.65f, 0.95f);
+    private static readonly Color StaminaColor = new Color(0.95f, 0.78f, 0.25f);
     private static readonly Color EnemyAccent = new Color(0.6f, 0.3f, 0.8f);
 
     private PlayerController player;
@@ -27,6 +30,7 @@ public class PlayerCombatHUD : MonoBehaviour {
     private Image playerPortrait;
     private Image enemyPortrait;
     private RectTransform playerFill;
+    private RectTransform staminaFill;
     private RectTransform enemyFill;
     private Image playerFillImage;
     private Image enemyFillImage;
@@ -62,6 +66,7 @@ public class PlayerCombatHUD : MonoBehaviour {
 
         SetPortrait(playerPortrait, characterVisual != null ? characterVisual.Portrait : playerRenderer?.sprite);
         SetHealth(playerFill, playerFillImage, playerHealthText, player.CurrentHealth, player.MaxHealth, true);
+        staminaFill.anchorMax = new Vector2(1f, HealthRatio(player.CurrentStamina, player.MaxStamina));
 
         EnemyHealthDrop enemy = sensor.Target;
         bool showEnemy = player.IsAlive && enemy != null && enemy.isActiveAndEnabled && enemy.IsAlive && enemy.IsSpawned;
@@ -115,6 +120,14 @@ public class PlayerCombatHUD : MonoBehaviour {
         playerHealthText = TextRect("Player Health", healthFrame, new Vector2(0.5f, 0f), new Vector2(0f, -10f),
             new Vector2(180f, 28f), "", 22, TextAnchor.MiddleCenter);
         playerHealthText.rectTransform.pivot = new Vector2(0.5f, 1f);
+
+        RectTransform staminaFrame = ImageRect("Player Vertical Stamina", safeRoot, Vector2.zero,
+            healthPosition + Vector2.right * (playerHealthBarWidth + playerStaminaBarGap),
+            new Vector2(playerStaminaBarWidth, playerHealthBarHeight), StaminaColor);
+        RectTransform staminaTrack = ImageRect("Track", staminaFrame, Vector2.zero, Vector2.one * 2f,
+            new Vector2(playerStaminaBarWidth - 4f, playerHealthBarHeight - 4f), PanelColor);
+        staminaFill = ImageRect("Fill", staminaTrack, Vector2.zero, Vector2.zero, Vector2.zero, StaminaColor);
+        staminaFill.anchorMax = Vector2.one;
 
         enemyPanel = ImageRect("Enemy Information", safeRoot, new Vector2(0.5f, 1f),
             new Vector2(0f, -enemyPanelTopOffset), enemyPanelSize, EnemyAccent);
