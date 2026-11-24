@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Netcode;
 using UnityEngine;
 
 [System.Flags]
@@ -112,6 +113,7 @@ public class TerrainController : MonoBehaviour {
     private HashSet<Vector2Int> inRangePositions = new HashSet<Vector2Int>();
     private readonly Dictionary<string, GameObject> spawnedStructuresByCell = new Dictionary<string, GameObject>();
     private readonly List<Vector3> spawnedStructurePositions = new List<Vector3>();
+    private readonly List<Vector3> outskirtRespawnPositions = new List<Vector3>();
     private HashSet<string> activeStructureKeys = new HashSet<string>();
     public static TerrainController Instance { get; private set; }
 
@@ -268,6 +270,7 @@ public class TerrainController : MonoBehaviour {
         inRangePositions.Clear();
         spawnedStructuresByCell.Clear();
         spawnedStructurePositions.Clear();
+        outskirtRespawnPositions.Clear();
         activeStructureKeys.Clear();
         // Initialize lastCameraGridPos using integer grid coordinates consistent with Update()
         lastCameraGridPos = new Vector3Int(0, 0, 0);
@@ -611,7 +614,54 @@ public class TerrainController : MonoBehaviour {
         structure.transform.parent = structureParent.transform;
         structure.name = $"{option.structureName}_{cell.x}_{cell.y}";
         spawnedStructurePositions.Add(worldPosition);
+        RegisterOutskirtRespawnPosition(option, structure);
+        TrySpawnStructureMerchant(structure);
         return structure;
+    }
+
+    public bool TryGetNearestOutskirtRespawnPosition(Vector3 origin, out Vector3 position) {
+        position = default;
+        float nearestDistanceSquared = float.MaxValue;
+
+        foreach (Vector3 candidate in outskirtRespawnPositions) {
+            Vector3 offset = candidate - origin;
+            offset.y = 0f;
+            if (offset.sqrMagnitude >= nearestDistanceSquared) {
+                continue;
+            }
+
+            nearestDistanceSquared = offset.sqrMagnitude;
+            position = candidate;
+        }
+
+        return nearestDistanceSquared < float.MaxValue;
+    }
+
+    private void RegisterOutskirtRespawnPosition(
+        StructureSpawnOption option,
+        GameObject structure) {
+        if (option.structureName != "Outskirt House") {
+            return;
+        }
+
+        Transform spawnPoint = structure.transform.Find("PlayerRespawnPoint");
+        Vector3 position = spawnPoint != null
+            ? spawnPoint.position
+            : structure.transform.position + Vector3.up * 4f;
+        outskirtRespawnPositions.Add(position);
+    }
+
+    private void TrySpawnStructureMerchant(GameObject structure) {
+        Transform spawnPoint = structure.transform.Find("MerchantSpawnPoint");
+        if (spawnPoint == null) {
+            return;
+        }
+
+        MerchantSpawner.TrySpawnMerchantAt(
+            NetworkManager.Singleton,
+            spawnPoint.position,
+            this
+        );
     }
 
     private Vector3 GridToWorldPosition(int x, int z) {

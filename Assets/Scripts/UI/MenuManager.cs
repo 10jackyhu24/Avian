@@ -8,12 +8,17 @@ public enum PanelType {
     MultiplayerRoomList,
     CreateWorldOptions,
     Options,
-    Auth,
+    Auth_LogIn,
     MultiplayerMatchmaking,
     PauseMenu,
     BagMenu,
     GameMenu,
     CharacterSelection,
+    Profile,
+    ScoreBoard,
+    AccountSetting,
+    Auth_Register,
+    ChangePassward,
 }
 
 public class MenuManager : MonoBehaviour {
@@ -60,6 +65,12 @@ public class MenuManager : MonoBehaviour {
 
         pageHistoryStack.Push(panelType);
         SetActivePanelOnly(panelType);
+    }
+
+    public void RegisterPanel(PanelType panelType, GameObject panelObject) {
+        if (panelObject != null && !panelDict.ContainsKey(panelType)) {
+            panelDict.Add(panelType, panelObject);
+        }
     }
 
     public void SetActivePanelOnly(PanelType panelType) {

@@ -26,6 +26,10 @@ public class PauseMenu : MonoBehaviour {
     }
 
     public void Leave() {
+        if (menuManager == null) {
+            menuManager = FindFirstObjectByType<MenuManager>();
+        }
+
         LeaveCurrentGame();
     }
 
@@ -92,9 +96,11 @@ public class PauseMenu : MonoBehaviour {
 
         GameState.ResetWorld();
 
-        menuManager.HideMenu();
-        menuManager.ClearHistory();
-        menuManager.SwitchToPanel(PanelType.MainMenu);
+        if (menuManager != null) {
+            menuManager.HideMenu();
+            menuManager.ClearHistory();
+            menuManager.SwitchToPanel(PanelType.MainMenu);
+        }
     }
 
 }

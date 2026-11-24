@@ -1,0 +1,15 @@
+{
+    "name": "Avian.Tests.PlayMode",
+    "references": [
+        "UnityEngine.TestRunner",
+        "Unity.Netcode.Runtime"
+    ],
+    "includePlatforms": [],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

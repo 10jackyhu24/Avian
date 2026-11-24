@@ -62,6 +62,7 @@ services:
       AVIAN_GAME_GATEWAY_HOST: ${AVIAN_GAME_GATEWAY_HOST:-avian-cluster-control-plane}
       AVIAN_ACME_CA: ${AVIAN_ACME_CA:-https://acme-v02.api.letsencrypt.org/directory}
     ports:
+      - "80:8000"
       - "127.0.0.1:${AVIAN_HTTP_PORT:-8000}:8000"
       - "${AVIAN_HTTPS_PORT:-8443}:${AVIAN_HTTPS_PORT:-8443}"
     volumes:

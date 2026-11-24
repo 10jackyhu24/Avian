@@ -33,7 +33,7 @@ public class SeededEnemySpawner : MonoBehaviour {
 
     [Header("Population")]
     [SerializeField] private float activationRadius = 80f;
-    [SerializeField] private float deactivationRadius = 110f;
+    [SerializeField] private float deactivationRadius = 45f;
     [SerializeField] private float populationTickInterval = 0.75f;
     [Min(0)] [SerializeField] private int maxActiveEnemies = 20;
 
@@ -51,7 +51,46 @@ public class SeededEnemySpawner : MonoBehaviour {
         new Dictionary<EnemyHealthDrop, EnemySpawnRecord>();
     private NetworkManager activeNetworkManager;
     private bool hasInitialized;
+    private bool populationEnabled = true;
     private float nextPopulationTickTime;
+
+    public void ConfigurePopulation(
+        GameObject prefab,
+        int enemyCountPerBiome,
+        float activationDistance,
+        float deactivationDistance,
+        int activeLimit) {
+        if (hasInitialized) {
+            return;
+        }
+
+        enemyPrefab = prefab;
+        activationRadius = Mathf.Max(0f, activationDistance);
+        deactivationRadius = Mathf.Max(activationRadius, deactivationDistance);
+        maxActiveEnemies = Mathf.Max(0, activeLimit);
+
+        int count = Mathf.Max(0, enemyCountPerBiome);
+        biomeSpawnRules = new[] {
+            CreateSpawnRule("Grassland", TerrainBiomeMask.Grassland, count),
+            CreateSpawnRule("Desert", TerrainBiomeMask.Desert, count),
+            CreateSpawnRule("Rainforest", TerrainBiomeMask.Rainforest, count),
+            CreateSpawnRule("Mountain", TerrainBiomeMask.Mountain, count)
+        };
+    }
+
+    public void SetActiveLimit(int activeLimit) {
+        maxActiveEnemies = Mathf.Max(0, activeLimit);
+        if (hasInitialized) {
+            RefreshPopulation();
+        }
+    }
+
+    public void StopPopulation() {
+        populationEnabled = false;
+        if (hasInitialized) {
+            RefreshPopulation();
+        }
+    }
 
     public void SpawnEnemies(NetworkManager networkManager, int mapSeed) {
         if (hasInitialized) {
@@ -128,6 +167,7 @@ public class SeededEnemySpawner : MonoBehaviour {
         int activeEnemyCount = CountActiveEnemies();
         int activatedCount = 0;
         int deactivatedCount = 0;
+        float effectiveDeactivationRadius = Mathf.Max(activationRadius, deactivationRadius);
 
         foreach (EnemySpawnRecord record in spawnRecords) {
             if (record.isDefeated) {
@@ -135,12 +175,22 @@ public class SeededEnemySpawner : MonoBehaviour {
             }
 
             if (record.activeEnemy != null) {
-                if (!IsAnyAlivePlayerWithin(players, record.activeEnemy.transform.position, deactivationRadius)) {
+                if (!populationEnabled ||
+                    activeEnemyCount > maxActiveEnemies ||
+                    !IsTerrainLoaded(record.activeEnemy.transform.position) ||
+                    !IsAnyAlivePlayerWithin(
+                    players,
+                    record.activeEnemy.transform.position,
+                    effectiveDeactivationRadius)) {
                     DeactivateEnemy(record);
                     activeEnemyCount = Mathf.Max(0, activeEnemyCount - 1);
                     deactivatedCount++;
                 }
 
+                continue;
+            }
+
+            if (!populationEnabled) {
                 continue;
             }
 
@@ -152,7 +202,11 @@ public class SeededEnemySpawner : MonoBehaviour {
                 continue;
             }
 
-            SpawnEnemy(record);
+            if (!TryGetLoadedSpawnPosition(record.position, out Vector3 spawnPosition)) {
+                continue;
+            }
+
+            SpawnEnemy(record, spawnPosition);
             activeEnemyCount++;
             activatedCount++;
         }
@@ -163,6 +217,17 @@ public class SeededEnemySpawner : MonoBehaviour {
                 this
             );
         }
+    }
+
+    private static BiomeEnemySpawnRule CreateSpawnRule(
+        string ruleName,
+        TerrainBiomeMask biomeMask,
+        int enemyCount) {
+        return new BiomeEnemySpawnRule {
+            name = ruleName,
+            biomeMask = biomeMask,
+            enemyCount = enemyCount
+        };
     }
 
     private int CountActiveEnemies() {
@@ -224,8 +289,30 @@ public class SeededEnemySpawner : MonoBehaviour {
         return (allowedBiomes & biome) != 0;
     }
 
-    private void SpawnEnemy(EnemySpawnRecord record) {
-        GameObject enemyInstance = Instantiate(enemyPrefab, record.position, Quaternion.identity);
+    private bool TryGetLoadedSpawnPosition(Vector3 candidate, out Vector3 spawnPosition) {
+        TerrainController terrain = TerrainController.Instance;
+        if (terrain == null) {
+            spawnPosition = candidate;
+            return true;
+        }
+
+        if (!terrain.TryGetClearGroundPosition(candidate, out Vector3 groundPosition)) {
+            spawnPosition = default;
+            return false;
+        }
+
+        spawnPosition = groundPosition + Vector3.up * 1.05f;
+        return true;
+    }
+
+    private static bool IsTerrainLoaded(Vector3 position) {
+        TerrainController terrain = TerrainController.Instance;
+        return terrain == null || terrain.IsWorldPositionLoaded(position);
+    }
+
+    private void SpawnEnemy(EnemySpawnRecord record, Vector3 spawnPosition) {
+        record.position = spawnPosition;
+        GameObject enemyInstance = Instantiate(enemyPrefab, spawnPosition, Quaternion.identity);
         enemyInstance.GetComponent<EnemyController>()?.ConfigureArchetype(record.archetype);
         record.activeEnemy = enemyInstance;
 

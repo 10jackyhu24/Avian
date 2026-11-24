@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import psycopg2
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 
@@ -21,6 +22,7 @@ PBKDF2_ITERATIONS = int(os.getenv("PASSWORD_HASH_ITERATIONS", "210000"))
 SQL_DIR = Path(__file__).resolve().parent / "sql"
 
 app = FastAPI(title="Avian Lobby", version="1.0.0")
+session_bearer = HTTPBearer(auto_error=False)
 
 
 class RegisterRequest(BaseModel):
@@ -31,6 +33,11 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=32)
     password: str = Field(min_length=6, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str = Field(min_length=6, max_length=128)
+    new_password: str = Field(min_length=6, max_length=128)
 
 
 def load_sql(filename: str) -> str:
@@ -108,6 +115,17 @@ def health():
     return {"ok": True}
 
 
+@app.get("/auth/health/database")
+def database_health():
+    try:
+        with db_cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except psycopg2.Error:
+        raise HTTPException(status_code=503, detail="Database unavailable") from None
+    return {"ok": True, "database": "ok"}
+
+
 @app.post("/auth/register")
 def register(payload: RegisterRequest):
     if get_user_by_username(payload.username):
@@ -175,4 +193,61 @@ def validate(token: str):
 @app.get("/me")
 def me(token: str):
     return validate(token)
+
+
+@app.delete("/auth/account")
+def delete_account(
+    credentials: HTTPAuthorizationCredentials | None = Depends(session_bearer),
+):
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Bearer session token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(load_sql("delete_user_by_session.sql"), (credentials.credentials,))
+        user = cursor.fetchone()
+        if user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid or expired session",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        user_id, username = user
+        cursor.execute(load_sql("count_user_sessions.sql"), (user_id,))
+        remaining_sessions = cursor.fetchone()[0]
+        if remaining_sessions != 0:
+            raise HTTPException(status_code=500, detail="Account deletion did not remove all sessions")
+
+    return {"deleted": True, "user_id": user_id, "username": username, "remaining_sessions": remaining_sessions}
+
+
+@app.post("/auth/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials | None = Depends(session_bearer),
+):
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Bearer session token required")
+
+    with db_cursor(commit=True) as cursor:
+        cursor.execute(load_sql("select_user_by_valid_session_for_update.sql"), (credentials.credentials,))
+        user = cursor.fetchone()
+        if user is None:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+        user_id, username, old_salt_hex, old_hash_hex = user
+        if not _verify_password(payload.old_password, old_salt_hex, old_hash_hex):
+            raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if payload.old_password == payload.new_password:
+            raise HTTPException(status_code=400, detail="New password must be different from current password")
+
+        salt_hex, hash_hex = _hash_password(payload.new_password)
+        cursor.execute(load_sql("update_user_password.sql"), (salt_hex, hash_hex, user_id))
+        cursor.execute(load_sql("delete_user_sessions.sql"), (user_id,))
+
+    return {"changed": True, "user_id": user_id, "username": username}
 

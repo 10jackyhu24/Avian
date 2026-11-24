@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using Unity.Netcode;
 using UnityEngine;
 
@@ -26,12 +27,14 @@ public class EnemyHealthDrop : NetworkBehaviour {
     private float localHealth;
     private bool isDead;
 
+
     public float CurrentHealth => IsSpawned ? networkHealth.Value : localHealth;
     public float MaxHealth => maxHealth;
     public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? name.Replace("(Clone)", "") : displayName;
     public Sprite Portrait => portrait != null ? portrait : GetComponentInChildren<SpriteRenderer>()?.sprite;
     public bool IsAlive => !isDead && CurrentHealth > 0f;
     public event Action<EnemyHealthDrop> Died;
+    public static event Action<EnemyHealthDrop, ulong, bool> EnemyDefeated;
 
     private void Awake() {
         localHealth = maxHealth;
@@ -57,13 +60,17 @@ public class EnemyHealthDrop : NetworkBehaviour {
 
     private void LateUpdate() {
         if (!IsAlive) {
+            ApplyDeathLocally();
             WorldHealthBarGUI.Remove(this);
             return;
         }
 
+        SpriteRenderer visual = GetComponentInChildren<SpriteRenderer>();
+        Vector3 barPosition = transform.position + healthBarOffset;
+        if (visual != null) barPosition.y = Mathf.Max(barPosition.y, visual.bounds.max.y + 0.2f);
         WorldHealthBarGUI.Draw(
             this,
-            transform.position + healthBarOffset,
+            barPosition,
             CurrentHealth,
             maxHealth,
             new Color(0.9f, 0.15f, 0.12f),
@@ -85,7 +92,7 @@ public class EnemyHealthDrop : NetworkBehaviour {
         Debug.Log($"[EnemyHealthDrop] {name} took {damage} damage from client {attackerClientId}. HP={newHealth}/{maxHealth}", this);
 
         if (newHealth <= 0f) {
-            Die(attackerClientId);
+            Die(attackerClientId, awardsScore: true);
             return;
         }
 
@@ -101,7 +108,9 @@ public class EnemyHealthDrop : NetworkBehaviour {
         if (!CanServerTakeDamage() || isDead || damage <= 0f) return;
         float newHealth = Mathf.Max(0f, CurrentHealth - damage);
         SetCurrentHealth(newHealth);
-        if (newHealth <= 0f) Die(Unity.Netcode.NetworkManager.ServerClientId);
+        if (newHealth <= 0f) {
+            Die(Unity.Netcode.NetworkManager.ServerClientId, awardsScore: false);
+        }
     }
 
     private void SetCurrentHealth(float value) {
@@ -111,20 +120,42 @@ public class EnemyHealthDrop : NetworkBehaviour {
         }
     }
 
-    private void Die(ulong attackerClientId) {
+    private void ApplyDeathLocally() {
+        if (isDead) return;
+        isDead = true;
+
+        EnemyAttackController attack = GetComponent<EnemyAttackController>();
+        if (attack != null) {
+            attack.StopAllCoroutines();
+            attack.enabled = false;
+        }
+
+        Animator animator = GetComponentInChildren<Animator>();
+        if (animator != null) {
+            animator.SetBool("IsDead", true);
+        }
+    }
+
+    private void Die(ulong attackerClientId, bool awardsScore) {
         if (isDead) {
             return;
         }
-
-        isDead = true;
+        ApplyDeathLocally();
         Died?.Invoke(this);
+        EnemyDefeated?.Invoke(this, attackerClientId, awardsScore);
         DropCoins();
         Debug.Log($"[EnemyHealthDrop] {name} defeated by client {attackerClientId}.", this);
+
+        StartCoroutine(RemoveAfterDeath());
+    }
+
+    private IEnumerator RemoveAfterDeath() {
+        yield return new WaitForSeconds(1.5f);
 
         NetworkObject networkObject = GetComponent<NetworkObject>();
         if (networkObject != null && networkObject.IsSpawned) {
             networkObject.Despawn(true);
-            return;
+            yield break;
         }
 
         if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
@@ -145,20 +176,10 @@ public class EnemyHealthDrop : NetworkBehaviour {
             Mathf.Max(minCoinsDropped, maxCoinsDropped) + 1
         );
 
-        for (int i = 0; i < coinCount; i++) {
-            Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
-            Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
-            GameObject coin = Instantiate(coinPickupPrefab, spawnPosition, Quaternion.identity);
-
-            NetworkObject coinNetworkObject = coin.GetComponent<NetworkObject>();
-            if (NetworkManager.Singleton != null && NetworkManager.Singleton.IsListening) {
-                if (coinNetworkObject != null) {
-                    coinNetworkObject.Spawn(true);
-                }
-                else {
-                    Debug.LogWarning("[EnemyHealthDrop] Coin prefab is missing NetworkObject, so multiplayer clients will not see the spawned coin.", coin);
-                }
-            }
+        Vector2 offset = UnityEngine.Random.insideUnitCircle * dropScatterRadius;
+        Vector3 spawnPosition = transform.position + new Vector3(offset.x, dropHeightOffset, offset.y);
+        if (coinCount > 0 && !CoinPickup.SpawnStack(coinPickupPrefab, spawnPosition, coinCount)) {
+            Debug.LogWarning("[EnemyHealthDrop] Could not create coin stack.", this);
         }
     }
 

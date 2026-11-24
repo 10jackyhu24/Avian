@@ -1,0 +1,50 @@
+name: Backend connection test
+
+on:
+  push:
+    paths:
+      - "backend/lobby/**"
+      - "backend/Caddyfile"
+      - "backend/docker-compose.yaml"
+      - "tests/test_backend*.py"
+      - "tests/backend_api.py"
+      - "tests/README-backend.md"
+      - ".github/workflows/BackendConnection.yml"
+  pull_request:
+    paths:
+      - "backend/lobby/**"
+      - "backend/Caddyfile"
+      - "backend/docker-compose.yaml"
+      - "tests/test_backend*.py"
+      - "tests/backend_api.py"
+      - "tests/README-backend.md"
+      - ".github/workflows/BackendConnection.yml"
+  workflow_dispatch:
+
+jobs:
+  backend-connection:
+    runs-on: ubuntu-latest
+    env:
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check backend connection
+        run: python -m unittest discover -s tests -p 'test_backend_connection.py'
+
+  database-tests:
+    name: Database, user creation and account deletion
+    needs: backend-connection
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BACKEND_HEALTH_URL: ${{ vars.BACKEND_HEALTH_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the three database and account lifecycle checks
+        run: python -m unittest discover -s tests -p 'test_backend_database.py' -v

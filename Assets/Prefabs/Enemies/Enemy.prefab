@@ -189,24 +189,25 @@ MonoBehaviour:
   patrolRadius: 8
   patrolPointReachedDistance: 0.75
   patrolPauseDuration: 0.75
-  detectionRange: 12
   chaseSpeed: 4.5
-  chaseDuration: 5
-  chaseCooldown: 3
   targetRefreshInterval: 0.25
   gravity: -20
   knockbackDistance: 3
   knockbackDuration: 1
   firstStageDistanceShare: 0.6
   firstStageTimeShare: 0.35
-  firstStageLiftHeight: 0.5
+  firstStageLiftHeight: 0
   disableWhenOutOfView: 1
   visibilityBoundsSize: {x: 2, y: 3, z: 2}
   visibilityCheckInterval: 0.2
-  raiderAnimatorController: {fileID: 9100000, guid: abf31d1f71de5cdea2519b1c4e837840, type: 2}
-  spitterAnimatorController: {fileID: 9100000, guid: 4d58ff85629755b2b17d822fd6ca095e, type: 2}
-  miniBossAnimatorController: {fileID: 9100000, guid: 7c7b2670249352589dc9e13ddc767346, type: 2}
-  bossAnimatorController: {fileID: 9100000, guid: 7ba8a07e8a9220449853c3f56e39d012, type: 2}
+  raiderAnimatorController: {fileID: 9100000, guid: abf31d1f71de5cdea2519b1c4e837840,
+    type: 2}
+  spitterAnimatorController: {fileID: 9100000, guid: 4d58ff85629755b2b17d822fd6ca095e,
+    type: 2}
+  miniBossAnimatorController: {fileID: 9100000, guid: 7c7b2670249352589dc9e13ddc767346,
+    type: 2}
+  bossAnimatorController: {fileID: 9100000, guid: 7ba8a07e8a9220449853c3f56e39d012,
+    type: 2}
 --- !u!114 &6988774309905714176
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -313,6 +314,11 @@ MonoBehaviour:
   defaultWindup: 0.3
   hitStunDuration: 0.4
   defaultCenterOffset: {x: 0, y: 1, z: 0}
+  simpleEnemyProjectilePrefab: {fileID: 6030480073088594671, guid: 583ec581efeac1649ae9a19462f1559a,
+    type: 3}
+  simpleEnemyProjectileDistance: 4
+  simpleEnemyProjectileRadius: 0.18
+  simpleEnemyProjectileScale: 2
   warningColor: {r: 1, g: 0.15, b: 0.05, a: 0.35}
   warningSegments: 32
   warningHeight: 0.12
@@ -350,18 +356,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2580887161878038996}
   m_LocalEulerAnglesHint: {x: 46.066, y: 0, z: 0}
---- !u!114 &9181994515459476516
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 9181994515459476515}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 82e9ab0367e84d2f9f34e5514e6710a2, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::CameraFacingSpriteVisual
 --- !u!212 &5341462175786336699
 SpriteRenderer:
   serializedVersion: 2
@@ -443,3 +437,15 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
+--- !u!114 &9181994515459476516
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 9181994515459476515}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 82e9ab0367e84d2f9f34e5514e6710a2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraFacingSpriteVisual

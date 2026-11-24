@@ -19,6 +19,10 @@ public class PlayerController : NetworkBehaviour {
     [SerializeField] private float runSpeedMultiplier = 1.75f;
     [SerializeField] private float gravity = -20f;
 
+    [Header("Stamina")]
+    [Min(0.1f)] [SerializeField] private float sprintDurationSeconds = 3f;
+    [Min(0.1f)] [SerializeField] private float staminaRecoverySeconds = 8f;
+
     [Header("Health")]
     [SerializeField] private float maxHealth = 100f;
     [SerializeField] private float respawnDelaySeconds = 2f;
@@ -65,6 +69,12 @@ public class PlayerController : NetworkBehaviour {
     private GameMenu gameMenu;
     private UI_BagManager bagManager;
     private readonly NetworkVariable<float> currentHealth = new NetworkVariable<float>(
+        readPerm: NetworkVariableReadPermission.Everyone,
+        writePerm: NetworkVariableWritePermission.Server
+    );
+
+    private readonly NetworkVariable<float> currentStamina = new NetworkVariable<float>(
+        100f,
         readPerm: NetworkVariableReadPermission.Everyone,
         writePerm: NetworkVariableWritePermission.Server
     );
@@ -117,7 +127,10 @@ public class PlayerController : NetworkBehaviour {
 
     public float CurrentHealth => currentHealth.Value;
     public float MaxHealth => maxHealth;
+    public float CurrentStamina => currentStamina.Value;
+    public float MaxStamina => 100f;
     public bool IsAlive => currentHealth.Value > 0;
+    public Vector3 SpawnPosition => spawnPosition;
 
     private void Awake() {
         characterController = GetComponent<CharacterController>();
@@ -152,6 +165,7 @@ public class PlayerController : NetworkBehaviour {
         if (IsServer) {
             spawnPosition = transform.position;
             currentHealth.Value = maxHealth;
+            currentStamina.Value = MaxStamina;
         }
 
         currentHealth.OnValueChanged += OnHealthChanged;
@@ -187,6 +201,24 @@ public class PlayerController : NetworkBehaviour {
 
         if (gameMenu != null && gameMenu.SelectedIndex >= 0) {
             HandleSelectedIndexChange(gameMenu.SelectedIndex);
+        }
+    }
+
+    public void SetSpawnPositionOnServer(Vector3 position) {
+        if (!IsServer) {
+            return;
+        }
+
+        spawnPosition = position;
+        bool controllerWasEnabled = characterController != null && characterController.enabled;
+        if (controllerWasEnabled) {
+            characterController.enabled = false;
+        }
+
+        transform.position = position;
+
+        if (controllerWasEnabled) {
+            characterController.enabled = true;
         }
     }
 
@@ -250,8 +282,10 @@ public class PlayerController : NetworkBehaviour {
         InputAction attackAction = inputActions.Player.Attack;
 
         if (!GameState.isPlaying || PauseMenu.isOpen || BagMenu.IsOpen ||
-            MerchantMenu.IsOpen || !IsAlive) {
-            SendMovementAtNetworkRate(0f, 0f, false);
+            MerchantMenu.IsOpen || !IsAlive ||
+            (SinglePlayerMatchController.Instance != null &&
+             SinglePlayerMatchController.Instance.IsMatchOver)) {
+            SendMovementAtNetworkRate(0f, 0f, runPressed);
             CancelPreparedAttack();
             return;
         }
@@ -268,7 +302,7 @@ public class PlayerController : NetworkBehaviour {
         SendMovementAtNetworkRate(
             isMovementLocked ? 0f : moveInput.x,
             isMovementLocked ? 0f : moveInput.y,
-            !isMovementLocked && runPressed
+            runPressed
         );
     }
 
@@ -549,6 +583,7 @@ public class PlayerController : NetworkBehaviour {
 
     [ServerRpc]
     private void SubmitMovementServerRpc(float horizontal, float vertical, bool runPressed) {
+        runRequested = runPressed;
         if (currentHealth.Value <= 0 || IsAttackMovementLockedOnServer()) {
             StopMovementOnServer();
             return;
@@ -556,7 +591,6 @@ public class PlayerController : NetworkBehaviour {
 
         moveInputX = Mathf.Clamp(horizontal, -1f, 1f);
         moveInputZ = Mathf.Clamp(vertical, -1f, 1f);
-        runRequested = runPressed;
     }
 
     [ClientRpc]
@@ -1885,7 +1919,7 @@ public class PlayerController : NetworkBehaviour {
 
         //moveDirection = new Vector3(moveInputX, 0f, moveInputZ).normalized;
         bool isMoving = moveDirection.sqrMagnitude > 0f;
-        bool isRunning = isMoving && runRequested;
+        float sprintFraction = UpdateStaminaOnServer(isMoving, Time.deltaTime);
 
         isMovingVisual.Value = isMoving;
         if (isMoving && Mathf.Abs(moveInputX) > 0f) {
@@ -1894,7 +1928,7 @@ public class PlayerController : NetworkBehaviour {
 
         verticalVelocity += gravity * Time.deltaTime;
 
-        float currentMoveSpeed = isRunning ? moveSpeed * runSpeedMultiplier : moveSpeed;
+        float currentMoveSpeed = moveSpeed * Mathf.Lerp(1f, runSpeedMultiplier, sprintFraction);
         Vector3 velocity = moveDirection * currentMoveSpeed;
         velocity.y = verticalVelocity;
         characterController.Move(velocity * Time.deltaTime);
@@ -1904,10 +1938,26 @@ public class PlayerController : NetworkBehaviour {
         return Time.time < attackMovementLockedUntil;
     }
 
+    // Returns the fraction of this frame that the remaining stamina can fund.
+    private float UpdateStaminaOnServer(bool isMoving, float deltaTime) {
+        if (deltaTime <= 0f) return 0f;
+        if (!runRequested) {
+            currentStamina.Value = Mathf.MoveTowards(currentStamina.Value, MaxStamina,
+                MaxStamina * deltaTime / Mathf.Max(0.1f, staminaRecoverySeconds));
+            return 0f;
+        }
+        if (!isMoving || currentStamina.Value <= 0f) return 0f;
+
+        float duration = Mathf.Max(0.1f, sprintDurationSeconds);
+        float sprintTime = Mathf.Min(deltaTime, currentStamina.Value / MaxStamina * duration);
+        currentStamina.Value = Mathf.Max(0f, currentStamina.Value - MaxStamina * sprintTime / duration);
+        return sprintTime / deltaTime;
+    }
+
     private void StopMovementOnServer() {
         moveInputX = 0f;
         moveInputZ = 0f;
-        runRequested = false;
+        // An attack stopping movement is not a release of the sprint button.
 
         if (IsServer) {
             isMovingVisual.Value = false;
@@ -1930,11 +1980,11 @@ public class PlayerController : NetworkBehaviour {
     }
 
     private void ApplyDamage(float amount, string attackerName) {
-        if (!IsServer || currentHealth.Value <= 0) {
+        if (!IsServer || currentHealth.Value <= 0 || amount <= 0f) {
             return;
         }
 
-        currentHealth.Value = Mathf.Max(0, currentHealth.Value - amount);
+        currentHealth.Value = PlayerHealthMath.AfterDamage(currentHealth.Value, amount);
 
         if (currentHealth.Value > 0) {
             return;
@@ -1946,14 +1996,29 @@ public class PlayerController : NetworkBehaviour {
             StopCoroutine(respawnCoroutine);
         }
 
-        respawnCoroutine = StartCoroutine(RespawnAfterDelay());
+        Vector3 respawnPosition = spawnPosition;
+        SinglePlayerMatchController matchController = SinglePlayerMatchController.Instance;
+        if (matchController != null &&
+            matchController.ControlsRespawning &&
+            !matchController.TryHandlePlayerDefeat(this, out respawnPosition)) {
+            return;
+        }
+
+        respawnCoroutine = StartCoroutine(RespawnAfterDelay(respawnPosition));
     }
 
-    private IEnumerator RespawnAfterDelay() {
+    private IEnumerator RespawnAfterDelay(Vector3 respawnPosition) {
         yield return new WaitForSeconds(respawnDelaySeconds);
 
+        if (SinglePlayerMatchController.Instance != null &&
+            SinglePlayerMatchController.Instance.ControlsRespawning &&
+            SinglePlayerMatchController.Instance.IsMatchOver) {
+            respawnCoroutine = null;
+            yield break;
+        }
+
         characterController.enabled = false;
-        transform.position = spawnPosition;
+        transform.position = respawnPosition;
         verticalVelocity = 0f;
         moveInputX = 0f;
         moveInputZ = 0f;
@@ -1961,6 +2026,7 @@ public class PlayerController : NetworkBehaviour {
         characterController.enabled = true;
 
         currentHealth.Value = maxHealth;
+        currentStamina.Value = MaxStamina;
         respawnCoroutine = null;
     }
 

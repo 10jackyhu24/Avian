@@ -28,6 +28,26 @@ public class BackendAuthClient : MonoBehaviour {
     }
 
     [Serializable]
+    public class DeleteAccountResponse {
+        public bool deleted;
+        public int user_id;
+        public string username;
+    }
+
+    [Serializable]
+    public class ChangePasswordRequest {
+        public string old_password;
+        public string new_password;
+    }
+
+    [Serializable]
+    public class ChangePasswordResponse {
+        public bool changed;
+        public int user_id;
+        public string username;
+    }
+
+    [Serializable]
     public class ErrorResponse {
         public string detail;
     }
@@ -38,6 +58,10 @@ public class BackendAuthClient : MonoBehaviour {
     public string SessionToken { get; private set; }
     public int CachedUserId { get; private set; }
     public string CachedUsername { get; private set; } = string.Empty;
+    public bool IsLoggedIn => HasStoredSessionToken() && CachedUserId > 0 && !string.IsNullOrWhiteSpace(CachedUsername);
+    public string CurrentUsername => IsLoggedIn ? CachedUsername : string.Empty;
+    public bool IsDeletingAccount { get; private set; }
+    public bool IsChangingPassword { get; private set; }
 
     private const string SessionTokenKey = "";
 
@@ -63,6 +87,14 @@ public class BackendAuthClient : MonoBehaviour {
 
     public Coroutine ValidateCurrentSession(Action<ValidateResponse> onSuccess, Action<string> onError) {
         return StartCoroutine(ValidateSessionRoutine(onSuccess, onError));
+    }
+
+    public Coroutine DeleteCurrentAccount(Action<DeleteAccountResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(DeleteAccountRoutine(onSuccess, onError));
+    }
+
+    public Coroutine ChangePassword(string oldPassword, string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
+        return StartCoroutine(ChangePasswordRoutine(oldPassword, newPassword, onSuccess, onError));
     }
 
     public bool HasStoredSessionToken() {
@@ -133,6 +165,108 @@ public class BackendAuthClient : MonoBehaviour {
         CachedUserId = response.user_id;
         CachedUsername = response.username;
         onSuccess?.Invoke(response);
+    }
+
+    private IEnumerator DeleteAccountRoutine(Action<DeleteAccountResponse> onSuccess, Action<string> onError) {
+        if (IsDeletingAccount) {
+            onError?.Invoke("Account deletion is already in progress.");
+            yield break;
+        }
+        if (!HasStoredSessionToken()) {
+            onError?.Invoke("Please log in before deleting your account.");
+            yield break;
+        }
+
+        string token = SessionToken;
+        string url = $"{(string.IsNullOrWhiteSpace(baseUrl) ? URL.BaseUrl : baseUrl)}{URL.AuthDeleteAccountPath}";
+        IsDeletingAccount = true;
+        try {
+            using UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbDELETE);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = 15;
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("Accept", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success) {
+                if (request.responseCode == 401 && SessionToken == token) {
+                    ClearSession();
+                }
+                onError?.Invoke(ExtractErrorMessage(request));
+                yield break;
+            }
+
+            DeleteAccountResponse response = null;
+            try {
+                response = JsonUtility.FromJson<DeleteAccountResponse>(request.downloadHandler.text);
+            } catch (ArgumentException) {
+                // Report a malformed response without treating the account as deleted.
+            }
+            if (response == null || !response.deleted || response.user_id <= 0) {
+                onError?.Invoke("The server returned an invalid account deletion response.");
+                yield break;
+            }
+
+            if (SessionToken == token) {
+                ClearSession();
+            }
+            onSuccess?.Invoke(response);
+        } finally {
+            IsDeletingAccount = false;
+        }
+    }
+
+    private IEnumerator ChangePasswordRoutine(string oldPassword, string newPassword, Action<ChangePasswordResponse> onSuccess, Action<string> onError) {
+        if (IsChangingPassword) {
+            onError?.Invoke("Password change is already in progress.");
+            yield break;
+        }
+        if (!HasStoredSessionToken()) {
+            onError?.Invoke("Please log in before changing your password.");
+            yield break;
+        }
+
+        string token = SessionToken;
+        string url = $"{(string.IsNullOrWhiteSpace(baseUrl) ? URL.BaseUrl : baseUrl)}{URL.AuthChangePasswordPath}";
+        byte[] payload = Encoding.UTF8.GetBytes(JsonUtility.ToJson(new ChangePasswordRequest { old_password = oldPassword, new_password = newPassword }));
+        IsChangingPassword = true;
+        try {
+            using UnityWebRequest request = new UnityWebRequest(url, UnityWebRequest.kHttpVerbPOST);
+            request.uploadHandler = new UploadHandlerRaw(payload);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.timeout = 15;
+            request.SetRequestHeader("Authorization", $"Bearer {token}");
+            request.SetRequestHeader("Content-Type", "application/json");
+            request.SetRequestHeader("Accept", "application/json");
+
+            yield return request.SendWebRequest();
+
+            if (request.result != UnityWebRequest.Result.Success) {
+                if (request.responseCode == 401 && SessionToken == token) {
+                    ClearSession();
+                }
+                onError?.Invoke(ExtractErrorMessage(request));
+                yield break;
+            }
+
+            ChangePasswordResponse response = null;
+            try {
+                response = JsonUtility.FromJson<ChangePasswordResponse>(request.downloadHandler.text);
+            } catch (ArgumentException) {
+            }
+            if (response == null || !response.changed || response.user_id <= 0) {
+                onError?.Invoke("The server returned an invalid password change response.");
+                yield break;
+            }
+
+            if (SessionToken == token) {
+                ClearSession();
+            }
+            onSuccess?.Invoke(response);
+        } finally {
+            IsChangingPassword = false;
+        }
     }
 
     public int GetCachedUserId() {
