@@ -738,6 +738,8 @@ public class PlayerInventory : NetworkBehaviour {
     }
 
     private bool CanAddItemOnServer(InventoryItemState incomingItem) {
+        if (ItemManager.TryGetItemById(incomingItem.ItemId.ToString(), out ItemData itemData) &&
+            itemData.itemObject.IsHealthPickup) return false;
         if (!TryCalculateWeight(incomingItem, out long incomingWeight)) {
             return false;
         }

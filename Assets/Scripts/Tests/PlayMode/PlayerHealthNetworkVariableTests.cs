@@ -10,7 +10,98 @@ using UnityEngine.TestTools;
 public class PlayerHealthNetworkVariableTests {
     private GameObject networkManagerObject;
     private GameObject playerObject;
+    private GameObject cureObject;
     private NetworkManager networkManager;
+
+    [Test]
+    public void CureAsset_IsIncludedInWorldLootWithTenPointHealingAndSprite() {
+        ScriptableObject cure = Resources.Load<ScriptableObject>("Items/Cure");
+        Assert.That(cure, Is.Not.Null);
+        Assert.That((bool)cure.GetType().GetProperty("IsHealthPickup").GetValue(cure), Is.True);
+        Assert.That((float)cure.GetType().GetField("healAmount").GetValue(cure), Is.EqualTo(10f));
+        Assert.That(cure.GetType().GetField("icon").GetValue(cure), Is.Not.Null);
+        ScriptableObject settings = Resources.Load<ScriptableObject>("WorldItemSpawnSettings");
+        Assert.That(settings, Is.Not.Null);
+        CollectionAssert.Contains((Array)settings.GetType().GetField("items").GetValue(settings), cure);
+    }
+
+    [UnityTest]
+    public IEnumerator ServerHealing_RestoresTenCapsAtMaximumAndCannotRevive() {
+        yield return CreateServerPlayer();
+        Component player = playerObject.GetComponent(Type.GetType("PlayerController, Assembly-CSharp"));
+        MethodInfo damage = player.GetType().GetMethod("TakeDamageFromEnemy");
+        MethodInfo heal = player.GetType().GetMethod("TryHealOnServer");
+        PropertyInfo health = player.GetType().GetProperty("CurrentHealth");
+
+        Assert.That((bool)heal.Invoke(player, new object[] { 10f }), Is.False, "Full health should not consume healing.");
+        damage.Invoke(player, new object[] { 15f });
+        Assert.That((bool)heal.Invoke(player, new object[] { 10f }), Is.True);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(95f));
+        Assert.That((bool)heal.Invoke(player, new object[] { -10f }), Is.False);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(95f));
+        Assert.That((bool)heal.Invoke(player, new object[] { 10f }), Is.True);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(100f), "Healing must not exceed max health.");
+        damage.Invoke(player, new object[] { 100f });
+        Assert.That((bool)heal.Invoke(player, new object[] { 10f }), Is.False);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(0f), "CURE must not resurrect a dead player.");
+    }
+
+    [UnityTest]
+    public IEnumerator CurePickup_HealsOnContactOnceAndRemovesItsWorldRecord() {
+        yield return CreateServerPlayer();
+        Component player = playerObject.GetComponent(Type.GetType("PlayerController, Assembly-CSharp"));
+        PropertyInfo health = player.GetType().GetProperty("CurrentHealth");
+        Component cure = SpawnCure(Vector3.zero);
+        MethodInfo fixedUpdate = cure.GetType().GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic);
+        NetworkObject networkObject = cureObject.GetComponent<NetworkObject>();
+
+        Physics.SyncTransforms();
+        fixedUpdate.Invoke(cure, null);
+        Assert.That(networkObject.IsSpawned, Is.True, "A full-health player should leave CURE on the ground.");
+
+        player.GetType().GetMethod("TakeDamageFromEnemy").Invoke(player, new object[] { 25f });
+        playerObject.transform.position = Vector3.right * 20f;
+        Physics.SyncTransforms();
+        fixedUpdate.Invoke(cure, null);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(75f), "Players outside contact range must not collect CURE.");
+        Assert.That(networkObject.IsSpawned, Is.True);
+
+        playerObject.transform.position = Vector3.zero;
+        Physics.SyncTransforms();
+        fixedUpdate.Invoke(cure, null);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(85f));
+        Assert.That(networkObject.IsSpawned, Is.False);
+        Type registry = Type.GetType("DroppedItemRegistry, Assembly-CSharp");
+        Assert.That((int)registry.GetProperty("Count").GetValue(null), Is.EqualTo(0), "A consumed pickup must not stream back in.");
+        fixedUpdate.Invoke(cure, null);
+        Assert.That((float)health.GetValue(player), Is.EqualTo(85f), "A second overlap must not heal again.");
+    }
+
+    [UnityTest]
+    public IEnumerator CurePickup_DoesNotCollectForDeadPlayers() {
+        yield return CreateServerPlayer();
+        Component player = playerObject.GetComponent(Type.GetType("PlayerController, Assembly-CSharp"));
+        player.GetType().GetMethod("TakeDamageFromEnemy").Invoke(player, new object[] { 100f });
+        Component cure = SpawnCure(Vector3.zero);
+        Physics.SyncTransforms();
+        cure.GetType().GetMethod("FixedUpdate", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(cure, null);
+        Assert.That(cureObject.GetComponent<NetworkObject>().IsSpawned, Is.True);
+        Assert.That((float)player.GetType().GetProperty("CurrentHealth").GetValue(player), Is.EqualTo(0f));
+    }
+
+    private Component SpawnCure(Vector3 position) {
+        Type stateType = Type.GetType("InventoryItemState, Assembly-CSharp");
+        object state = Activator.CreateInstance(stateType);
+        stateType.GetField("InstanceId").SetValue(state, 0xC0FFEE1UL);
+        stateType.GetField("Count").SetValue(state, 1);
+        FieldInfo itemId = stateType.GetField("ItemId");
+        itemId.SetValue(state, Activator.CreateInstance(itemId.FieldType, new object[] { "cure" }));
+        Type droppedItemType = Type.GetType("NetworkDroppedItem, Assembly-CSharp");
+        Assert.That((bool)droppedItemType.GetMethod("TrySpawnOnServer").Invoke(null, new object[] { state, position }), Is.True);
+        cureObject = GameObject.Find("NetworkDroppedItem(Clone)");
+        Assert.That(cureObject, Is.Not.Null);
+        return cureObject.GetComponent(droppedItemType);
+    }
 
     [UnityTest]
     public IEnumerator ServerSprint_ExhaustsAfterThreeSeconds_RecoversOnlyAfterRelease() {
@@ -123,6 +214,11 @@ public class PlayerHealthNetworkVariableTests {
         if (playerObject != null) {
             UnityEngine.Object.Destroy(playerObject);
         }
+
+        if (cureObject != null) {
+            UnityEngine.Object.Destroy(cureObject);
+        }
+        Type.GetType("DroppedItemRegistry, Assembly-CSharp").GetMethod("Reset").Invoke(null, null);
 
         if (networkManagerObject != null) {
             UnityEngine.Object.Destroy(networkManagerObject);

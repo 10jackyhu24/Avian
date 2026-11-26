@@ -7,7 +7,8 @@ public enum ItemType {
     AttackSpeed,
     DamageBonus,
     CriticalRate,
-    Ammo
+    Ammo,
+    HealthPickup
 }
 
 // Types of attachment slots for weapons
@@ -38,7 +39,10 @@ public class ItemObject : ScriptableObject {
     [Header("Weapon Attachment")]
     [Tooltip("Percentage bonus. For example, 20 means +20%. Critical rate adds percentage points.")]
     [Min(0f)] public float bonusPercent;
+    [Header("Health Pickup")]
+    [Min(0f)] public float healAmount = 10f;
     public bool IsWeapon => isWeapon || itemType == ItemType.Weapon;
+    public bool IsHealthPickup => itemType == ItemType.HealthPickup;
 
     public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? itemName : displayName;
     public bool IsAttachment => ItemData.GetAttachmentType(itemType) != AttachmentType.None;

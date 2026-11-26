@@ -1,6 +1,7 @@
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Collections;
 
 public enum SinglePlayerMatchPhase {
     Preparing,
@@ -141,6 +142,10 @@ public sealed class SinglePlayerMatchController : MonoBehaviour {
 
         RefreshStatus(snapshot);
     }
+    private IEnumerator ShowResultAfterDeath() {
+        yield return new WaitForSeconds(2f);
+        ShowResult();
+    }
 
     public bool TryHandlePlayerDefeat(
         PlayerController player,
@@ -152,6 +157,7 @@ public sealed class SinglePlayerMatchController : MonoBehaviour {
 
         remainingLives = Mathf.Max(0, remainingLives - 1);
         if (remainingLives == 0) {
+            player.PlayFinalDeathOnServer();
             EndMatch(SinglePlayerMatchPhase.Defeat);
             return false;
         }
@@ -277,14 +283,18 @@ public sealed class SinglePlayerMatchController : MonoBehaviour {
         phase = result;
         enemySpawner?.StopPopulation();
 
-        if (result == SinglePlayerMatchPhase.Defeat && finalBossHealth != null &&
-            finalBossHealth.TryGetComponent(out NetworkObject bossNetworkObject) &&
-            bossNetworkObject.IsSpawned) {
-            bossNetworkObject.Despawn(true);
+        // if (result == SinglePlayerMatchPhase.Defeat && finalBossHealth != null &&
+        //     finalBossHealth.TryGetComponent(out NetworkObject bossNetworkObject) &&
+        //     bossNetworkObject.IsSpawned) {
+        //     bossNetworkObject.Despawn(true);
+        // }
+        if (result == SinglePlayerMatchPhase.Defeat) {
+            StartCoroutine(ShowResultAfterDeath());
+        } else {
+            ShowResult();
         }
 
         ShowBanner(result == SinglePlayerMatchPhase.Victory ? "Victory" : "Defeat");
-        ShowResult();
         RefreshStatus(null);
         Debug.Log(
             $"[SinglePlayerMatch] Match ended: {result}. Score={score}, kills={defeatedEnemies}.",

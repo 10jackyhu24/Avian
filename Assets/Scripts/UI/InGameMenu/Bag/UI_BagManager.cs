@@ -168,7 +168,7 @@ public class UI_BagManager : MonoBehaviour {
             }
 
             Pickupable pickupable = hits[i].GetComponentInParent<Pickupable>();
-            if (pickupable == null || !pickupable.HasItem) {
+            if (pickupable == null || !pickupable.HasItem || pickupable.ItemData.itemObject.IsHealthPickup) {
                 continue;
             }
 

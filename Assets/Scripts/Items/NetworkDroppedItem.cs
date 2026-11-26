@@ -12,6 +12,7 @@ public class NetworkDroppedItem : NetworkBehaviour {
     private Rigidbody itemRigidbody;
     private bool hasSettled;
     private WorldLootVisual lootVisual;
+    private readonly Collider[] healthPickupHits = new Collider[16];
 
     private readonly NetworkVariable<InventoryItemState> itemState =
         new NetworkVariable<InventoryItemState>(
@@ -36,6 +37,9 @@ public class NetworkDroppedItem : NetworkBehaviour {
     }
 
     private void FixedUpdate() {
+        // Check even after the rigidbody settles so resting health pickups remain collectible.
+        if (IsServer && TryCollectHealthOnServer()) return;
+
         if (!IsServer || hasSettled || itemRigidbody == null ||
             itemRigidbody.isKinematic || !itemRigidbody.IsSleeping() ||
             !itemState.Value.IsValid) {
@@ -64,6 +68,29 @@ public class NetworkDroppedItem : NetworkBehaviour {
 
         itemState.Value = value;
         ApplyItemState(value);
+    }
+
+    private bool TryCollectHealthOnServer() {
+        if (!IsSpawned || pickupable == null || !pickupable.HasItem ||
+            !pickupable.ItemData.itemObject.IsHealthPickup) return false;
+
+        float amount = pickupable.ItemData.itemObject.healAmount;
+        if (amount <= 0f || float.IsNaN(amount) || float.IsInfinity(amount)) return false;
+        int hitCount = Physics.OverlapSphereNonAlloc(transform.position, 1.25f,
+            healthPickupHits, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hitCount; i++) {
+            PlayerController player = healthPickupHits[i].GetComponentInParent<PlayerController>();
+            if (player == null || !player.IsSpawned || !player.IsAlive ||
+                player.CurrentHealth >= player.MaxHealth) continue;
+
+            // Claim the shared record before healing; it cannot be collected twice
+            // or reappear when the terrain chunk streams back in.
+            if (!DroppedItemRegistry.TryRemove(itemState.Value.InstanceId, this, out _)) return false;
+            player.TryHealOnServer(amount);
+            NetworkObject.Despawn(true);
+            return true;
+        }
+        return false;
     }
 
     private void HandleItemStateChanged(InventoryItemState previousValue, InventoryItemState newValue) {

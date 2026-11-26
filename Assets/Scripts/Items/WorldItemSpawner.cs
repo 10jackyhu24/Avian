@@ -68,7 +68,8 @@ public class WorldItemSpawner : MonoBehaviour {
             return false;
         }
         ItemObject item = settings.items[random.Next(settings.items.Length)];
-        if (item == null || !item.IsAttachment || string.IsNullOrWhiteSpace(item.itemId)) return false;
+        if (item == null || (!item.IsAttachment && !item.IsHealthPickup) ||
+            string.IsNullOrWhiteSpace(item.itemId)) return false;
 
         bool hadLoadedCandidate = false;
         for (int attempt = 0; attempt < 8; attempt++) {

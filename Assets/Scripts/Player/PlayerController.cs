@@ -1964,6 +1964,16 @@ public class PlayerController : NetworkBehaviour {
         }
     }
 
+    public bool TryHealOnServer(float amount) {
+        if (!IsServer || !IsSpawned || !IsAlive || amount <= 0f ||
+            float.IsNaN(amount) || float.IsInfinity(amount) || currentHealth.Value >= maxHealth) {
+            return false;
+        }
+
+        currentHealth.Value = Mathf.Min(maxHealth, currentHealth.Value + amount);
+        return true;
+    }
+
     public void TakeDamageFromEnemy(float amount) {
         if (amount <= 0f) {
             return;
@@ -1977,6 +1987,24 @@ public class PlayerController : NetworkBehaviour {
 
     private void TakeDamage(float amount, ulong attackerClientId) {
         ApplyDamage(amount, $"client {attackerClientId}");
+    }
+
+    private void ApplyFinalDeathLocally() {
+        if (animator == null) return;
+
+        animator.SetBool("isMoving", false);
+        animator.SetBool("isDead", true);
+    }
+
+    public void PlayFinalDeathOnServer() {
+    if (!IsServer || !IsSpawned) return;
+        StopMovementOnServer();
+        PlayFinalDeathClientRpc();
+    }
+
+    [ClientRpc]
+    private void PlayFinalDeathClientRpc() {
+        ApplyFinalDeathLocally();
     }
 
     private void ApplyDamage(float amount, string attackerName) {
